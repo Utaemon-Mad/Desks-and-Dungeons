@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Desks &amp; Dungeons · La Taberna</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jacquard+12&family=Pixelify+Sans:wght@400;600;700&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <canvas id="scene"></canvas>
+
+    <header id="title">
+      <div class="logo">Desks <span>&amp;</span> Dungeons</div>
+      <div class="sub">La Taberna · sala <b id="room-name">taberna</b></div>
+    </header>
+
+    <!-- Panel lateral: héroes en la taberna -->
+    <aside id="heroes" class="panel">
+      <div class="panel-title">EN LA TABERNA <span id="count">0</span></div>
+      <div id="hero-list"></div>
+    </aside>
+
+    <!-- Registro del chat -->
+    <section id="log" class="panel">
+      <div class="panel-title small">CRÓNICA <button id="log-toggle" class="mini" title="Plegar">–</button></div>
+      <div id="log-lines"></div>
+    </section>
+
+    <!-- Barra inferior -->
+    <nav id="bar">
+      <button class="tool" data-act="heroes" title="Héroes"><span class="ico">🛡️</span><span>Héroes</span></button>
+      <button class="tool" data-act="emotes" title="Gestos"><span class="ico">😄</span><span>Gestos</span></button>
+      <button class="tool" data-act="dice" title="Tirar d20"><span class="ico">🎲</span><span>Dado</span></button>
+      <form id="chat-form" autocomplete="off">
+        <input id="chat-input" maxlength="200" placeholder="Di algo a la taberna… (Enter)" enterkeyhint="send">
+        <button class="btn" type="submit">HABLAR</button>
+      </form>
+      <button class="tool" data-act="wall" title="Escribir en el muro"><span class="ico">💡</span><span>Muro</span></button>
+      <button class="tool" data-act="drink" title="Pedir una jarra"><span class="ico">🍺</span><span>Jarra</span></button>
+      <button class="tool" data-act="menu" title="Menú"><span class="ico">☰</span><span>Menú</span></button>
+    </nav>
+
+    <div id="emote-pop" class="pop panel hidden">
+      <button data-e="wave">👋</button><button data-e="dance">💃</button><button data-e="cheers">🍻</button>
+      <button data-e="laugh">😂</button><button data-e="heart">❤️</button><button data-e="fight">⚔️</button>
+      <button data-e="think">🤔</button><button data-e="sleep">💤</button>
+    </div>
+
+    <div id="menu-pop" class="pop panel hidden">
+      <button data-m="invite">🔗 Copiar enlace de invitación</button>
+      <button data-m="hero">🧙 Cambiar de héroe</button>
+      <button data-m="help">📜 Comandos</button>
+      <button data-m="sound">🔔 Sonido: <b id="sound-state">sí</b></button>
+    </div>
+
+    <div id="toast" class="hidden"></div>
+    <div id="conn" class="hidden">Reconectando con la taberna…</div>
+  </div>
+
+  <!-- Pantalla de entrada -->
+  <div id="login" class="overlay">
+    <form id="login-form" class="panel card" autocomplete="off">
+      <div class="logo big">Desks <span>&amp;</span> Dungeons</div>
+      <p class="tag">Entra en la taberna y charla con tus amigos</p>
+
+      <label>Nombre del héroe
+        <input id="login-name" maxlength="16" required placeholder="Tu nombre">
+      </label>
+
+      <div class="field-title">Clase</div>
+      <div id="class-pick" class="class-pick"></div>
+
+      <div class="looks">
+        <div><div class="field-title">Piel</div><div id="skin-pick" class="swatches"></div></div>
+        <div><div class="field-title">Pelo</div><div id="hair-pick" class="swatches"></div></div>
+        <canvas id="preview" width="120" height="120"></canvas>
+      </div>
+
+      <label>Sala <small>(comparte el mismo nombre con tus amigos)</small>
+        <input id="login-room" maxlength="24" placeholder="taberna">
+      </label>
+
+      <button class="btn big" type="submit">ENTRAR EN LA TABERNA</button>
+    </form>
+  </div>
+
+  <script src="map.js"></script>
+  <script src="game.js"></script>
+</body>
+</html>
