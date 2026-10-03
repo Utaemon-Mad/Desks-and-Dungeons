@@ -1,0 +1,21 @@
+{
+  "name": "desks-and-dungeons",
+  "version": "1.0.0",
+  "description": "Taberna social multijugador: un sitio pixel-art isométrico para charlar con tus amigos.",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test/smoke.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Utaemon-Mad/Desks-and-Dungeons.git"
+  },
+  "license": "ISC",
+  "dependencies": {
+    "ws": "^8.22.0"
+  }
+}
