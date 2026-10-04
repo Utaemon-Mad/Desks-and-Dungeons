@@ -66,5 +66,7 @@ Cofre: 15–35 de oro y 15 de experiencia. Salida: 25 de oro y 40 de experiencia
 - `public/game.js`: la taberna: dibujo, personajes, editor de muebles, interfaz y red.
 - `public/dungeon.js`: lista de mazmorras, partida y editor.
 - `test/smoke.js`: prueba automática (`npm test`).
+- `scripts/lint.js`: comprueba la sintaxis de todos los `.js` (`npm run lint`).
+- `.claude/`: prepara las sesiones de Claude Code en la nube (instala dependencias al arrancar).
 
 Las mazmorras, los muebles y los perfiles se guardan en `data/`. El chat no se guarda: vive en la memoria del servidor.
