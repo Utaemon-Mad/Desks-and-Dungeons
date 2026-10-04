@@ -35,12 +35,14 @@
       <button class="tool" data-act="heroes" title="Héroes"><span class="ico">🛡️</span><span>Héroes</span></button>
       <button class="tool" data-act="emotes" title="Gestos"><span class="ico">😄</span><span>Gestos</span></button>
       <button class="tool" data-act="dice" title="Tirar d20"><span class="ico">🎲</span><span>Dado</span></button>
+      <button class="tool" data-act="dungeons" title="Mazmorras"><span class="ico">🗝️</span><span>Mazmorras</span></button>
       <form id="chat-form" autocomplete="off">
         <input id="chat-input" maxlength="200" placeholder="Di algo a la taberna… (Enter)" enterkeyhint="send">
         <button class="btn" type="submit">HABLAR</button>
       </form>
-      <button class="tool" data-act="wall" title="Escribir en el muro"><span class="ico">💡</span><span>Muro</span></button>
-      <button class="tool" data-act="drink" title="Pedir una jarra"><span class="ico">🍺</span><span>Jarra</span></button>
+      <button class="tool tavern-only" data-act="wall" title="Escribir en el muro"><span class="ico">💡</span><span>Muro</span></button>
+      <button class="tool tavern-only" data-act="drink" title="Pedir una jarra"><span class="ico">🍺</span><span>Jarra</span></button>
+      <button class="tool tavern-only hidden" data-act="edit" title="Editar la taberna"><span class="ico">🔨</span><span>Editar</span></button>
       <button class="tool" data-act="menu" title="Menú"><span class="ico">☰</span><span>Menú</span></button>
     </nav>
 
@@ -55,6 +57,32 @@
       <button data-m="hero">🧙 Cambiar de héroe</button>
       <button data-m="help">📜 Comandos</button>
       <button data-m="sound">🔔 Sonido: <b id="sound-state">sí</b></button>
+    </div>
+
+    <!-- Editor de la taberna -->
+    <aside id="editor" class="panel hidden">
+      <div class="panel-title small">EDITAR TABERNA</div>
+      <div id="edit-tools" class="edit-tools"></div>
+      <div class="edit-row">
+        <button id="edit-rot" class="btn" type="button">Orientación <b id="edit-dir">↙</b> (R)</button>
+      </div>
+      <div class="edit-row">
+        <button id="edit-reset" class="btn alt" type="button">Restaurar</button>
+        <button id="edit-clear" class="btn alt" type="button">Vaciar</button>
+      </div>
+      <button id="edit-done" class="btn big" type="button">LISTO</button>
+    </aside>
+
+    <!-- Mazmorra en juego -->
+    <div id="dview" class="hidden">
+      <canvas id="dcanvas"></canvas>
+      <div id="dhud" class="panel">
+        <div class="dname" id="dname">Mazmorra</div>
+        <div class="bar-row"><span>❤️</span><div class="meter hp"><i id="dhp-bar"></i></div><b id="dhp">10/10</b></div>
+        <div class="bar-row"><span>⭐</span><div class="meter xp"><i id="dxp-bar"></i></div><b id="dlvl">Nv 1</b></div>
+        <div class="bar-row gold-row"><span>🪙</span><b id="dgold">0</b><span class="kills" id="dleft"></span></div>
+        <button id="dexit" class="btn alt" type="button">VOLVER A LA TABERNA</button>
+      </div>
     </div>
 
     <div id="toast" class="hidden"></div>
@@ -88,7 +116,38 @@
     </form>
   </div>
 
+  <!-- Lista de mazmorras -->
+  <div id="dmenu" class="overlay hidden">
+    <div class="panel card wide">
+      <div class="panel-title">MAZMORRAS</div>
+      <p class="tag">Baja con tus amigos a luchar contra goblins, orcos y no muertos. Cada enemigo da experiencia y deja oro.</p>
+      <div id="dlist" class="dlist"></div>
+      <div class="edit-row">
+        <button id="dnew" class="btn" type="button">✏️ CREAR MAZMORRA</button>
+        <button id="dclose" class="btn alt" type="button">CERRAR</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Editor de mazmorras -->
+  <div id="deditor" class="hidden">
+    <div class="de-top panel">
+      <input id="de-name" maxlength="32" placeholder="Nombre de la mazmorra">
+      <button id="de-save" class="btn" type="button">GUARDAR</button>
+      <button id="de-play" class="btn" type="button">GUARDAR Y JUGAR</button>
+      <button id="de-close" class="btn alt" type="button">SALIR</button>
+    </div>
+    <div class="de-body">
+      <aside class="de-palette panel" id="de-palette"></aside>
+      <div class="de-stage"><canvas id="decanvas"></canvas></div>
+    </div>
+    <div class="de-help" id="de-help">Clic o arrastra para pintar · Clic derecho para borrar · Necesitas una entrada y una salida</div>
+  </div>
+
   <script src="map.js"></script>
+  <script src="dungeon-data.js"></script>
+  <script src="sprites.js"></script>
   <script src="game.js"></script>
+  <script src="dungeon.js"></script>
 </body>
 </html>

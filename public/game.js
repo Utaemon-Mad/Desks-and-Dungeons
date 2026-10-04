@@ -20,6 +20,17 @@
   let ctx = mainCtx; // contexto activo (se cambia al dibujar retratos o la capa estática)
   let view = { scale: 1, ox: 0, oy: 0, dpr: 1 };
 
+  // Editor de la taberna
+  let isOwner = false, editing = false, editTool = 'barrel', editDir = 'S';
+
+  // Puente con otros módulos (mazmorras): escena actual y eventos
+  const DD = window.DD = {
+    scene: 'tavern',
+    handlers: {},
+    on(t, fn) { (this.handlers[t] = this.handlers[t] || []).push(fn); },
+    emit(t, m) { for (const fn of this.handlers[t] || []) fn(m); },
+  };
+
   function resize() {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     const w = window.innerWidth, h = window.innerHeight;
@@ -321,29 +332,39 @@
   // ======================================================================
   function furnitureDrawables() {
     const list = [];
-    for (const it of MAP.items) {
-      const d = it.x + it.y;
-      switch (it.type) {
-        case 'barrel': list.push({ depth: d + 0.6, draw: () => drawBarrel(it) }); break;
-        case 'crate': list.push({ depth: d + 0.6, draw: () => drawCrate(it) }); break;
-        case 'table': list.push({ depth: d + 0.6, draw: () => drawTable(it) }); break;
-        case 'roundtable': list.push({ depth: d + 0.6, draw: () => drawRoundTable(it) }); break;
-        case 'bar': list.push({ depth: d + 0.6, draw: () => drawBar(it) }); break;
-        case 'stool': list.push({ depth: d + 0.2, draw: () => drawStool(it) }); break;
-        case 'chair': {
-          list.push({ depth: d + 0.2, draw: () => drawChairSeat(it) });
-          const front = it.dir === 'N' || it.dir === 'W';
-          list.push({ depth: d + (front ? 0.85 : 0.25), draw: () => drawChairBack(it) });
-          break;
-        }
-        case 'sofa': list.push({ depth: d + 0.2, draw: () => drawSofa(it) }); break;
-      }
-    }
-    // El mapa sobre la mesa de juego, después de todas sus casillas
-    list.push({ depth: 5 + 7 + 0.65, draw: drawTableMap });
+    for (const it of MAP.items) list.push(...itemDrawables(it));
     // El tabernero
-    list.push({ depth: 12 + 4 + 0.5, draw: drawBartender });
+    list.push({ depth: MAP.BARKEEP.x + MAP.BARKEEP.y + 0.5, draw: drawBartender });
     return list;
+  }
+
+  function itemDrawables(it, ghost) {
+    const d = it.x + it.y;
+    const wrap = (fn) => (ghost ? () => { ctx.save(); ctx.globalAlpha = 0.55; fn(); ctx.restore(); } : fn);
+    switch (it.type) {
+      case 'barrel': return [{ depth: d + 0.6, draw: wrap(() => drawBarrel(it)) }];
+      case 'crate': case 'smallcrate': return [{ depth: d + 0.6, draw: wrap(() => drawCrate(it)) }];
+      case 'table': case 'maptable': return [{ depth: d + 0.6, draw: wrap(() => drawTable(it)) }];
+      case 'roundtable': return [{ depth: d + 0.6, draw: wrap(() => drawRoundTable(it)) }];
+      case 'bar': return [{ depth: d + 0.6, draw: wrap(() => drawBar(it)) }];
+      case 'bookshelf': return [{ depth: d + 0.6, draw: wrap(() => drawBookshelf(it)) }];
+      case 'plant': return [{ depth: d + 0.6, draw: wrap(() => drawPlant(it)) }];
+      case 'stool': return [{ depth: d + 0.2, draw: wrap(() => drawStool(it)) }];
+      case 'chair': {
+        const front = it.dir === 'N' || it.dir === 'W';
+        return [{ depth: d + 0.2, draw: wrap(() => drawChairSeat(it)) }, { depth: d + (front ? 0.85 : 0.25), draw: wrap(() => drawChairBack(it)) }];
+      }
+      case 'sofa': {
+        const front = it.dir === 'N' || it.dir === 'W';
+        return [{ depth: d + 0.2, draw: wrap(() => drawSofa(it, false)) }, { depth: d + (front ? 0.85 : 0.25), draw: wrap(() => drawSofa(it, true)) }];
+      }
+      case 'staff': return editing || ghost ? [{ depth: d + 0.1, draw: () => drawStaffZone(it) }] : [];
+    }
+    return [];
+  }
+
+  function drawStaffZone(it) {
+    poly([iso(it.x, it.y), iso(it.x + 1, it.y), iso(it.x + 1, it.y + 1), iso(it.x, it.y + 1)], 'rgba(216,67,59,.18)', 'rgba(216,67,59,.6)', 1);
   }
 
   function drawBarrel(it) {
@@ -355,41 +376,44 @@
   }
 
   function drawCrate(it) {
-    const s = it.small ? 0.2 : 0.08;
-    const h = it.small ? 24 : 34;
+    const small = it.type === 'smallcrate';
+    const s = small ? 0.2 : 0.08;
+    const h = small ? 24 : 34;
     const t = isoBox(it.x + s, it.y + s, 1 - 2 * s, 1 - 2 * s, h, '#a0703c');
-    // listones en X
     const a = iso(it.x + s, it.y + 1 - s), b = iso(it.x + 1 - s, it.y + 1 - s);
     ctx.strokeStyle = '#5a3a1a'; ctx.lineWidth = 2.5;
     ctx.beginPath(); ctx.moveTo(a.x + 3, a.y - 3); ctx.lineTo(b.x - 3, b.y - h + 3); ctx.moveTo(a.x + 3, a.y - h + 3); ctx.lineTo(b.x - 3, b.y - 3); ctx.stroke();
     poly([t.a, t.b, t.c, t.e], null, '#5a3a1a', 1);
   }
 
+  const sameAt = (x, y, type) => { const o = MAP.itemAt(x, y); return o && o.type === type; };
+
   function drawTable(it) {
     const legs = '#4a2e1a';
-    // patas sólo en las esquinas de la mesa grande
-    if (it.y === 7) { const p = iso(it.x + 0.5, it.y + 0.9); rrect(p.x - 2, p.y - 24, 4, 24, 0, legs, OUT, 1); }
+    if (!sameAt(it.x, it.y + 1, it.type)) { const p = iso(it.x + 0.5, it.y + 0.9); rrect(p.x - 2, p.y - 24, 4, 24, 0, legs, OUT, 1); }
+    if (!sameAt(it.x + 1, it.y, it.type)) { const p = iso(it.x + 0.9, it.y + 0.5); rrect(p.x - 2, p.y - 24, 4, 24, 0, legs, OUT, 1); }
     isoBox(it.x, it.y, 1, 1, 6, '#8a5a30', 24, { stroke: null, top: '#9c6a3a' });
+    // borde exterior de la mesa
+    const z = 30, m = (x, y) => up(iso(x, y), z);
+    ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.beginPath();
+    if (!sameAt(it.x, it.y - 1, it.type)) { const a = m(it.x, it.y), b = m(it.x + 1, it.y); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); }
+    if (!sameAt(it.x - 1, it.y, it.type)) { const a = m(it.x, it.y), b = m(it.x, it.y + 1); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); }
+    ctx.stroke();
+    if (it.type === 'maptable') drawMapPiece(it, m);
   }
 
-  function drawTableMap() {
-    const z = 30;
-    const pts = [iso(3.25, 6.2), iso(5.8, 6.2), iso(5.8, 7.8), iso(3.25, 7.8)].map((p) => up(p, z));
-    poly([iso(3, 6), iso(6, 6), iso(6, 8), iso(3, 8)].map((p) => up(p, z)), null, OUT, 1.5);
-    poly(pts, '#e8d6a8', '#8a6a3a', 1.5);
-    // garabatos del mapa
-    ctx.strokeStyle = '#6b8a4a'; ctx.lineWidth = 2;
-    const m = (x, y) => up(iso(x, y), z);
-    ctx.beginPath(); let p = m(3.6, 6.5); ctx.moveTo(p.x, p.y); p = m(4.3, 6.9); ctx.lineTo(p.x, p.y); p = m(4.8, 6.6); ctx.lineTo(p.x, p.y); p = m(5.4, 7.3); ctx.lineTo(p.x, p.y); ctx.stroke();
-    ctx.strokeStyle = '#4a7ab0'; ctx.beginPath(); p = m(3.5, 7.5); ctx.moveTo(p.x, p.y); p = m(4.4, 7.2); ctx.lineTo(p.x, p.y); p = m(5.0, 7.6); ctx.lineTo(p.x, p.y); ctx.stroke();
-    p = m(5.0, 6.9); ellipse(p.x, p.y, 3, 1.5, '#c0392b');
-    // fichas y dados
-    const tokens = [[3.4, 6.35, '#d8433b'], [5.6, 7.6, '#4b7ea6'], [3.3, 7.65, '#f2c94c'], [5.65, 6.4, '#5cb85c']];
-    for (const [tx, ty, col] of tokens) { const q = m(tx, ty); cylinder(q.x, q.y, 3, 1.6, 4, col); }
-    const dd = m(4.6, 7.55); isoBoxAt(dd.x, dd.y, 5, '#f4f0e6');
-    // libro de reglas
-    const bk = [m(5.9, 6.2), m(6.0, 6.2), m(6.0, 6.9), m(5.9, 6.9)];
-    void bk;
+  // Trozo de mapa de aventuras sobre una casilla de mesa: las casillas vecinas forman un mapa continuo
+  function drawMapPiece(it, m) {
+    const e = (side) => (sameAt(it.x + side[0], it.y + side[1], 'maptable') ? 0 : 0.18);
+    const x0 = it.x + e([-1, 0]), x1 = it.x + 1 - e([1, 0]), y0 = it.y + e([0, -1]), y1 = it.y + 1 - e([0, 1]);
+    poly([m(x0, y0), m(x1, y0), m(x1, y1), m(x0, y1)], '#e8d6a8', null);
+    const r = (k) => rand(it.x * 17 + it.y * 31 + k);
+    ctx.strokeStyle = r(1) > 0.5 ? '#6b8a4a' : '#4a7ab0'; ctx.lineWidth = 2;
+    const a = m(it.x + r(2) * 0.6 + 0.2, it.y + 0.3), b = m(it.x + 0.5, it.y + r(3) * 0.4 + 0.4), c2 = m(it.x + 0.8, it.y + 0.7);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y); ctx.lineTo(b.x, b.y); ctx.lineTo(c2.x, c2.y); ctx.stroke();
+    if (r(4) > 0.6) { const q = m(it.x + 0.6, it.y + 0.4); ellipse(q.x, q.y, 3, 1.5, '#c0392b'); }
+    if (r(5) > 0.55) { const q = m(it.x + 0.3, it.y + 0.6); cylinder(q.x, q.y, 3, 1.6, 4, ['#d8433b', '#4b7ea6', '#f2c94c', '#5cb85c'][Math.floor(r(6) * 4)]); }
+    if (r(7) > 0.75) { const q = m(it.x + 0.7, it.y + 0.75); isoBoxAt(q.x, q.y, 5, '#f4f0e6'); }
   }
 
   function isoBoxAt(cx, cy, s, color) {
@@ -403,7 +427,6 @@
     rrect(c.x - 3, c.y - 22, 6, 22, 1, '#3b2414', OUT, 1);
     ellipse(c.x, c.y, 10, 5, '#3b2414', OUT);
     cylinder(c.x, c.y - 20, 26, 13, 5, '#7a4e2c', '#94643a');
-    // vela y jarra
     rrect(c.x - 8, c.y - 38, 5, 12, 1, '#f4ecd0', OUT, 1);
     const fl = 1 + Math.sin(performance.now() / 120 + it.x) * 0.15;
     ellipse(c.x - 5.5, c.y - 42, 2 * fl, 3.5 * fl, '#ffcf4a');
@@ -418,19 +441,42 @@
   }
 
   function drawBar(it) {
-    const t = isoBox(it.x, it.y, 1, 1, 36, '#5a3a22', 0, { top: '#8a5a32' });
-    // panel frontal
-    const left = it.y === 8 && it.x > 10; // tramo horizontal
+    isoBox(it.x, it.y, 1, 1, 36, '#5a3a22', 0, { top: '#8a5a32' });
     ctx.strokeStyle = 'rgba(20,10,4,.6)'; ctx.lineWidth = 1;
-    if (!left) { const a = iso(it.x + 1, it.y + 0.5); ctx.beginPath(); ctx.moveTo(a.x, a.y - 4); ctx.lineTo(a.x, a.y - 30); ctx.stroke(); }
-    else { const a = iso(it.x + 0.5, it.y + 1); ctx.beginPath(); ctx.moveTo(a.x, a.y - 4); ctx.lineTo(a.x, a.y - 30); ctx.stroke(); }
-    void t;
+    { const a = iso(it.x + 1, it.y + 0.5); ctx.beginPath(); ctx.moveTo(a.x, a.y - 4); ctx.lineTo(a.x, a.y - 30); ctx.stroke(); }
+    { const a = iso(it.x + 0.5, it.y + 1); ctx.beginPath(); ctx.moveTo(a.x, a.y - 4); ctx.lineTo(a.x, a.y - 30); ctx.stroke(); }
     const c = up(iso(it.x + 0.5, it.y + 0.5), 36);
-    if (it.deco === 0) { mug(c.x - 6, c.y + 2); }
-    else if (it.deco === 1) {
+    const deco = (it.x * 7 + it.y * 3) % 3;
+    if (deco === 0) mug(c.x - 6, c.y + 2);
+    else if (deco === 1) {
       const col = ['#2e7d4f', '#7a2a2a', '#3a5a9a'][(it.x + it.y) % 3];
       rrect(c.x + 2, c.y - 14, 6, 14, 2, col, OUT, 1); rrect(c.x + 3.8, c.y - 19, 2.4, 6, 0, shade(col, -0.3), null);
     }
+  }
+
+  function drawBookshelf(it) {
+    // Estantería alta pegada al lado contrario a donde mira
+    const [ox, oy, w, d] = { S: [0.05, 0.05, 0.9, 0.4], N: [0.05, 0.55, 0.9, 0.4], E: [0.05, 0.05, 0.4, 0.9], W: [0.55, 0.05, 0.4, 0.9] }[it.dir || 'S'];
+    isoBox(it.x + ox, it.y + oy, w, d, 70, '#5a3a22', 0, { top: '#6b4528' });
+    // libros en la cara visible
+    const faceY = it.dir === 'S' || it.dir === 'N';
+    for (let shelf = 0; shelf < 3; shelf++) {
+      const z = 10 + shelf * 20;
+      for (let i = 0; i < 5; i++) {
+        const tt = 0.12 + i * 0.16;
+        const p = faceY ? iso(it.x + ox + tt * w / 0.9, it.y + oy + d) : iso(it.x + ox + w, it.y + oy + tt * d / 0.9);
+        const col = ['#8a2a2a', '#2a5a8a', '#3a7a3a', '#c09030', '#6a3a8a'][(i + shelf + it.x) % 5];
+        rrect(p.x - 3, p.y - z - 15, 5, 15, 0.5, col, OUT, 0.8);
+      }
+    }
+  }
+
+  function drawPlant(it) {
+    const c = iso(it.x + 0.5, it.y + 0.5);
+    poly([{ x: c.x - 12, y: c.y - 16 }, { x: c.x + 12, y: c.y - 16 }, { x: c.x + 9, y: c.y + 2 }, { x: c.x - 9, y: c.y + 2 }], '#a0522d', OUT, 1.5);
+    ellipse(c.x, c.y - 16, 12, 5, '#5a2a10', OUT, 1.5);
+    const leaf = (dx, dy, r, col) => ellipse(c.x + dx, c.y - 22 + dy, r, r * 0.8, col, OUT, 1.2);
+    leaf(-9, -6, 9, '#2f7a3a'); leaf(9, -8, 9, '#2f7a3a'); leaf(0, -18, 10, '#3f9a4a'); leaf(-4, -10, 8, '#4fae5a'); leaf(6, -16, 7, '#4fae5a');
   }
 
   function drawStool(it) {
@@ -440,14 +486,16 @@
     cylinder(c.x, c.y - 16, 11, 5.5, 4, '#7a4e2c', '#9c6a3a');
   }
 
-  function chairOffsets(dir) {
-    // devuelve la caja del respaldo dentro de la casilla
+  // Caja del respaldo dentro de la casilla, en el lado contrario a donde se mira
+  function backOffsets(dir, thick = 0.14, inset = 0.15) {
+    const len = 1 - 2 * inset;
     switch (dir) {
-      case 'S': return [0.15, 0.1, 0.7, 0.14];   // respaldo en -y (mira a +y)
-      case 'N': return [0.15, 0.76, 0.7, 0.14];  // respaldo en +y
-      case 'E': return [0.1, 0.15, 0.14, 0.7];   // respaldo en -x
-      case 'W': return [0.76, 0.15, 0.14, 0.7];  // respaldo en +x
+      case 'S': return [inset, 0.1, len, thick];
+      case 'N': return [inset, 0.9 - thick, len, thick];
+      case 'E': return [0.1, inset, thick, len];
+      case 'W': return [0.9 - thick, inset, thick, len];
     }
+    return [inset, 0.1, len, thick];
   }
 
   function drawChairSeat(it) {
@@ -458,184 +506,57 @@
   }
 
   function drawChairBack(it) {
-    const [ox, oy, w, d] = chairOffsets(it.dir);
+    const [ox, oy, w, d] = backOffsets(it.dir);
     isoBox(it.x + ox, it.y + oy, w, d, 22, '#6b4228', 18, { top: '#8a5a32' });
   }
 
-  function drawSofa(it) {
+  function drawSofa(it, backPart) {
     const blue = '#2a4a8a';
-    isoBox(it.x + 0.12, it.y, 0.83, 1, 16, blue, 0, { stroke: null });
-    // cojín
-    isoBox(it.x + 0.2, it.y + 0.06, 0.7, 0.88, 4, '#3a62b0', 16, { stroke: 'rgba(10,20,50,.6)' });
-    // respaldo contra la pared
-    isoBox(it.x + 0.02, it.y, 0.22, 1, 26, '#23407a', 12, { stroke: null });
-    if (it.end === 'start') isoBox(it.x + 0.12, it.y, 0.83, 0.16, 12, '#23407a', 14);
-    if (it.end === 'end') isoBox(it.x + 0.12, it.y + 0.84, 0.83, 0.16, 12, '#23407a', 14);
-    // botones capitoné
-    const p = up(iso(it.x + 0.13, it.y + 0.5), 28);
-    ellipse(p.x, p.y, 1.5, 1.5, '#162a55');
+    const horiz = it.dir === 'E' || it.dir === 'W'; // el sofá se extiende a lo largo de y
+    const [nx, ny] = horiz ? [0, 1] : [1, 0];
+    const prev = sameAt(it.x - nx, it.y - ny, 'sofa') && MAP.itemAt(it.x - nx, it.y - ny).dir === it.dir;
+    const next = sameAt(it.x + nx, it.y + ny, 'sofa') && MAP.itemAt(it.x + nx, it.y + ny).dir === it.dir;
+    if (!backPart) {
+      isoBox(it.x + 0.02, it.y + 0.02, 0.96, 0.96, 14, blue, 0, { stroke: null });
+      isoBox(it.x + 0.12, it.y + 0.12, 0.76, 0.76, 4, '#3a62b0', 14, { stroke: 'rgba(10,20,50,.6)' });
+      if (!prev) { const b = horiz ? [0.05, 0.02, 0.9, 0.16] : [0.02, 0.05, 0.16, 0.9]; isoBox(it.x + b[0], it.y + b[1], b[2], b[3], 10, '#23407a', 14); }
+      return;
+    }
+    const [ox, oy, w, d] = backOffsets(it.dir, 0.22, 0.02);
+    isoBox(it.x + ox, it.y + oy, w, d, 24, '#23407a', 12, { stroke: null });
+    if (!next) { const b = horiz ? [0.05, 0.82, 0.9, 0.16] : [0.82, 0.05, 0.16, 0.9]; isoBox(it.x + b[0], it.y + b[1], b[2], b[3], 10, '#23407a', 14); }
   }
 
   function drawBartender() {
-    const c = iso(12.5, 4.5);
+    const c = iso(MAP.BARKEEP.x + 0.5, MAP.BARKEEP.y + 0.5);
     const t = performance.now();
-    drawHero(ctx, c.x, c.y, bartenderLook, { dir: 'W', walking: false, phase: 0, t, wiping: true, apron: true });
+    drawHero(ctx, c.x, c.y, bartenderLook, { dir: 'W', t, wiping: true });
   }
 
-  const bartenderLook = { cls: 'bardo', skin: 1, hair: 1, npc: true, color: '#7a4a2a', beard: '#6b4226', bald: true };
+  const bartenderLook = { cls: 'bardo', skin: 1, hair: 1, npc: true, color: '#7a4a2a', beard: '#6b4226', bald: true, apron: true };
 
   // ======================================================================
-  //  Personajes
+  //  Personajes (sprites pixel art de sprites.js)
   // ======================================================================
+  const PX = 2; // cada píxel del sprite ocupa 2 unidades del mundo
+
   // dir: E (+x, abajo-derecha), S (+y, abajo-izquierda), W (-x, arriba-izquierda), N (-y, arriba-derecha)
   function drawHero(c, x, y, look, o = {}) {
-    withCtx(c, () => drawHeroImpl(c, x, y, look, o));
-  }
-
-  function drawHeroImpl(c, x, y, look, o) {
-    const k = MAP.CLASSES[look.cls] || MAP.CLASSES.guerrero;
-    const body = look.color || k.color, trim = k.trim;
-    const skin = MAP.SKINS[look.skin] || MAP.SKINS[0];
-    const hair = MAP.HAIRS[look.hair] || MAP.HAIRS[0];
-    const back = o.dir === 'N' || o.dir === 'W';
-    const flip = o.dir === 'S' || o.dir === 'N' ? -1 : 1; // S/N miran a la izquierda en pantalla
     const t = o.t || 0;
-    const sit = !!o.sitting;
-    let bob = o.walking ? Math.abs(Math.sin(o.phase * Math.PI)) * 3 : Math.sin(t / 500 + x) * 0.6;
-    if (o.emote === 'dance') bob = Math.abs(Math.sin(t / 130)) * 6;
-    if (o.emote === 'laugh') bob = Math.abs(Math.sin(t / 80)) * 2;
-    const sway = o.emote === 'dance' ? Math.sin(t / 260) * 0.25 : 0;
-
+    const back = o.dir === 'N' || o.dir === 'W';
+    const flip = o.dir === 'S' || o.dir === 'W';
+    let frame = o.walking ? 1 + (Math.floor(o.phase * 2) % 2) : 0;
+    let bob = o.walking ? (frame === 1 ? 1 : 0) : 0;
+    if (o.emote === 'dance') { frame = 1 + (Math.floor(t / 180) % 2); bob = Math.floor(t / 180) % 2 ? 2 : 0; }
+    if (o.emote === 'laugh') bob = Math.floor(t / 90) % 2;
+    const tick = Math.floor(t / 220) % 2;
+    const spr = SPRITES.hero(look, { back, frame: o.sitting ? 0 : frame, sit: !!o.sitting, emote: o.emote, mug: o.mug, wiping: o.wiping, tick });
     c.save();
-    c.translate(x, y);
-    // sombra
-    if (!o.noShadow) ellipse(0, 0, 13, 5.5, 'rgba(0,0,0,.35)');
-    c.translate(0, -(sit ? 14 : 0) - bob);
-    c.rotate(sway);
-    c.scale(flip, 1);
-
-    // piernas
-    if (!sit) {
-      const sw = o.walking ? Math.sin(o.phase * Math.PI * 2) * 3 : 0;
-      rrect(-6, -10 + Math.max(0, sw), 5, 10 - Math.max(0, sw), 1, '#3a2a20', OUT, 1.2);
-      rrect(1, -10 + Math.max(0, -sw), 5, 10 - Math.max(0, -sw), 1, '#3a2a20', OUT, 1.2);
-    } else {
-      rrect(-6, -6, 12, 6, 2, '#3a2a20', OUT, 1.2);
-    }
-
-    // capa (maga, clérigo, pícaro) por detrás
-    if (back && (look.cls === 'maga' || look.cls === 'picaro')) rrect(-9, -24, 18, 20, 3, shade(body, -0.3), OUT, 1.2);
-
-    // cuerpo
-    const robe = look.cls === 'maga' || look.cls === 'clerigo';
-    if (robe && !sit) { poly([{ x: -9, y: -2 }, { x: 9, y: -2 }, { x: 7, y: -24 }, { x: -7, y: -24 }], body, OUT, 1.5); }
-    else rrect(-8, -24, 16, 16, 3, body, OUT, 1.5);
-    if (o.apron) rrect(-6, -20, 12, 16, 2, '#f4ecd8', OUT, 1);
-    // cinturón
-    rrect(-8, -13, 16, 3, 0, robe ? trim : '#3b2414', null);
-    if (!back) { c.fillStyle = trim; c.fillRect(-1.5, -13, 3, 3); }
-    if (look.cls === 'guerrero' && !back) { rrect(-6, -23, 12, 6, 2, '#a8a8b0', OUT, 1); }
-
-    // brazos
-    const armY = -22;
-    const wave = o.emote === 'wave' || o.emote === 'fight';
-    const holding = o.mug || o.emote === 'cheers';
-    // brazo trasero
-    rrect(-11, armY, 4, 11, 2, shade(body, -0.2), OUT, 1.2);
-    // brazo delantero
-    if (wave) {
-      const ang = Math.sin(t / 110) * 0.5;
-      c.save(); c.translate(9, armY + 2); c.rotate(-2.4 + ang);
-      rrect(-2, 0, 4, 11, 2, body, OUT, 1.2); ellipse(0, 12, 2.6, 2.6, skin, OUT, 1);
-      if (o.emote === 'fight') { rrect(-1, 12, 2, 14, 0, '#d0d0d8', OUT, 1); rrect(-4, 11, 8, 2, 0, '#6b4228', null); }
-      c.restore();
-    } else if (holding) {
-      rrect(7, armY, 4, 8, 2, body, OUT, 1.2);
-      c.save(); c.scale(flip, 1); mug(flip * 12, armY + 6, 0.8); c.restore();
-    } else if (o.wiping) {
-      const wx = Math.sin(t / 300) * 3;
-      rrect(6 + wx, armY + 2, 4, 10, 2, body, OUT, 1.2);
-      rrect(4 + wx, armY + 10, 8, 4, 1, '#d8d8e0', OUT, 1);
-    } else {
-      const swing = o.walking ? Math.sin(o.phase * Math.PI * 2) * 2 : 0;
-      rrect(7, armY + swing, 4, 11, 2, body, OUT, 1.2);
-      ellipse(9, armY + 11 + swing, 2.4, 2.4, skin, OUT, 1);
-    }
-    // laúd del bardo
-    if (look.cls === 'bardo' && !look.npc && !back) { ellipse(-4, -14, 5, 4, '#a0602a', OUT, 1); rrect(-3, -26, 2, 12, 0, '#6b3a1a', null); }
-
-    // cabeza
-    const hy = -34;
-    // orejas de elfo
-    if (look.cls === 'elfo') {
-      poly([{ x: -10, y: hy - 1 }, { x: -17, y: hy - 7 }, { x: -9, y: hy + 3 }], skin, OUT, 1.2);
-      poly([{ x: 10, y: hy - 1 }, { x: 17, y: hy - 7 }, { x: 9, y: hy + 3 }], skin, OUT, 1.2);
-    }
-    ellipse(0, hy, 11, 10.5, skin, OUT, 1.6);
-    // barba (tabernero)
-    if (look.beard && !back) { poly([{ x: -8, y: hy + 2 }, { x: 8, y: hy + 2 }, { x: 5, y: hy + 12 }, { x: -5, y: hy + 12 }], look.beard, OUT, 1.2); }
-
-    // pelo
-    if (!look.bald) {
-      if (back) {
-        ellipse(0, hy - 1, 11.5, 10.5, hair, OUT, 1.6);
-      } else {
-        c.beginPath(); c.ellipse(0, hy - 2, 11.5, 9.5, 0, Math.PI, 0); c.lineTo(11, hy - 1);
-        c.quadraticCurveTo(4, hy - 6, -2, hy - 3); c.quadraticCurveTo(-7, hy - 6, -11, hy); c.closePath();
-        c.fillStyle = hair; c.fill(); c.strokeStyle = OUT; c.lineWidth = 1.4; c.stroke();
-        if (look.cls === 'maga' || look.cls === 'elfo') { rrect(-12, hy - 3, 4, 14, 2, hair, OUT, 1.2); }
-      }
-    }
-
-    // ojos
-    if (!back) {
-      const blink = t > 0 && (Math.floor(t / 100) + Math.floor(x)) % 40 === 0;
-      c.fillStyle = '#1b1410';
-      if (o.emote === 'laugh' || o.emote === 'sleep' || blink) {
-        c.fillRect(1, hy + 1, 4, 1.5); c.fillRect(7, hy + 1, 3, 1.5);
-      } else {
-        c.fillRect(2, hy - 2, 2.5, 4); c.fillRect(7, hy - 2, 2.5, 4);
-        c.fillStyle = '#fff'; c.fillRect(2, hy - 2, 1, 1); c.fillRect(7, hy - 2, 1, 1);
-      }
-      c.fillStyle = 'rgba(230,110,110,.45)'; c.fillRect(0, hy + 3, 3, 2); c.fillRect(8, hy + 3, 3, 2);
-      if (o.emote === 'laugh' || o.emote === 'cheers') { c.fillStyle = '#5a1a1a'; c.fillRect(4, hy + 5, 4, 2.5); }
-    }
-
-    // sombreros y accesorios por clase
-    switch (look.cls) {
-      case 'maga':
-        poly([{ x: -14, y: hy - 6 }, { x: 14, y: hy - 6 }, { x: 9, y: hy - 3 }, { x: -9, y: hy - 3 }], shade(body, -0.25), OUT, 1.4);
-        poly([{ x: -9, y: hy - 6 }, { x: 9, y: hy - 6 }, { x: -2, y: hy - 30 }], body, OUT, 1.4);
-        c.fillStyle = trim; c.fillRect(-1, hy - 16, 3, 3);
-        break;
-      case 'guerrero':
-        c.beginPath(); c.ellipse(0, hy - 3, 12, 10, 0, Math.PI, 0); c.closePath();
-        c.fillStyle = '#9aa0aa'; c.fill(); c.strokeStyle = OUT; c.lineWidth = 1.4; c.stroke();
-        rrect(-12, hy - 5, 24, 3, 1, '#7a808a', OUT, 1);
-        poly([{ x: -11, y: hy - 6 }, { x: -18, y: hy - 18 }, { x: -8, y: hy - 10 }], '#f0e6d0', OUT, 1.2);
-        poly([{ x: 11, y: hy - 6 }, { x: 18, y: hy - 18 }, { x: 8, y: hy - 10 }], '#f0e6d0', OUT, 1.2);
-        break;
-      case 'elfo':
-        rrect(-11, hy - 8, 22, 3, 1, trim, OUT, 1);
-        poly([{ x: -4, y: hy - 8 }, { x: -1, y: hy - 15 }, { x: 2, y: hy - 8 }], '#4caf50', OUT, 1);
-        break;
-      case 'picaro':
-        c.beginPath(); c.ellipse(0, hy - 1, 13, 12.5, 0, Math.PI * 0.95, Math.PI * 0.05);
-        if (!back) { c.lineTo(10, hy + 6); c.quadraticCurveTo(0, hy - 8, -10, hy + 6); }
-        c.closePath(); c.fillStyle = body; c.fill(); c.strokeStyle = OUT; c.lineWidth = 1.4; c.stroke();
-        if (!back) { c.fillStyle = '#222'; c.fillRect(-2, hy + 4, 12, 4); }
-        break;
-      case 'bardo':
-        if (look.npc) break;
-        c.beginPath(); c.ellipse(0, hy - 6, 13, 6, -0.15, Math.PI, 0); c.closePath();
-        c.fillStyle = trim; c.fill(); c.strokeStyle = OUT; c.lineWidth = 1.4; c.stroke();
-        poly([{ x: -6, y: hy - 9 }, { x: -16, y: hy - 24 }, { x: -3, y: hy - 11 }], '#e04040', OUT, 1.2);
-        break;
-      case 'clerigo':
-        rrect(-11, hy - 9, 22, 3, 1, trim, OUT, 1);
-        c.fillStyle = trim; c.fillRect(-1.5, hy - 14, 3, 6); c.fillRect(-3.5, hy - 12.5, 7, 2);
-        break;
-    }
+    c.imageSmoothingEnabled = false;
+    if (!o.noShadow) { c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(x, y, 13, 5.5, 0, 0, Math.PI * 2); c.fill(); }
+    c.translate(Math.round(x), Math.round(y - (o.sitting ? 12 : 0) - bob * PX));
+    if (flip) c.scale(-1, 1);
+    c.drawImage(spr, -12 * PX, -32 * PX, spr.width * PX, spr.height * PX);
     c.restore();
   }
 
@@ -648,7 +569,7 @@
 
   function makeUser(u) {
     return {
-      id: u.id, name: u.name, look: u.look, gold: u.gold,
+      id: u.id, name: u.name, look: u.look, gold: u.gold, xp: u.xp || 0, where: u.where || null,
       tx: u.x, ty: u.y,          // casilla destino
       px: u.x, py: u.y,          // posición actual (continua)
       path: [], dir: 'S', phase: 0,
@@ -816,6 +737,7 @@
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     updateUsers(dt);
+    if (DD.scene !== 'tavern') { requestAnimationFrame(frame); return; }
     updateWall(now);
     updateBarkeep(now);
 
@@ -834,8 +756,13 @@
     drawLanterns(now);
 
     // casilla bajo el ratón
-    if (hover && MAP.isStandable(hover.x, hover.y)) {
-      const occupied = MAP.isSeat(hover.x, hover.y) && [...users.values()].some((u) => u.id !== myId && u.tx === hover.x && u.ty === hover.y);
+    if (hover && editing) {
+      const it = MAP.itemAt(hover.x, hover.y);
+      const col = editTool === 'erase' ? '#ff6b6b' : editTool === 'rotate' ? '#7ad0ff' : '#ffe9a8';
+      poly([iso(hover.x, hover.y), iso(hover.x + 1, hover.y), iso(hover.x + 1, hover.y + 1), iso(hover.x, hover.y + 1)],
+        it && editTool === 'erase' ? 'rgba(216,67,59,.35)' : 'rgba(255,230,150,.15)', col, 2);
+    } else if (hover && MAP.isStandable(hover.x, hover.y)) {
+      const occupied = MAP.isSeat(hover.x, hover.y) && [...users.values()].some((u) => u.id !== myId && !u.where && u.tx === hover.x && u.ty === hover.y);
       poly([iso(hover.x, hover.y), iso(hover.x + 1, hover.y), iso(hover.x + 1, hover.y + 1), iso(hover.x, hover.y + 1)],
         occupied ? 'rgba(216,67,59,.3)' : 'rgba(255,230,150,.22)', occupied ? '#d8433b' : '#ffe9a8', 1.5);
     }
@@ -848,7 +775,10 @@
     }
 
     const drawables = furnitureDrawables();
-    for (const u of users.values()) drawables.push(userDrawable(u, now));
+    for (const u of users.values()) if (!u.where) drawables.push(userDrawable(u, now)); else u._screen = null;
+    if (editing && hover && MAP.inBounds(hover.x, hover.y) && editTool !== 'erase' && editTool !== 'rotate') {
+      drawables.push(...itemDrawables({ type: editTool, x: hover.x, y: hover.y, dir: editDir }, true));
+    }
     drawables.sort((a, b) => a.depth - b.depth);
     for (const d of drawables) d.draw();
 
@@ -912,11 +842,12 @@
     // ¿clic en el muro de letras? (pared izquierda: x = 0)
     const wy = (OX - t.wx) / (TW / 2);
     const wz = iso(0, wy).y - t.wy;
+    if (editing) { editClick(t.x, t.y); return; }
     if (wy > 1.6 && wy < 7.3 && wz > 45 && wz < WALL_H) { askWall(); return; }
     if (!MAP.isStandable(t.x, t.y)) return;
     const me = users.get(myId);
     if (!me) return;
-    if (MAP.isSeat(t.x, t.y) && [...users.values()].some((u) => u.id !== myId && u.tx === t.x && u.ty === t.y)) {
+    if (MAP.isSeat(t.x, t.y) && [...users.values()].some((u) => u.id !== myId && !u.where && u.tx === t.x && u.ty === t.y)) {
       toast('Ese asiento está ocupado.'); return;
     }
     setTarget(me, t.x, t.y);
@@ -926,6 +857,7 @@
   // Mover con el teclado (WASD / flechas) cuando no se está escribiendo
   window.addEventListener('keydown', (e) => {
     if (document.activeElement && (document.activeElement.tagName === 'INPUT')) return;
+    if (DD.scene !== 'tavern') return;
     if (e.key === 'Enter') { e.preventDefault(); chatInput.focus(); return; }
     const me = users.get(myId);
     if (!me || me.path.length) return;
@@ -935,7 +867,7 @@
     e.preventDefault();
     const x = me.tx + d[0], y = me.ty + d[1];
     if (!MAP.isStandable(x, y)) return;
-    if (MAP.isSeat(x, y) && [...users.values()].some((u) => u.id !== myId && u.tx === x && u.ty === y)) return;
+    if (MAP.isSeat(x, y) && [...users.values()].some((u) => u.id !== myId && !u.where && u.tx === x && u.ty === y)) return;
     setTarget(me, x, y);
     net.send({ t: 'move', x, y });
   });
@@ -953,7 +885,7 @@
       ws.onopen = () => {
         this.retry = 0;
         connEl.classList.add('hidden');
-        ws.send(JSON.stringify({ t: 'join', room: profile.room, name: profile.name, look: profile.look }));
+        ws.send(JSON.stringify({ t: 'join', room: profile.room, name: profile.name, look: profile.look, token: playerToken() }));
       };
       ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; } handle(m); };
       ws.onclose = () => {
@@ -976,6 +908,11 @@
         roomNameEl.textContent = m.room;
         history.replaceState(null, '', `?sala=${encodeURIComponent(m.room)}`);
         for (const u of m.users) users.set(u.id, makeUser(u));
+        MAP.setItems(m.items);
+        isOwner = !!m.owner;
+        document.querySelector('#bar [data-act="edit"]').classList.toggle('hidden', !isOwner);
+        if (!isOwner) setEditing(false);
+        DD.emit('welcome', m);
         logEl.innerHTML = '';
         for (const h of m.history) logLine(h);
         renderHeroes();
@@ -985,7 +922,28 @@
       case 'leave': users.delete(m.id); renderHeroes(); break;
       case 'move': {
         const u = users.get(m.id);
-        if (u && (u.tx !== m.x || u.ty !== m.y)) setTarget(u, m.x, m.y);
+        if (u && m.snap) { u.tx = u.px = m.x; u.ty = u.py = m.y; u.path = []; }
+        else if (u && (u.tx !== m.x || u.ty !== m.y)) setTarget(u, m.x, m.y);
+        break;
+      }
+      case 'titems': MAP.setItems(m.items); break;
+      case 'where': {
+        const u = users.get(m.id);
+        if (!u) break;
+        u.where = m.where;
+        if (!m.where && m.x !== undefined) { u.tx = u.px = m.x; u.ty = u.py = m.y; u.path = []; }
+        renderHeroes();
+        break;
+      }
+      case 'profile': {
+        const u = users.get(m.id);
+        if (!u) break;
+        const before = MAP.levelFromXp(u.xp);
+        const gained = m.gold - u.gold;
+        u.xp = m.xp; u.gold = m.gold;
+        if (MAP.levelFromXp(u.xp) > before && m.id === myId) { toast(`⭐ ¡Subes a nivel ${MAP.levelFromXp(u.xp)}!`); blip(990, 0.2); }
+        if (gained > 0 && !u.where) floaters.push({ id: m.id, text: `+${gained} 🪙`, start: now, dur: 1800, color: '#ffd23f' });
+        renderHeroes();
         break;
       }
       case 'chat': {
@@ -1028,7 +986,9 @@
       }
       case 'system': logLine(m); break;
       case 'error': toast(m.text); break;
+      default: DD.emit(m.t, m);
     }
+    if (m.t === 'chat' || m.t === 'action' || m.t === 'roll' || m.t === 'system' || m.t === 'wall') DD.emit('log', m);
   }
 
   // ======================================================================
@@ -1069,10 +1029,10 @@
     const c = document.createElement('canvas');
     c.width = size * 2; c.height = size * 2;
     const g = c.getContext('2d');
-    g.scale(2, 2);
-    g.translate(size / 2, size * 1.45);
-    g.scale(1.55, 1.55);
-    drawHero(g, 0, 0, look, { dir: 'E', t: 0, noShadow: true });
+    g.imageSmoothingEnabled = false;
+    const spr = SPRITES.hero(look, {});
+    const k = 4; // recorte de cabeza y torso, ampliado
+    g.drawImage(spr, 0, 0, 24, 28, (c.width - 24 * k) / 2, c.height - 26 * k, 24 * k, 28 * k);
     return c;
   }
 
@@ -1082,6 +1042,7 @@
     heroListEl.innerHTML = '';
     for (const u of list) {
       const k = MAP.CLASSES[u.look.cls];
+      const st = MAP.heroStats(u.look.cls, u.xp);
       const card = document.createElement('div');
       card.className = 'hero' + (u.id === myId ? ' me' : '');
       card.dataset.id = u.id;
@@ -1089,11 +1050,17 @@
       const row = document.createElement('div'); row.className = 'row';
       row.appendChild(portrait(u.look));
       const stats = document.createElement('div'); stats.className = 'stats';
-      stats.innerHTML = `<div class="cls"></div><div>❤️ HP ${k.hp}</div><div>🗡️ ATT ${k.att}</div><div class="gold">🪙 <span></span></div>`;
-      stats.querySelector('.cls').textContent = k.name;
+      stats.innerHTML = `<div class="cls"></div><div>❤️ HP ${st.hp} · 🗡️ ATT ${st.att}</div><div class="xp" title="Experiencia"><i></i><span></span></div><div class="gold">🪙 <span></span></div>`;
+      stats.querySelector('.cls').textContent = `${k.name} · Nivel ${st.level}`;
+      stats.querySelector('.xp i').style.width = Math.round(100 * (u.xp - st.base) / (st.next - st.base)) + '%';
+      stats.querySelector('.xp span').textContent = `${u.xp}/${st.next} XP`;
       stats.querySelector('.gold span').textContent = u.gold;
       row.appendChild(stats);
       card.append(name, row);
+      if (u.where) {
+        const w = document.createElement('div'); w.className = 'where'; w.textContent = `⚔️ En «${u.where}»`;
+        card.appendChild(w);
+      }
       if (u.id !== myId) {
         const acts = document.createElement('div'); acts.className = 'acts';
         const greet = document.createElement('button'); greet.className = 'btn'; greet.textContent = 'SALUDAR';
@@ -1105,6 +1072,7 @@
       }
       heroListEl.appendChild(card);
     }
+    DD.emit('heroes');
   }
 
   function updateHeroGold(u) {
@@ -1144,6 +1112,8 @@
     else if (act === 'dice') { closePops(); net.send({ t: 'roll', sides: 20 }); }
     else if (act === 'drink') { closePops(); net.send({ t: 'drink' }); }
     else if (act === 'wall') { closePops(); askWall(); }
+    else if (act === 'edit') { closePops(); setEditing(!editing); }
+    else if (act === 'dungeons') { closePops(); DD.emit('open-dungeons'); }
     else if (act === 'heroes') {
       closePops();
       if (window.innerWidth <= 820) heroesEl.classList.toggle('open');
@@ -1195,6 +1165,96 @@
   function load(k) { try { return localStorage.getItem(k); } catch { return null; } }
   function save(k, v) { try { localStorage.setItem(k, v); } catch { /* sin almacenamiento */ } }
 
+
+  // ======================================================================
+  //  Editor de la taberna (sólo el dueño de la sala)
+  // ======================================================================
+  const editorEl = $('#editor');
+  const EDIT_ORDER = ['barrel', 'crate', 'smallcrate', 'table', 'maptable', 'roundtable', 'bar', 'bookshelf', 'plant', 'chair', 'stool', 'sofa', 'staff'];
+
+  function toolPreview(type) {
+    const c = document.createElement('canvas');
+    c.width = 112; c.height = 96;
+    const g = c.getContext('2d');
+    const s = 1.1, center = iso(0.5, 0.5);
+    g.setTransform(s, 0, 0, s, 56 - center.x * s, 74 - center.y * s);
+    withCtx(g, () => {
+      const ds = itemDrawables({ type, x: 0, y: 0, dir: 'S' }, false);
+      if (type === 'staff') ds.push({ depth: 0, draw: () => drawStaffZone({ x: 0, y: 0 }) });
+      ds.sort((a, b) => a.depth - b.depth).forEach((d) => d.draw());
+    });
+    return c;
+  }
+
+  function buildEditor() {
+    const box = $('#edit-tools');
+    box.innerHTML = '';
+    const tools = [...EDIT_ORDER.map((t) => ({ id: t, name: MAP.FURNITURE[t].name })), { id: 'rotate', name: 'Girar', icon: '↻' }, { id: 'erase', name: 'Quitar', icon: '🧹' }];
+    for (const tool of tools) {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'tool-btn' + (editTool === tool.id ? ' on' : '');
+      b.title = tool.name;
+      if (tool.icon) { const i = document.createElement('span'); i.className = 'big-ico'; i.textContent = tool.icon; b.appendChild(i); }
+      else b.appendChild(toolPreview(tool.id));
+      const l = document.createElement('span'); l.textContent = tool.name; b.appendChild(l);
+      b.onclick = () => { editTool = tool.id; buildEditor(); };
+      box.appendChild(b);
+    }
+    $('#edit-dir').textContent = { E: '↘', S: '↙', W: '↖', N: '↗' }[editDir];
+  }
+
+  function setEditing(on) {
+    editing = !!on && isOwner;
+    editorEl.classList.toggle('hidden', !editing);
+    document.body.classList.toggle('editing', editing);
+    if (editing) { buildEditor(); toast('Modo edición: haz clic en el suelo para colocar muebles.'); }
+  }
+
+  function editClick(x, y) {
+    if (!MAP.inBounds(x, y)) return;
+    if (x === MAP.BARKEEP.x && y === MAP.BARKEEP.y) { toast('Ahí trabaja el tabernero.'); return; }
+    const it = MAP.itemAt(x, y);
+    if (editTool === 'erase') { if (it) net.send({ t: 'tedit', op: 'remove', x, y }); return; }
+    if (editTool === 'rotate') { if (it && MAP.FURNITURE[it.type].rotates) net.send({ t: 'tedit', op: 'rotate', x, y }); return; }
+    if (it && it.type === editTool && MAP.FURNITURE[it.type].rotates) { net.send({ t: 'tedit', op: 'rotate', x, y }); return; }
+    if ([...users.values()].some((u) => !u.where && u.tx === x && u.ty === y) && MAP.FURNITURE[editTool].block) { toast('Hay alguien ahí de pie.'); return; }
+    net.send({ t: 'tedit', op: 'place', type: editTool, x, y, dir: editDir });
+  }
+
+  function rotateEditDir() {
+    editDir = MAP.DIRS[(MAP.DIRS.indexOf(editDir) + 1) % 4];
+    $('#edit-dir').textContent = { E: '↘', S: '↙', W: '↖', N: '↗' }[editDir];
+  }
+
+  $('#edit-rot').addEventListener('click', rotateEditDir);
+  $('#edit-done').addEventListener('click', () => setEditing(false));
+  $('#edit-reset').addEventListener('click', () => { if (confirm('¿Volver a la taberna original? Se perderán tus cambios.')) net.send({ t: 'tedit', op: 'reset' }); });
+  $('#edit-clear').addEventListener('click', () => { if (confirm('¿Quitar todos los muebles?')) net.send({ t: 'tedit', op: 'clear' }); });
+  window.addEventListener('keydown', (e) => {
+    if (!editing || (document.activeElement && document.activeElement.tagName === 'INPUT')) return;
+    if (e.key === 'r' || e.key === 'R') rotateEditDir();
+    if (e.key === 'Escape') setEditing(false);
+  });
+
+  function playerToken() {
+    let t = load('dd-token');
+    if (!t || !/^[a-f0-9]{32}$/.test(t)) {
+      const a = new Uint8Array(16);
+      crypto.getRandomValues(a);
+      t = [...a].map((b) => b.toString(16).padStart(2, '0')).join('');
+      save('dd-token', t);
+    }
+    return t;
+  }
+
+  Object.defineProperty(DD, 'myId', { get: () => myId });
+  Object.defineProperty(DD, 'roomName', { get: () => roomName });
+  Object.assign(DD, {
+    net, users, toast, logLine, blip, makeUser,
+    setScene(sc) { DD.scene = sc; document.body.classList.toggle('in-dungeon', sc !== 'tavern'); hover = null; if (sc !== 'tavern') setEditing(false); },
+  });
+
   // ======================================================================
   //  Pantalla de entrada
   // ======================================================================
@@ -1216,7 +1276,7 @@
     for (const [id, k] of Object.entries(MAP.CLASSES)) {
       const b = document.createElement('button'); b.type = 'button';
       b.className = look.cls === id ? 'on' : '';
-      b.innerHTML = `<span></span><small>❤️${k.hp} 🗡️${k.att}</small>`;
+      b.innerHTML = `<span></span><small>❤️${k.hp * 2} 🗡️${k.att}</small>`;
       b.firstChild.textContent = k.name;
       b.onclick = () => { look.cls = id; buildPickers(); };
       cp.appendChild(b);

@@ -1,8 +1,13 @@
 // Prueba rápida: dos amigos entran en la misma sala, se mueven y charlan.
 process.env.PORT = process.env.PORT || '3999';
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-'));
 const assert = require('assert');
 const WebSocket = require('ws');
-const server = require('../server.js');
+const { server } = require('../server.js');
+const DUNGEON = require('../public/dungeon-data.js');
 
 const url = `ws://localhost:${process.env.PORT}/ws`;
 
@@ -12,8 +17,8 @@ function client(name) {
   const waiters = [];
   ws.on('message', (d) => {
     const m = JSON.parse(d);
-    inbox.push(m);
-    for (const w of [...waiters]) if (w.pred(m)) { waiters.splice(waiters.indexOf(w), 1); w.resolve(m); }
+    const w = waiters.find((x) => x.pred(m));
+    if (w) { waiters.splice(waiters.indexOf(w), 1); w.resolve(m); } else inbox.push(m);
   });
   const next = (pred) => {
     const found = inbox.find(pred);
@@ -28,16 +33,21 @@ function client(name) {
 }
 
 (async () => {
+  await new Promise((r) => server.listen(process.env.PORT, r));
+  const tokA = 'a'.repeat(32), tokB = 'b'.repeat(32);
   const a = await client('Ana');
-  a.send({ t: 'join', room: 'Prueba Sala', name: 'Ana', look: { cls: 'maga', skin: 1, hair: 2 } });
+  a.send({ t: 'join', room: 'Prueba Sala', name: 'Ana', look: { cls: 'maga', skin: 1, hair: 2 }, token: tokA });
   const wa = await a.next((m) => m.t === 'welcome');
   assert.strictEqual(wa.room, 'prueba-sala');
   assert.strictEqual(wa.users.length, 1);
+  assert.strictEqual(wa.owner, true, 'quien abre la sala es su dueño');
+  assert.ok(wa.items.length > 10, 'llegan los muebles');
 
   const b = await client('Beto');
-  b.send({ t: 'join', room: 'prueba-sala', name: 'Beto', look: { cls: 'hacker', skin: 99 } });
+  b.send({ t: 'join', room: 'prueba-sala', name: 'Beto', look: { cls: 'hacker', skin: 99 }, token: tokB });
   const wb = await b.next((m) => m.t === 'welcome');
   assert.strictEqual(wb.users.length, 2);
+  assert.strictEqual(wb.owner, false);
   const beto = wb.users.find((u) => u.id === wb.id);
   assert.deepStrictEqual(beto.look, { cls: 'guerrero', skin: 0, hair: 0 }, 'aspecto inválido saneado');
   await a.next((m) => m.t === 'join' && m.user.name === 'Beto');
@@ -69,8 +79,68 @@ function client(name) {
   // Invitar a una ronda cuesta oro
   a.send({ t: 'round', to: wb.id });
   await b.next((m) => m.t === 'drink' && m.id === wb.id);
-  const g = await b.next((m) => m.t === 'gold' && m.id === wa.id);
+  const g = await b.next((m) => m.t === 'profile' && m.id === wa.id);
   assert.strictEqual(g.gold, 45);
+
+  // Editor de la taberna: sólo el dueño
+  b.send({ t: 'tedit', op: 'place', type: 'plant', x: 8, y: 6 });
+  const denied = await b.next((m) => m.t === 'error');
+  assert.match(denied.text, /dueño/);
+  a.send({ t: 'tedit', op: 'place', type: 'plant', x: 8, y: 6 });
+  const ti = await b.next((m) => m.t === 'titems');
+  assert.ok(ti.items.some((it) => it.type === 'plant' && it.x === 8 && it.y === 6));
+  a.send({ t: 'tedit', op: 'place', type: 'chair', x: 12, y: 4, dir: 'N' }); // casilla del tabernero
+  a.send({ t: 'tedit', op: 'remove', x: 8, y: 6 });
+  const ti2 = await b.next((m) => m.t === 'titems' && !m.items.some((it) => it.x === 8 && it.y === 6));
+  assert.ok(!ti2.items.some((it) => it.x === 12 && it.y === 4), 'nadie pone muebles sobre el tabernero');
+  assert.ok(!ti2.items.some((it) => it.x === 8 && it.y === 6));
+
+  // Mazmorras: lista, guardar, validar y jugar
+  b.send({ t: 'dlist' });
+  const dl = await b.next((m) => m.t === 'dlist');
+  assert.ok(dl.list.some((d) => d.id === 'cripta'), 'hay una mazmorra de ejemplo');
+  b.send({ t: 'dsave', dungeon: { name: 'Sin salida', tiles: '.'.repeat(DUNGEON.W * DUNGEON.H), objects: [{ k: 'start', x: 1, y: 1 }] } });
+  const bad = await b.next((m) => m.t === 'dsaved');
+  assert.strictEqual(bad.ok, false);
+  // Pasillo: entrada, un goblin, un cofre y la salida
+  const tiles = ('#'.repeat(DUNGEON.W)) + ('#' + '.'.repeat(DUNGEON.W - 2) + '#') + ('#'.repeat(DUNGEON.W)).repeat(DUNGEON.H - 2);
+  const corridor = { name: 'Pasillo', tiles, objects: [{ k: 'start', x: 1, y: 1 }, { k: 'goblin', x: 2, y: 1 }, { k: 'potion', x: 3, y: 1 }, { k: 'chest', x: 10, y: 1 }, { k: 'exit', x: 5, y: 1 }] };
+  b.send({ t: 'dsave', dungeon: corridor });
+  const ok = await b.next((m) => m.t === 'dsaved');
+  assert.ok(ok.ok, ok.error);
+  b.send({ t: 'denter', id: ok.id });
+  const ds = await b.next((m) => m.t === 'dstart');
+  assert.strictEqual(ds.players.length, 1);
+  assert.strictEqual(ds.enemies[0].k, 'goblin');
+  await a.next((m) => m.t === 'where' && m.id === wb.id && m.where === 'Pasillo');
+  // Atacar al goblin hasta acabar con él (guerrero: 6+ de daño, goblin: 6 de vida)
+  let died = null;
+  for (let i = 0; i < 6 && !died; i++) {
+    b.send({ t: 'dmove', dx: 1, dy: 0 });
+    const snap = await b.next((m) => m.t === 'dsnap' && m.events.some((e) => e.e === 'hit' || e.e === 'die'));
+    died = snap.events.find((e) => e.e === 'die');
+    await new Promise((r) => setTimeout(r, 450));
+  }
+  assert.ok(died, 'el goblin muere');
+  const xpMsg = await a.next((m) => m.t === 'profile' && m.id === wb.id && m.xp > 0);
+  assert.strictEqual(xpMsg.xp, DUNGEON.ENEMIES.goblin.xp);
+  // Recoger las monedas, la poción y llegar a la salida
+  for (let i = 0; i < 4; i++) { b.send({ t: 'dmove', dx: 1, dy: 0 }); await new Promise((r) => setTimeout(r, 200)); }
+  const exit = await b.next((m) => m.t === 'dexit');
+  assert.strictEqual(exit.reason, 'win');
+  const final = await a.next((m) => m.t === 'profile' && m.id === wb.id && m.xp >= DUNGEON.ENEMIES.goblin.xp + DUNGEON.REWARDS.exit.xp);
+  assert.ok(final.gold > 50, 'gana oro');
+
+  // El perfil (experiencia y oro) se guarda con el token
+  b.ws.close();
+  await a.next((m) => m.t === 'leave' && m.id === wb.id);
+  const b2 = await client('Beto2');
+  b2.send({ t: 'join', room: 'prueba-sala', name: 'Beto', token: tokB });
+  const wb2 = await b2.next((m) => m.t === 'welcome');
+  const me2 = wb2.users.find((u) => u.id === wb2.id);
+  assert.strictEqual(me2.xp, final.xp);
+  assert.strictEqual(me2.gold, final.gold);
+  b2.ws.close();
 
   // El historial llega a quien entra después
   const c = await client('Cris');
@@ -78,9 +148,6 @@ function client(name) {
   const wc = await c.next((m) => m.t === 'welcome');
   assert.ok(wc.history.some((m) => m.t === 'chat' && m.text === '¡Hola Ana!'));
 
-  // Salida
-  b.ws.close();
-  await a.next((m) => m.t === 'leave' && m.id === wb.id);
 
   // Ficheros estáticos y protección de rutas
   const http = require('http');

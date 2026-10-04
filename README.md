@@ -7,7 +7,11 @@ Una taberna pixel-art isométrica, en plan red social, para quedar y charlar con
 - Habla con bocadillos encima de tu personaje; todo queda en la **Crónica** (y quien entra después ve los últimos mensajes).
 - Gestos (saludar, bailar, brindar…), tirar dados (`/d20`, `/dado 6`), pedir una jarra al tabernero.
 - **Muro de letras**: escribe algo con `/muro HOLA` (o haciendo clic en el muro) y las luces lo deletrean letra a letra para todos.
-- Panel de héroes con HP/ATT y oro: ganas oro hablando y lo gastas invitando a rondas a tus amigos.
+- Personajes en **pixel art**, con animaciones de andar, sentarse y gestos.
+- **Editor de la taberna**: quien abre una sala nueva es su dueño y, con el botón 🔨 Editar, puede colocar, girar y quitar barriles, mesas, sillas, sofás, estanterías, plantas…
+- **Mazmorras** (🗝️): bajad juntos a combatir contra **goblins** (goblin, chamán), **orcos** (orco, jefe orco) y **no muertos** (esqueleto, zombi, nigromante que invoca esqueletos). Se ataca chocando contra el enemigo.
+- **Editor de mazmorras**: pinta muros, suelo, puertas, pinchos y agua, y coloca entrada, salida, cofres, pociones y enemigos. Las mazmorras de otros se pueden copiar.
+- **Experiencia y oro**: cada enemigo da experiencia y suelta monedas; los cofres dan oro y experiencia; llegar a la salida da un premio. Al subir de nivel ganas vida y ataque. Si caes, vuelves a la taberna y pierdes el 10 % del oro. El progreso se guarda en el servidor y se recupera al volver desde el mismo navegador.
 - Salas privadas: comparte el nombre de la sala o el enlace `?sala=nombre` (Menú → Copiar enlace).
 
 ## Jugar en tu ordenador
@@ -32,17 +36,36 @@ El juego es un único servidor Node (HTTP + WebSocket), así que se puede public
 
 | Comando | Qué hace |
 | --- | --- |
-| `/d20`, `/d6`, `/dado 12` | Tira un dado (un 20 natural en d20 da +20 de oro) |
+| `/d20`, `/d6`, `/dado 12` | Tira un dado y todos ven el resultado |
 | `/muro TEXTO` | Deletrea el texto en el muro de luces |
 | `/me acción` | Narra una acción (`/me pide otra ronda`) |
 | `/nombre Nuevo` | Cambia tu nombre |
 | `/ayuda` | Muestra la ayuda |
 
+## Recompensas
+
+| Enemigo | Familia | Vida | Ataque | Experiencia | Oro |
+| --- | --- | --- | --- | --- | --- |
+| Goblin | Goblins | 6 | 2 | 10 | 2–6 |
+| Chamán goblin | Goblins | 8 | 3 | 18 | 5–10 |
+| Orco | Orcos | 16 | 4 | 25 | 6–14 |
+| Jefe orco | Orcos | 40 | 7 | 100 | 40–70 |
+| Esqueleto | No muertos | 10 | 3 | 15 | 3–8 |
+| Zombi | No muertos | 14 | 3 | 18 | 2–7 |
+| Nigromante | No muertos | 30 | 6 | 90 | 35–60 |
+
+Cofre: 15–35 de oro y 15 de experiencia. Salida: 25 de oro y 40 de experiencia. Para llegar al nivel *n* hacen falta 50·*n*·(*n*−1) puntos de experiencia (nivel 2 con 100, nivel 3 con 300…).
+
 ## Estructura
 
-- `server.js`: servidor HTTP estático y WebSocket (salas, chat, validación de movimientos, límite de mensajes).
-- `public/map.js`: mapa de la taberna, clases y búsqueda de rutas; lo usan tanto el servidor como el navegador.
-- `public/game.js`: dibujo de la sala en canvas, personajes, animaciones, interfaz y red.
+- `server.js`: servidor HTTP estático y WebSocket (salas, chat, editor, mazmorras, experiencia y oro).
+- `server/store.js`: guarda salas, mazmorras y perfiles en `data/*.json` (cambia la carpeta con `DATA_DIR`).
+- `server/dungeon.js`: partidas en mazmorra: IA de los enemigos, combate y botín.
+- `public/map.js`: mapa y muebles de la taberna, clases, niveles y búsqueda de rutas (servidor y navegador).
+- `public/dungeon-data.js`: casillas, enemigos, recompensas y validación de mazmorras (servidor y navegador).
+- `public/sprites.js`: generador de pixel art para héroes, enemigos y casillas.
+- `public/game.js`: la taberna: dibujo, personajes, editor de muebles, interfaz y red.
+- `public/dungeon.js`: lista de mazmorras, partida y editor.
 - `test/smoke.js`: prueba automática (`npm test`).
 
-No se guarda nada en disco: las salas y su historial viven en la memoria del servidor.
+Las mazmorras, los muebles y los perfiles se guardan en `data/`. El chat no se guarda: vive en la memoria del servidor.
