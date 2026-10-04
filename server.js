@@ -9,6 +9,7 @@ const DUNGEON = require('./public/dungeon-data.js');
 const RULES = require('./public/rules/engine.js');
 const { createStore } = require('./server/store.js');
 const { Instance } = require('./server/dungeon.js');
+const WORLD = require('./server/world.js');
 
 const PORT = Number(process.env.PORT) || 3000;
 const PUBLIC_DIR = path.join(__dirname, 'public');
@@ -169,10 +170,21 @@ function reward(room, user, xp, gold) {
   }
 }
 
-// ---------- Mazmorras ----------
+// ---------- Mazmorras y mundo abierto ----------
 function dungeonSummary(d, pid) {
-  const enemies = d.objects.filter((o) => DUNGEON.ENEMIES[o.k]).length;
+  const enemies = d.objects.filter((o) => DUNGEON.enemyKey(o.k)).length;
   return { id: d.id, name: d.name, author: d.author, mine: d.authorId === pid, enemies, updated: d.updated };
+}
+
+// El mundo de cada sala se genera una vez (con sus cuevas apuntando a las mazmorras que existan)
+function worldDef(room) {
+  if (!room.world) {
+    const list = Object.values(store.dungeons()).sort((a, b) => (a.id === 'cripta' ? -1 : b.id === 'cripta' ? 1 : b.updated - a.updated));
+    const def = WORLD.generate(room.name, list.map((d) => d.id));
+    for (const c of def.caves) { const d = store.dungeon(c.dungeon); def.labels.push({ x: c.x, y: c.y - 2, text: `Cueva: ${d ? d.name : '?'}` }); }
+    room.world = def;
+  }
+  return room.world;
 }
 
 function getInstance(room, def) {
@@ -181,23 +193,65 @@ function getInstance(room, def) {
     inst = new Instance(def, {
       send: (u, msg) => send(u.ws, msg),
       reward: (u, xp, gold) => reward(room, u, xp, gold),
-      exit: (u, reason, r) => leaveDungeon(room, u, reason, r),
+      exit: (u, reason, r) => leaveInstance(room, u, reason, r),
+      portal: (u, dungeonId, back) => enterDungeon(room, u, dungeonId, { from: 'world', back }),
     });
     room.instances.set(def.id, inst);
   }
   return inst;
 }
 
-function leaveDungeon(room, user, reason, r) {
-  if (!user.where) return;
-  const name = user.where.name;
-  const inst = room.instances.get(user.where.id);
+function detach(room, user) {
+  const inst = user.where && room.instances.get(user.where.id);
   if (inst) {
     inst.leave(user.id);
     inst.flush([user]);
     if (!inst.size) room.instances.delete(user.where.id);
   }
+}
+
+function enterDungeon(room, user, id, via = {}) {
+  const d = store.dungeon(String(id));
+  if (!d) { send(user.ws, { t: 'error', text: 'Esa mazmorra ya no existe.' }); return backToWorldOrTavern(room, user, via); }
+  if (user.where && user.where.id !== d.id) detach(room, user);
+  user.where = { id: d.id, name: d.name, from: via.from || null, back: via.back || null };
+  getInstance(room, d).join(user, user.profile);
+  broadcast(room, { t: 'where', id: user.id, where: d.name });
+  system(room, `⚔️ ${user.name} baja a «${d.name}».`);
+}
+
+function enterWorld(room, user, at) {
+  const def = worldDef(room);
+  if (user.where && user.where.id !== 'world') detach(room, user);
+  user.where = { id: 'world', name: def.name };
+  getInstance(room, def).join(user, user.profile, at || def.start);
+  broadcast(room, { t: 'where', id: user.id, where: def.name });
+}
+
+function backToWorldOrTavern(room, user, via) {
+  if (via && via.from === 'world') return enterWorld(room, user, via.back);
+  return toTavern(room, user, 'leave');
+}
+
+// Sale de una partida. Desde una mazmorra a la que se llegó por una cueva se vuelve al mundo (salvo si cae).
+function leaveInstance(room, user, reason, r) {
+  if (!user.where) return;
+  const where = user.where;
+  detach(room, user);
+  if (reason === 'win') system(room, `🏆 ${user.name} completa «${where.name}»: +${r.xp} de experiencia y +${r.gold} de oro.`);
+  if (reason !== 'down' && reason !== 'town' && where.from === 'world') {
+    user.where = null;
+    send(user.ws, { t: 'dexit', reason, silent: true });
+    return enterWorld(room, user, where.back);
+  }
+  toTavern(room, user, reason, where.name);
+}
+
+function toTavern(room, user, reason, name) {
+  if (user.where) detach(room, user);
+  name = name || (user.where && user.where.name) || '';
   user.where = null;
+  user.combat = null; // descanso largo: vida, espacios de conjuro y rasgos se recuperan
   const pos = freeSpawn(room, user);
   user.x = pos.x; user.y = pos.y;
   let lost = 0;
@@ -205,10 +259,8 @@ function leaveDungeon(room, user, reason, r) {
     lost = Math.floor(user.profile.gold * DUNGEON.REWARDS.deathGoldLoss);
     if (lost) reward(room, user, 0, -lost);
     system(room, `💀 ${user.name} cae en «${name}» y vuelve a la taberna${lost ? ` (pierde ${lost} de oro)` : ''}.`);
-  } else if (reason === 'win') {
-    system(room, `🏆 ${user.name} completa «${name}»: +${r.xp} de experiencia y +${r.gold} de oro.`);
-  } else {
-    system(room, `${user.name} vuelve de «${name}».`);
+  } else if (reason !== 'win') {
+    system(room, `${user.name} vuelve a la taberna.`);
   }
   send(user.ws, { t: 'dexit', reason, lost });
   broadcast(room, { t: 'where', id: user.id, where: null, x: user.x, y: user.y });
@@ -429,13 +481,19 @@ wss.on('connection', (ws) => {
       }
       case 'denter': {
         if (user.where) return;
-        const d = store.dungeon(String(msg.id));
-        if (!d) return send(ws, { t: 'error', text: 'Esa mazmorra ya no existe.' });
-        user.where = { id: d.id, name: d.name };
-        const inst = getInstance(room, d);
-        inst.join(user, user.profile);
-        broadcast(room, { t: 'where', id: user.id, where: d.name });
-        system(room, `⚔️ ${user.name} baja a «${d.name}».`);
+        enterDungeon(room, user, msg.id);
+        break;
+      }
+      case 'wenter': {
+        if (user.where) return;
+        enterWorld(room, user);
+        system(room, `🗺️ ${user.name} sale de la taberna a «${room.world.name}».`);
+        break;
+      }
+      case 'dact': {
+        if (!user.where) return;
+        const inst = room.instances.get(user.where.id);
+        if (inst) inst.action(user.id, msg);
         break;
       }
       case 'dmove': {
@@ -445,7 +503,9 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'dleave': {
-        leaveDungeon(room, user, 'leave');
+        if (!user.where) return;
+        if (user.where.id === 'world') toTavern(room, user, 'leave');
+        else leaveInstance(room, user, 'leave');
         break;
       }
     }

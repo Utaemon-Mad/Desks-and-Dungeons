@@ -4,10 +4,13 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-'));
+process.env.DD_TEST_FAST = '1';
 const assert = require('assert');
 const WebSocket = require('ws');
 const { server } = require('../server.js');
 const DUNGEON = require('../public/dungeon-data.js');
+const RULES = require('../public/rules/engine.js');
+const MONSTERS = require('../public/rules/monsters.json');
 
 const url = `ws://localhost:${process.env.PORT}/ws`;
 
@@ -49,7 +52,24 @@ function client(name) {
   assert.strictEqual(wb.users.length, 2);
   assert.strictEqual(wb.owner, false);
   const beto = wb.users.find((u) => u.id === wb.id);
-  assert.deepStrictEqual(beto.look, { cls: 'guerrero', skin: 0, hair: 0 }, 'aspecto inválido saneado');
+  assert.deepStrictEqual(beto.look, { cls: 'fighter', species: 'human', skin: 0, hair: 0 }, 'aspecto inválido saneado');
+  assert.ok(RULES.validate(beto.sheet, 0).ok, 'recibe una ficha pregenerada válida');
+  assert.strictEqual(beto.sheet.class, 'fighter');
+
+  // Ficha: una inválida se rechaza y una válida se guarda y cambia el aspecto
+  const wiz = RULES.pregen('wizard', 'elf', { name: 'Beto', look: { skin: 1, hair: 2 } });
+  b.send({ t: 'sheet:save', sheet: { ...wiz, base: { str: 15, dex: 15, con: 15, int: 15, wis: 15, cha: 15 } } });
+  const badSheet = await b.next((m) => m.t === 'sheet:saved');
+  assert.strictEqual(badSheet.ok, false);
+  assert.match(badSheet.errors.join(' '), /serie estándar/);
+  b.send({ t: 'sheet:save', sheet: wiz });
+  assert.ok((await b.next((m) => m.t === 'sheet:saved')).ok);
+  const shMsg = await a.next((m) => m.t === 'sheet' && m.id === wb.id);
+  assert.strictEqual(shMsg.look.cls, 'wizard');
+  assert.strictEqual(shMsg.look.species, 'elf');
+  // vuelve a guerrero para el combate de más abajo
+  b.send({ t: 'sheet:save', sheet: RULES.pregen('fighter', 'human', { name: 'Beto' }) });
+  assert.ok((await b.next((m) => m.t === 'sheet:saved')).ok);
   await a.next((m) => m.t === 'join' && m.user.name === 'Beto');
 
   // Movimiento válido a una silla, y movimiento a una casilla bloqueada (ignorado)
@@ -104,32 +124,51 @@ function client(name) {
   assert.strictEqual(bad.ok, false);
   // Pasillo: entrada, un goblin, un cofre y la salida
   const tiles = ('#'.repeat(DUNGEON.W)) + ('#' + '.'.repeat(DUNGEON.W - 2) + '#') + ('#'.repeat(DUNGEON.W)).repeat(DUNGEON.H - 2);
-  const corridor = { name: 'Pasillo', tiles, objects: [{ k: 'start', x: 1, y: 1 }, { k: 'goblin', x: 2, y: 1 }, { k: 'potion', x: 3, y: 1 }, { k: 'chest', x: 10, y: 1 }, { k: 'exit', x: 5, y: 1 }] };
+  const corridor = { name: 'Pasillo', tiles, objects: [{ k: 'start', x: 1, y: 1 }, { k: 'goblin-minion', x: 2, y: 1 }, { k: 'potion', x: 3, y: 1 }, { k: 'chest', x: 10, y: 1 }, { k: 'exit', x: 5, y: 1 }] };
   b.send({ t: 'dsave', dungeon: corridor });
   const ok = await b.next((m) => m.t === 'dsaved');
   assert.ok(ok.ok, ok.error);
   b.send({ t: 'denter', id: ok.id });
   const ds = await b.next((m) => m.t === 'dstart');
   assert.strictEqual(ds.players.length, 1);
-  assert.strictEqual(ds.enemies[0].k, 'goblin');
+  assert.strictEqual(ds.enemies[0].k, 'goblin-minion');
+  assert.strictEqual(ds.you.maxHp, RULES.derive(RULES.pregen('fighter', 'human', {}), 0).hp);
   await a.next((m) => m.t === 'where' && m.id === wb.id && m.where === 'Pasillo');
-  // Atacar al goblin hasta acabar con él (guerrero: 6+ de daño, goblin: 6 de vida)
+  // Atacar al esbirro goblin (CA 12, 7 PG) con la espada larga (+5, 1d8+3) hasta derribarlo: tiradas d20 de verdad
   let died = null;
-  for (let i = 0; i < 6 && !died; i++) {
-    b.send({ t: 'dmove', dx: 1, dy: 0 });
-    const snap = await b.next((m) => m.t === 'dsnap' && m.events.some((e) => e.e === 'hit' || e.e === 'die'));
+  const attacks = [];
+  for (let i = 0; i < 25 && !died; i++) {
+    b.send({ t: 'dact', act: 'attack', weapon: 0, target: ds.enemies[0].id });
+    const snap = await b.next((m) => m.t === 'dsnap' && m.events.some((e) => e.e === 'attack' && e.by === wb.id));
+    for (const ev of snap.events.filter((e) => e.e === 'attack' && e.by === wb.id)) attacks.push(ev);
     died = snap.events.find((e) => e.e === 'die');
-    await new Promise((r) => setTimeout(r, 450));
+    await new Promise((r) => setTimeout(r, 160));
   }
   assert.ok(died, 'el goblin muere');
+  for (const ev of attacks) {
+    assert.ok(ev.roll >= 1 && ev.roll <= 20 && ev.bonus === 5 && ev.total === ev.roll + 5 && ev.ac === 12, 'tirada de ataque d20 + 5 contra CA 12');
+    assert.strictEqual(ev.hit, ev.roll === 20 || (ev.roll !== 1 && ev.total >= 12));
+    if (ev.hit) assert.ok(ev.dmg >= 4 && ev.dmg <= (ev.crit ? 19 : 11), 'daño 1d8+3 (crítico 2d8+3)');
+  }
+  const minionXp = MONSTERS.find((m) => m.id === 'goblin-minion').xp;
   const xpMsg = await a.next((m) => m.t === 'profile' && m.id === wb.id && m.xp > 0);
-  assert.strictEqual(xpMsg.xp, DUNGEON.ENEMIES.goblin.xp);
+  assert.strictEqual(xpMsg.xp, minionXp, 'experiencia oficial del monstruo');
   // Recoger las monedas, la poción y llegar a la salida
   for (let i = 0; i < 4; i++) { b.send({ t: 'dmove', dx: 1, dy: 0 }); await new Promise((r) => setTimeout(r, 200)); }
   const exit = await b.next((m) => m.t === 'dexit');
   assert.strictEqual(exit.reason, 'win');
-  const final = await a.next((m) => m.t === 'profile' && m.id === wb.id && m.xp >= DUNGEON.ENEMIES.goblin.xp + DUNGEON.REWARDS.exit.xp);
+  const final = await a.next((m) => m.t === 'profile' && m.id === wb.id && m.xp >= minionXp + DUNGEON.REWARDS.exit.xpPerLevel);
   assert.ok(final.gold > 50, 'gana oro');
+
+  // Mundo abierto: se entra desde la taberna y se vuelve con un descanso largo
+  b.send({ t: 'wenter' });
+  const wd = await b.next((m) => m.t === 'dstart');
+  assert.strictEqual(wd.dungeon.kind, 'world');
+  assert.strictEqual(wd.dungeon.tiles.length, wd.dungeon.w * wd.dungeon.h);
+  assert.ok(wd.enemies.length >= 10, 'hay enemigos por el mundo');
+  assert.ok(wd.dungeon.labels.some((l) => /Cueva: La Cripta/.test(l.text)), 'hay una cueva hacia la mazmorra de ejemplo');
+  b.send({ t: 'dleave' });
+  assert.strictEqual((await b.next((m) => m.t === 'dexit')).reason, 'leave');
 
   // El perfil (experiencia y oro) se guarda con el token
   b.ws.close();

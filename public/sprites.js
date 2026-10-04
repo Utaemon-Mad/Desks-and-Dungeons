@@ -240,13 +240,18 @@
   // ======================================================================
   //  Enemigos (24×34, pies abajo)
   // ======================================================================
+  // Tamaño del lienzo por tipo de enemigo: [ancho, alto, desplazamiento x, desplazamiento y]
+  const BIG = { warchief: [30, 38, 3, 4], necromancer: [30, 38, 3, 4], lich: [30, 38, 3, 4], ogre: [34, 42, 5, 6], troll: [34, 44, 5, 8], bear: [34, 36, 5, 0], owlbear: [34, 40, 5, 4], dragon: [44, 44, 10, 8], bugbear: [28, 38, 2, 4] };
+
   function enemy(type, o = {}) {
-    const key = ['e', type, o.frame || 0, o.hit ? 1 : 0].join(':');
+    const key = ['e', type, o.frame || 0, o.hit ? 1 : 0, o.tint || ''].join(':');
     return cached(key, () => {
-      const { c, g } = canvas(type === 'warchief' || type === 'necromancer' ? 30 : 24, type === 'warchief' || type === 'necromancer' ? 38 : 34);
-      const p = painter(g, type === 'warchief' || type === 'necromancer' ? 3 : 0, type === 'warchief' || type === 'necromancer' ? 4 : 2);
+      const [w, hgt, ox, oy] = BIG[type] || [24, 34, 0, 2];
+      const { c, g } = canvas(w, hgt);
+      const p = painter(g, ox, oy);
       (ENEMY_DRAW[type] || ENEMY_DRAW.goblin)(p, o.frame || 0);
       outline(c);
+      if (o.tint) { g.globalCompositeOperation = 'source-atop'; g.globalAlpha = 0.5; g.fillStyle = o.tint; g.fillRect(0, 0, c.width, c.height); g.globalAlpha = 1; }
       if (o.hit) { g.globalCompositeOperation = 'source-atop'; g.fillStyle = 'rgba(255,255,255,.75)'; g.fillRect(0, 0, c.width, c.height); }
       return c;
     });
@@ -259,6 +264,138 @@
   }
 
   const ENEMY_DRAW = {
+    hobgoblin(p, f) {
+      const s = '#d0703a', sd = '#a0502a', arm = '#5a5e6a';
+      legs(p, f, 9, 13, 26, 4, '#3a2a1a');
+      p.rect(8, 18, 8, 8, arm); p.col(15, 18, 25, '#3a3e4a'); p.row(18, 8, 15, '#7a808a'); p.row(24, 8, 15, '#2a1a0e');
+      p.rect(7, 19, 1, 5, s); p.rect(16, 19, 1, 4, s);
+      p.col(18, 10, 25, '#c8ccd4'); p.col(19, 11, 24, '#9aa0aa'); p.row(25, 17, 20, '#6b4228');
+      p.rect(7, 8, 10, 10, s); p.clear(7, 8); p.clear(16, 8); p.col(16, 9, 16, sd); p.row(17, 8, 15, sd);
+      p.px(5, 11, s); p.px(6, 12, s); p.px(18, 11, s); p.px(17, 12, s);
+      p.row(7, 8, 15, '#2a1a10'); p.row(6, 9, 14, '#2a1a10');
+      p.px(10, 12, '#ffd23f'); p.px(14, 12, '#ffd23f'); p.row(15, 10, 14, '#4a1a0a'); p.px(10, 15, '#fff6dc'); p.px(14, 15, '#fff6dc');
+    },
+    bugbear(p, f) {
+      const fur = '#7a5530', fd = '#5a3a1e';
+      legs(p, f, 8, 14, 27, 5, fd);
+      p.rect(6, 15, 12, 12, fur); p.col(17, 15, 26, fd); p.rect(8, 18, 8, 6, '#a07a4a');
+      p.rect(4, 16, 2, 9, fur); p.rect(18, 16, 2, 8, fur); p.px(4, 25, fd); p.px(19, 24, fd);
+      p.col(21, 8, 26, '#6b4228'); p.rect(20, 6, 3, 4, '#8a8e98');
+      p.rect(6, 4, 12, 11, fur); p.clear(6, 4); p.clear(17, 4); p.col(17, 5, 14, fd);
+      p.px(5, 4, fur); p.px(4, 3, fur); p.px(18, 4, fur); p.px(19, 3, fur);
+      p.rect(9, 9, 6, 4, '#c8a070'); p.px(10, 8, '#ffd23f'); p.px(14, 8, '#ffd23f'); p.px(12, 10, '#2a1a10'); p.row(12, 10, 14, '#2a1a10');
+    },
+    ogre(p, f) {
+      const s = '#b8a060', sd = '#8a7a40', hide = '#6b4a2a';
+      legs(p, f, 9, 16, 30, 5, '#4a3a22');
+      p.rect(6, 15, 16, 16, s); p.col(21, 15, 30, sd); p.rect(7, 24, 14, 6, hide); p.row(24, 7, 20, '#4a2e1a');
+      p.rect(3, 16, 3, 11, s); p.rect(22, 16, 3, 10, s); p.rect(2, 26, 4, 3, sd);
+      p.col(25, 6, 28, '#6b4228'); p.rect(24, 3, 4, 7, '#5a3a1a'); p.px(24, 4, '#8a6a3a');
+      p.rect(8, 3, 12, 12, s); p.clear(8, 3); p.clear(19, 3); p.col(19, 4, 14, sd); p.row(14, 9, 18, sd);
+      p.row(3, 10, 17, '#3a2a1a'); p.px(11, 8, '#1b120c'); p.px(16, 8, '#1b120c'); p.rect(12, 9, 3, 2, sd);
+      p.row(12, 11, 16, '#3a1a10'); p.px(11, 11, '#fff6dc'); p.px(16, 11, '#fff6dc');
+    },
+    troll(p, f) {
+      const s = '#4a7a4a', sd = '#2f5a30';
+      legs(p, f, 10, 16, 32, 4, sd);
+      p.rect(8, 14, 12, 18, s); p.col(19, 14, 31, sd); p.rect(10, 20, 8, 6, '#6a5a3a');
+      p.rect(4, 14, 3, 16, s); p.rect(21, 14, 3, 16, s); p.row(30, 3, 6, '#e8e4d0'); p.row(30, 21, 24, '#e8e4d0');
+      p.rect(9, 3, 10, 11, s); p.clear(9, 3); p.clear(18, 3); p.col(18, 4, 13, sd);
+      p.row(2, 10, 17, '#2a3a2a'); p.px(11, 1, '#2a3a2a'); p.px(15, 1, '#2a3a2a');
+      p.px(15, 7, '#ff3a2a'); p.px(11, 7, '#ff3a2a'); p.rect(13, 8, 2, 3, sd);
+      p.row(12, 11, 16, '#1b120c'); p.px(12, 12, '#fff6dc'); p.px(15, 12, '#fff6dc');
+    },
+    ghoul(p, f) {
+      const s = '#a8a89a', sd = '#7a7a6e';
+      legs(p, f, 9, 13, 27, 3, sd);
+      p.rect(8, 18, 8, 9, s); p.col(15, 18, 26, sd); p.rect(9, 20, 6, 5, '#4a4a42'); p.row(21, 9, 14, s);
+      p.rect(15, 18, 5, 2, s); p.px(20, 20, '#e8e4d0'); p.px(21, 19, '#e8e4d0'); p.rect(5, 19, 3, 2, s); p.px(4, 21, '#e8e4d0');
+      p.rect(7, 10, 10, 8, s); p.clear(7, 10); p.clear(16, 10); p.col(16, 11, 17, sd);
+      p.px(10, 13, '#ffef7a'); p.px(14, 13, '#ffef7a'); p.row(16, 10, 14, '#3a1a1a'); p.px(10, 17, '#fff6dc'); p.px(12, 17, '#fff6dc'); p.px(14, 17, '#fff6dc');
+      p.px(9, 9, '#3a3a32'); p.px(12, 9, '#3a3a32');
+    },
+    specter(p, f) {
+      const c = 'rgba(170,190,230,.85)', cd = 'rgba(110,130,180,.85)';
+      const sway = f === 1 ? 1 : 0;
+      p.rect(7, 17, 10, 10, c); p.rect(8 + sway, 27, 2, 3, c); p.rect(12 - sway, 27, 2, 4, c); p.rect(15, 27, 2, 2, c);
+      p.col(16, 17, 26, cd); p.rect(5, 18, 2, 6, c); p.rect(17, 18, 2, 6, c); p.px(4, 24, cd); p.px(19, 24, cd);
+      p.rect(7, 8, 10, 10, c); p.row(7, 9, 14, c); p.rect(9, 11, 6, 6, 'rgba(20,20,40,.9)');
+      p.px(10, 13, '#c8f0ff'); p.px(13, 13, '#c8f0ff');
+    },
+    wight(p, f) {
+      const bone = '#c8c0a8', arm = '#3a3e48';
+      legs(p, f, 9, 13, 26, 4, '#2a2e38');
+      p.rect(8, 17, 8, 9, arm); p.col(15, 17, 25, '#22262e'); p.row(17, 8, 15, '#5a5e6a'); p.row(22, 8, 15, '#6a2a2a');
+      p.rect(7, 18, 1, 5, bone); p.rect(16, 18, 1, 4, bone);
+      p.col(18, 9, 24, '#6a8aa0'); p.col(19, 10, 23, '#3a5a70'); p.row(24, 17, 20, '#4a3a2a');
+      p.rect(8, 8, 8, 9, bone); p.clear(8, 8); p.clear(15, 8); p.rect(7, 6, 10, 3, arm); p.row(5, 9, 14, arm);
+      p.rect(9, 11, 2, 2, '#0c0c18'); p.rect(13, 11, 2, 2, '#0c0c18'); p.px(10, 12, '#7ad0ff'); p.px(13, 12, '#7ad0ff');
+      p.row(15, 9, 14, '#8a8270');
+    },
+    mummy(p, f) {
+      const w = '#d8ccaa', wd = '#a89a78';
+      legs(p, f, 9, 13, 26, 4, w, wd);
+      p.rect(8, 17, 8, 9, w); p.col(15, 17, 25, wd);
+      for (let y = 18; y < 26; y += 2) p.row(y, 8, 15, wd);
+      p.rect(15, 18, 5, 2, w); p.rect(5, 18, 3, 2, w); p.px(20, 19, wd); p.px(4, 19, wd);
+      p.rect(7, 8, 10, 9, w); p.clear(7, 8); p.clear(16, 8); p.row(10, 7, 16, wd); p.row(14, 7, 16, wd);
+      p.row(12, 9, 14, '#1b120c'); p.px(10, 12, '#ffef7a'); p.px(13, 12, '#ffef7a');
+    },
+    lich(p, f) {
+      ENEMY_DRAW.necromancer(p, f);
+      p.row(6, 8, 15, '#e0b830'); p.px(8, 5, '#e0b830'); p.px(11, 4, '#e0b830'); p.px(12, 4, '#e0b830'); p.px(15, 5, '#e0b830'); p.px(11, 5, '#ff4a4a');
+      p.rect(9, 11, 6, 6, '#d8d0c0'); p.px(10, 13, '#1b120c'); p.px(13, 13, '#1b120c'); p.px(10, 13, '#7ad0ff'); p.px(13, 13, '#7ad0ff'); p.row(16, 10, 13, '#1b120c');
+    },
+    wolf(p, f) {
+      const c = '#7a7a82', cd = '#55555c', l = '#a8a8b0';
+      const a = f === 1 ? -1 : 0, b = f === 2 ? -1 : 0;
+      p.rect(5, 22, 14, 6, c); p.row(22, 6, 17, l); p.row(27, 6, 17, cd);
+      p.rect(6, 28 + a, 2, 3, cd); p.rect(9, 28 + b, 2, 3, c); p.rect(15, 28 + a, 2, 3, cd); p.rect(17, 28 + b, 2, 3, c);
+      p.rect(2, 21, 3, 2, c); p.px(1, 20, c); p.px(1, 19, cd);
+      p.rect(17, 17, 6, 6, c); p.rect(21, 20, 3, 3, l); p.px(23, 20, '#1b120c');
+      p.px(18, 15, c); p.px(18, 16, c); p.px(21, 15, c); p.px(21, 16, c);
+      p.px(20, 19, '#ffd23f'); p.row(23, 21, 23, '#3a1a1a');
+    },
+    spider(p, f) {
+      const c = '#2a2a32', cl = '#4a4a5a';
+      const a = f === 1 ? 1 : 0;
+      for (const [x, d] of [[4, -1], [6, -1], [16, 1], [18, 1]]) { p.px(x, 22 - a, c); p.px(x + d, 24, c); p.px(x + d * 2, 27 + a, c); p.px(x + d * 2, 28 + a, c); }
+      p.rect(7, 18, 10, 8, c); p.row(18, 8, 15, cl); p.rect(9, 20, 6, 3, '#7a2a2a');
+      p.rect(9, 25, 6, 4, c); p.px(10, 27, '#ff3a2a'); p.px(13, 27, '#ff3a2a'); p.px(11, 26, '#ff3a2a'); p.px(12, 26, '#ff3a2a');
+      p.px(10, 29, '#e8e4d0'); p.px(13, 29, '#e8e4d0');
+    },
+    bear(p, f) {
+      const c = '#6b4226', cd = '#4a2e1a', l = '#8a5a36';
+      const a = f === 1 ? -1 : 0, b = f === 2 ? -1 : 0;
+      p.rect(4, 18, 20, 10, c); p.row(18, 5, 22, l); p.col(23, 19, 27, cd);
+      p.rect(5, 28 + a, 3, 4, cd); p.rect(9, 28 + b, 3, 4, c); p.rect(18, 28 + a, 3, 4, cd); p.rect(21, 28 + b, 3, 4, c);
+      p.rect(21, 14, 8, 8, c); p.rect(26, 18, 3, 3, '#a07a4a'); p.px(28, 18, '#1b120c');
+      p.px(22, 13, c); p.px(26, 13, c); p.px(24, 16, '#1b120c'); p.row(21, 26, 28, '#3a1a1a');
+    },
+    owlbear(p, f) {
+      const c = '#7a5a3a', cd = '#5a3e26', feather = '#a08a6a';
+      legs(p, f, 9, 17, 30, 4, cd);
+      p.rect(6, 14, 16, 16, c); p.col(21, 14, 29, cd); p.rect(9, 17, 10, 9, feather);
+      for (let y = 18; y < 26; y += 2) p.row(y, 10, 17, '#8a7050');
+      p.rect(2, 16, 4, 10, c); p.rect(22, 16, 4, 10, c); p.row(26, 1, 5, '#e8e4d0'); p.row(26, 22, 26, '#e8e4d0');
+      p.rect(7, 3, 14, 11, feather); p.row(3, 8, 19, '#c8b08a');
+      p.px(7, 2, feather); p.px(6, 1, feather); p.px(20, 2, feather); p.px(21, 1, feather);
+      p.rect(9, 6, 3, 3, '#f4ecd0'); p.rect(16, 6, 3, 3, '#f4ecd0'); p.px(10, 7, '#1b120c'); p.px(17, 7, '#1b120c');
+      p.rect(13, 9, 2, 3, '#e0b040'); p.px(13, 12, '#8a6a2a');
+    },
+    dragon(p, f) {
+      const c = '#b83a2a', cd = '#8a2418', belly = '#e0a060', wing = '#7a1a10';
+      const flap = f === 1 ? -2 : 0;
+      p.rect(0, 6 + flap, 10, 10, wing); p.rect(24, 6 + flap, 10, 10, wing);
+      for (let i = 0; i < 4; i++) { p.col(2 + i * 2, 8 + flap, 15 + flap, cd); p.col(25 + i * 2, 8 + flap, 15 + flap, cd); }
+      p.rect(8, 14, 18, 14, c); p.rect(12, 17, 10, 10, belly); for (let y = 18; y < 27; y += 2) p.row(y, 12, 21, '#c88a50');
+      p.rect(9, 28, 4, 4, cd); p.rect(21, 28, 4, 4, cd); p.row(31, 8, 13, '#e8e4d0'); p.row(31, 20, 25, '#e8e4d0');
+      p.rect(0, 24, 9, 3, c); p.px(0, 23, cd);
+      p.rect(12, 2, 10, 11, c); p.rect(19, 7, 6, 5, c); p.row(11, 19, 24, cd);
+      p.px(13, 1, '#e8e4d0'); p.px(12, 0, '#e8e4d0'); p.px(20, 1, '#e8e4d0'); p.px(21, 0, '#e8e4d0');
+      p.px(18, 5, '#ffd23f'); p.px(15, 5, '#ffd23f'); p.px(23, 8, '#1b120c');
+      p.row(12, 20, 24, '#ff8a2a');
+    },
     goblin(p, f) {
       const s = '#6aa84f', sd = '#4a7a34', rag = '#7a5a2a';
       legs(p, f, 9, 13, 26, 4, '#4a3a22');
@@ -435,5 +572,45 @@
     });
   }
 
-  root.SPRITES = { hero, enemy, floorTile, wallTile, overlayTile, shade, outline };
+  // ======================================================================
+  //  Casillas del mundo abierto (16×16)
+  // ======================================================================
+  function worldTile(ch, x, y, frame = 0) {
+    const v = Math.floor(rand(x * 7.3 + y * 13.1) * 4);
+    const key = 'W' + ch + v + (ch === 'w' || ch === 'v' || ch === 'F' ? frame : '');
+    return cached(key, () => {
+      const { c, g } = canvas(16, 16);
+      const p = painter(g);
+      const grass = () => {
+        const base = ['#2f4a2a', '#2c4628', '#324e2c', '#2e4829'][v];
+        p.rect(0, 0, 16, 16, base);
+        for (let i = 0; i < 6; i++) p.px(Math.floor(rand(v * 50 + i) * 16), Math.floor(rand(v * 70 + i) * 16), shade(base, i % 2 ? 0.15 : -0.2));
+      };
+      switch (ch) {
+        case ',': grass(); break;
+        case ';': grass(); for (let i = 0; i < 5; i++) { const gx = 2 + i * 3, gy = 4 + (i * 5 + v) % 9; p.col(gx, gy, gy + 3, '#4a6a3a'); p.px(gx + 1, gy, '#5a7a44'); } break;
+        case 'T': grass(); p.rect(7, 10, 2, 5, '#4a2e1a'); p.rect(3, 2, 10, 9, '#1f3a1e'); p.rect(4, 1, 8, 1, '#1f3a1e'); p.row(3, 4, 10, '#2f5a2c'); p.px(5, 5, '#2f5a2c'); p.px(10, 7, '#173016'); return outline(c, '#0c140b');
+        case 'P': grass(); p.rect(7, 12, 2, 3, '#3a2414'); for (let i = 0; i < 4; i++) p.row(3 + i * 2, 7 - i, 8 + i, '#1a3226'); p.row(11, 3, 12, '#1a3226'); p.px(7, 1, '#1a3226'); p.px(8, 2, '#24443a'); return outline(c, '#0a120e');
+        case 'w': p.rect(0, 0, 16, 16, '#14284a'); p.row(4 + frame, 2, 6, '#1e3a66'); p.row(10 - frame, 8, 13, '#1e3a66'); p.px(12, 3 + frame, '#3a5a8a'); break;
+        case 'v': p.rect(0, 0, 16, 16, '#24426a'); p.row(5 + frame, 3, 8, '#3a5a8a'); p.row(11 - frame, 7, 12, '#3a5a8a'); p.px(3, 12, '#6a6a5a'); p.px(12, 4, '#6a6a5a'); break;
+        case 's': p.rect(0, 0, 16, 16, '#7a6a4a'); p.px(3, 4, '#8a7a5a'); p.px(11, 9, '#6a5a3a'); p.px(6, 13, '#8a7a5a'); break;
+        case 'h': grass(); p.rect(2, 8, 12, 5, '#3a5232'); p.row(7, 4, 11, '#3a5232'); p.row(7, 5, 9, '#4a6a3a'); p.rect(9, 3, 6, 4, '#36502f'); p.row(3, 10, 13, '#46663a'); break;
+        case 'M': p.rect(0, 0, 16, 16, '#2a2a30'); for (let i = 0; i < 8; i++) p.row(15 - i * 2, i, 15 - i, '#4a4a52'); p.row(1, 7, 8, '#d8dce4'); p.row(2, 6, 9, '#b8bcc4'); p.px(5, 9, '#3a3a40'); p.px(10, 11, '#5a5a62'); break;
+        case '=': p.rect(0, 0, 16, 16, '#4a3c2a'); p.px(3, 3, '#5a4a36'); p.px(11, 6, '#3a2e20'); p.px(6, 11, '#6a5a44'); p.px(13, 13, '#5a4a36'); break;
+        case 'b': p.rect(0, 0, 16, 16, '#14284a'); p.rect(0, 2, 16, 12, '#6b4a2a'); for (let i = 0; i < 16; i += 4) p.col(i, 2, 13, '#4a2e1a'); p.row(2, 0, 15, '#8a6a3a'); p.row(13, 0, 15, '#3a2414'); break;
+        case 'g': p.rect(0, 0, 16, 16, '#2a2622'); p.px(4, 5, '#3a342e'); p.px(11, 10, '#1e1a16'); p.px(8, 13, '#3a342e'); break;
+        case 't': p.rect(0, 0, 16, 16, '#2a2622'); p.rect(5, 4, 6, 9, '#7a7a82'); p.row(3, 6, 9, '#7a7a82'); p.row(4, 5, 10, '#9a9aa2'); p.col(8, 6, 9, '#4a4a52'); p.row(7, 7, 9, '#4a4a52'); p.row(13, 4, 11, '#1a1612'); break;
+        case 'R': p.rect(0, 0, 16, 16, '#3a3a3e'); for (let r = 0; r < 4; r++) { p.row(r * 4, 0, 15, '#2a2a2e'); for (let i = (r % 2) * 4; i < 16; i += 8) p.col(i, r * 4, r * 4 + 3, '#2a2a2e'); } p.row(1, 0, 15, '#5a5a5e'); break;
+        case 'F': p.rect(0, 0, 16, 16, '#3a2e22'); p.row(13, 3, 12, '#4a2e1a'); p.row(12, 4, 11, '#5a3a1a'); p.rect(6, 6 - frame, 4, 6 + frame, '#e8601c'); p.rect(7, 8 - frame, 2, 4, '#ffd25a'); p.px(8, 4 - frame, '#ffb03a'); break;
+        case 'C': p.rect(0, 0, 16, 16, '#36502f'); p.rect(1, 3, 14, 13, '#4a4a52'); p.row(2, 3, 12, '#4a4a52'); p.rect(4, 7, 8, 9, '#050308'); p.row(6, 5, 10, '#050308'); p.row(5, 6, 9, '#050308'); p.row(3, 2, 13, '#6a6a72'); break;
+        case 'H': p.rect(0, 0, 16, 16, '#4a3c2a'); p.rect(2, 7, 12, 8, '#6b4a2a'); for (let i = 0; i < 6; i++) p.row(1 + i, 7 - i, 8 + i, '#7a2a1a'); p.row(7, 1, 14, '#5a1a10'); p.rect(6, 10, 4, 5, '#3a2414'); p.rect(3, 9, 2, 2, '#ffcf6a'); p.rect(11, 9, 2, 2, '#ffcf6a'); return outline(c);
+        case 'k': grass(); p.rect(3, 8, 10, 7, '#5a4a3a'); for (let i = 0; i < 5; i++) p.row(3 + i, 7 - i, 8 + i, '#4a3a4a'); p.rect(7, 11, 2, 4, '#2a1a10'); p.px(4, 10, '#c8a050'); return outline(c, '#120c08');
+        case 'D': p.rect(0, 0, 16, 16, '#2a1a14'); p.px(3, 4, '#e8e4d0'); p.px(4, 4, '#e8e4d0'); p.px(11, 10, '#e8e4d0'); p.row(12, 5, 8, '#c8c0b0'); p.px(9, 6, '#5a2a1a'); p.px(6, 9, '#4a1a10'); break;
+        default: grass();
+      }
+      return c;
+    });
+  }
+
+  root.SPRITES = { hero, enemy, floorTile, wallTile, overlayTile, worldTile, shade, outline };
 })(this);

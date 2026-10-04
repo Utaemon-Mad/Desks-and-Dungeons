@@ -352,3 +352,33 @@ body.editing #log { display: none; }
   .skill-list { columns: 1; }
   .class-pick.species { grid-template-columns: repeat(3, 1fr); }
 }
+
+/* ---------- Combate: barra de acciones y registro ---------- */
+body.in-dungeon #heroes, body.in-dungeon #log { display: none; }
+.dslots { font-size: 12px; color: #c8b0ff; letter-spacing: .02em; }
+.dlog { position: absolute; left: 12px; bottom: 166px; width: min(560px, calc(100% - 24px)); z-index: 3; display: flex; flex-direction: column; gap: 1px; pointer-events: none;
+  font-family: var(--mono); font-size: 16px; line-height: 1.05; text-shadow: 0 2px 0 #000; }
+.dlog-line { color: #e9d8b8; background: rgba(0,0,0,.45); padding: 1px 6px; border-radius: 3px; align-self: flex-start; max-width: 100%; }
+.dlog-line.mine { color: #ffe9a8; }
+.dlog-line.hurt { color: #ff9a8a; }
+.dlog-line.good { color: #9fe09f; }
+.dactions { position: absolute; left: 50%; transform: translateX(-50%); bottom: 88px; z-index: 3; display: flex; gap: 4px; max-width: calc(100% - 24px); overflow-x: auto; padding: 4px; }
+.act-btn { position: relative; flex: none; width: 86px; min-height: 64px; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 1px; padding: 4px 3px;
+  background: linear-gradient(#4a2e1a, #2a180c); color: var(--parch); border: 2px solid #120904; border-radius: 6px; box-shadow: inset 0 0 0 2px #6b4528; }
+.act-btn .ic { font-size: 18px; line-height: 1; }
+.act-btn .lb { font-size: 11px; font-weight: 700; line-height: 1.05; text-align: center; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.act-btn small { font-size: 10px; opacity: .75; }
+.act-btn .k { position: absolute; left: 4px; top: 2px; font-size: 10px; opacity: .6; }
+.act-btn .cnt { position: absolute; right: 4px; top: 2px; font-size: 11px; color: #c8b0ff; font-weight: 700; }
+.act-btn.spell { box-shadow: inset 0 0 0 2px #4a3a7a; }
+.act-btn.feature { box-shadow: inset 0 0 0 2px #7a5a1a; }
+.act-btn.on { background: linear-gradient(#f2c94c, #b8862a); color: var(--ink); box-shadow: 0 0 0 2px var(--gold); }
+.act-btn.off { opacity: .45; }
+.dactions.cooldown .act-btn::after { content: ''; position: absolute; left: 0; bottom: 0; height: 3px; background: var(--gold); animation: cd 1.3s linear forwards; }
+@keyframes cd { from { width: 100%; } to { width: 0; } }
+#dview.world #dhud .dname { color: #9fd0ff; }
+@media (max-width: 820px) {
+  .dactions { bottom: 132px; }
+  .act-btn { width: 70px; min-height: 54px; }
+  .dlog { bottom: 196px; font-size: 14px; }
+}

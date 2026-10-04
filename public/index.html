@@ -75,16 +75,19 @@
       <button id="edit-done" class="btn big" type="button">LISTO</button>
     </aside>
 
-    <!-- Mazmorra en juego -->
+    <!-- Mazmorra o mundo abierto en juego -->
     <div id="dview" class="hidden">
       <canvas id="dcanvas"></canvas>
       <div id="dhud" class="panel">
         <div class="dname" id="dname">Mazmorra</div>
         <div class="bar-row"><span>❤️</span><div class="meter hp"><i id="dhp-bar"></i></div><b id="dhp">10/10</b></div>
         <div class="bar-row"><span>⭐</span><div class="meter xp"><i id="dxp-bar"></i></div><b id="dlvl">Nv 1</b></div>
-        <div class="bar-row gold-row"><span>🪙</span><b id="dgold">0</b><span class="kills" id="dleft"></span></div>
+        <div class="bar-row gold-row"><span>🪙</span><b id="dgold">0</b><span class="kills" id="dac"></span><span class="kills" id="dleft"></span></div>
+        <div id="dslots" class="dslots"></div>
         <button id="dexit" class="btn alt" type="button">VOLVER A LA TABERNA</button>
       </div>
+      <div id="dlog" class="dlog"></div>
+      <div id="dactions" class="dactions"></div>
     </div>
 
     <div id="toast" class="hidden"></div>
