@@ -44,7 +44,7 @@ const masteries = load('Weapon-Mastery-Properties').map((p) => ({ id: p.index, n
 const traits = load('Traits');
 const subspecies = load('Subspecies');
 const species = load('Species').map((s) => ({
-  id: s.index, name: es('species', s.index, s.name), en: s.name, size: s.size, speed: s.speed, type: s.type,
+  id: s.index, name: es('species', s.index, s.name), en: s.name, size: s.size || 'Medium or Small', speed: s.speed, type: s.type,
   traits: traits.filter((t) => (t.species || []).some((x) => x.index === s.index)).map((t) => ({ id: t.index, name: t.name, desc: clean(t.description) })),
   subspecies: subspecies.filter((x) => x.species.index === s.index).map((x) => ({
     id: x.index, name: es('subspecies', x.index, x.name), en: x.name, damage: x.damage_type ? x.damage_type.index : null,

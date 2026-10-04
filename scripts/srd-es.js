@@ -87,7 +87,7 @@ module.exports = {
     'lawful-neutral': 'Legal neutral', neutral: 'Neutral', 'chaotic-neutral': 'Caótico neutral',
     'lawful-evil': 'Legal malvado', 'neutral-evil': 'Neutral malvado', 'chaotic-evil': 'Caótico malvado', unaligned: 'Sin alineamiento',
   },
-  sizes: { Tiny: 'Diminuto', Small: 'Pequeño', Medium: 'Mediano', Large: 'Grande', Huge: 'Enorme', Gargantuan: 'Gargantuesco' },
+  sizes: { 'Medium or Small': 'Mediano o Pequeño', Tiny: 'Diminuto', Small: 'Pequeño', Medium: 'Mediano', Large: 'Grande', Huge: 'Enorme', Gargantuan: 'Gargantuesco' },
   monsterTypes: {
     aberration: 'Aberración', beast: 'Bestia', celestial: 'Celestial', construct: 'Constructo', dragon: 'Dragón',
     elemental: 'Elemental', fey: 'Feérico', fiend: 'Infernal', giant: 'Gigante', humanoid: 'Humanoide',
