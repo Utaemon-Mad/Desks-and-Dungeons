@@ -6,6 +6,7 @@ const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const MAP = require('./public/map.js');
 const DUNGEON = require('./public/dungeon-data.js');
+const RULES = require('./public/rules/engine.js');
 const { createStore } = require('./server/store.js');
 const { Instance } = require('./server/dungeon.js');
 
@@ -31,6 +32,8 @@ const MIME = {
   '.js': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
   '.svg': 'image/svg+xml',
+  '.json': 'application/json; charset=utf-8',
+  '.md': 'text/markdown; charset=utf-8',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
 };
@@ -86,7 +89,7 @@ function cleanText(s, max) {
 }
 
 function publicUser(u) {
-  return { id: u.id, name: u.name, look: u.look, gold: u.profile.gold, xp: u.profile.xp, x: u.x, y: u.y, where: u.where ? u.where.name : null };
+  return { id: u.id, name: u.name, look: u.look, gold: u.profile.gold, xp: u.profile.xp, sheet: u.profile.sheet, x: u.x, y: u.y, where: u.where ? u.where.name : null };
 }
 
 function send(ws, msg) {
@@ -115,11 +118,19 @@ function system(room, text) {
   say(room, { t: 'system', text });
 }
 
-function cleanLook(look) {
-  look = look || {};
-  const cls = Object.prototype.hasOwnProperty.call(MAP.CLASSES, look.cls) ? look.cls : 'guerrero';
-  const idx = (v, n) => (Number.isInteger(v) && v >= 0 && v < n ? v : 0);
-  return { cls, skin: idx(look.skin, MAP.SKINS.length), hair: idx(look.hair, MAP.HAIRS.length) };
+// El aspecto del héroe sale de su ficha: clase, especie y linaje, más piel y pelo
+function lookFromSheet(sheet) {
+  return MAP.cleanLook({ cls: sheet.class, species: sheet.species, sub: sheet.subspecies || undefined, skin: sheet.look.skin, hair: sheet.look.hair });
+}
+
+// Si el jugador no tiene ficha (o eligió otra clase/especie al entrar) se le da un personaje pregenerado
+function ensureSheet(profile, look, name) {
+  const s = profile.sheet;
+  if (s && s.class === look.cls && s.species === look.species) {
+    const v = RULES.validate({ ...s, name: s.name || name, look: { skin: look.skin, hair: look.hair } }, profile.xp);
+    if (v.ok) { profile.sheet = v.sheet; return; }
+  }
+  profile.sheet = RULES.pregen(look.cls, look.species, { name, look: { skin: look.skin, hair: look.hair }, xp: profile.xp, subspecies: look.sub });
 }
 
 function freeSpawn(room, except) {
@@ -139,13 +150,17 @@ function freeSpawn(room, except) {
 // ---------- Experiencia y oro ----------
 function reward(room, user, xp, gold) {
   const prof = user.profile;
-  const before = MAP.levelFromXp(prof.xp);
+  const before = RULES.levelFromXp(prof.xp);
   prof.xp = Math.max(0, prof.xp + xp);
   prof.gold = Math.max(0, prof.gold + gold);
   store.setPlayer(user.pid, prof);
   broadcast(room, { t: 'profile', id: user.id, xp: prof.xp, gold: prof.gold });
-  const after = MAP.levelFromXp(prof.xp);
+  const after = RULES.levelFromXp(prof.xp);
   if (after > before) {
+    // Al subir de nivel la ficha se vuelve a validar (más trucos y conjuros posibles); lo que falte se rellena
+    prof.sheet = RULES.refresh(prof.sheet, prof.xp);
+    store.setPlayer(user.pid, prof);
+    broadcast(room, { t: 'sheet', id: user.id, sheet: prof.sheet });
     system(room, `⭐ ${user.name} sube a nivel ${after}.`);
     if (user.where) {
       const inst = room.instances.get(user.where.id);
@@ -248,11 +263,13 @@ wss.on('connection', (ws) => {
       const name = cleanText(msg.name, 16) || 'Aventurero';
       const profile = store.player(pid) || { xp: 0, gold: START_GOLD };
       profile.name = name;
+      const look = MAP.cleanLook(msg.look);
+      ensureSheet(profile, look, name);
       store.setPlayer(pid, profile);
       // Quien entra primero en una sala nueva es su dueño y puede editar los muebles
       if (!room.ownerId) { room.ownerId = pid; saveRoom(room); }
       const pos = freeSpawn(room);
-      user = { id: crypto.randomBytes(6).toString('hex'), pid, name, look: cleanLook(msg.look), profile, x: pos.x, y: pos.y, where: null, ws };
+      user = { id: crypto.randomBytes(6).toString('hex'), pid, name, look: lookFromSheet(profile.sheet), profile, x: pos.x, y: pos.y, where: null, ws };
       room.users.set(user.id, user);
       send(ws, {
         t: 'welcome', id: user.id, room: roomName, owner: isOwner(),
@@ -315,6 +332,22 @@ wss.on('connection', (ws) => {
         reward(room, user, 0, -ROUND_PRICE);
         broadcast(room, { t: 'drink', id: target.id });
         system(room, `${user.name} invita a una ronda a ${target.name}. 🍻`);
+        break;
+      }
+
+      // ----- Ficha de personaje -----
+      case 'sheet:save': {
+        if (!allow(1)) return;
+        if (user.where) return send(ws, { t: 'sheet:saved', ok: false, errors: ['Vuelve a la taberna para cambiar tu ficha.'] });
+        const v = RULES.validate(msg.sheet, user.profile.xp);
+        if (!v.ok) return send(ws, { t: 'sheet:saved', ok: false, errors: v.errors });
+        user.profile.sheet = v.sheet;
+        store.setPlayer(user.pid, user.profile);
+        user.look = lookFromSheet(v.sheet);
+        send(ws, { t: 'sheet:saved', ok: true });
+        broadcast(room, { t: 'sheet', id: user.id, sheet: v.sheet, look: user.look });
+        const d = RULES.derive(v.sheet, user.profile.xp);
+        system(room, `📜 ${user.name} es ahora ${d.speciesName.toLowerCase()} ${d.className.toLowerCase()} de nivel ${d.level}.`);
         break;
       }
 

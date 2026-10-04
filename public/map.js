@@ -148,29 +148,51 @@
     return path;
   }
 
-  // Clases de héroe y opciones de aspecto
+  // Aspecto de los héroes. Las clases son las 12 del SRD 5.2; "style" elige el dibujo base del sprite.
   const CLASSES = {
-    guerrero: { name: 'Guerrero', hp: 14, att: 6, color: '#b8432f', trim: '#e0b040' },
-    maga:     { name: 'Maga',     hp: 8,  att: 9, color: '#6b3fa0', trim: '#f2d36b' },
-    elfo:     { name: 'Elfo',     hp: 10, att: 7, color: '#3f8a3a', trim: '#c9e07a' },
-    picaro:   { name: 'Pícaro',   hp: 9,  att: 8, color: '#3b3f4a', trim: '#a0a8b8' },
-    bardo:    { name: 'Bardo',    hp: 10, att: 5, color: '#d0772a', trim: '#4a7ed0' },
-    clerigo:  { name: 'Clérigo',  hp: 12, att: 4, color: '#e8e0cc', trim: '#d4a52a' },
+    barbarian: { name: 'Bárbaro',    style: 'guerrero', color: '#8a5a2a', trim: '#c8a070' },
+    bard:      { name: 'Bardo',      style: 'bardo',    color: '#d0772a', trim: '#4a7ed0' },
+    cleric:    { name: 'Clérigo',    style: 'clerigo',  color: '#e8e0cc', trim: '#d4a52a' },
+    druid:     { name: 'Druida',     style: 'elfo',     color: '#5a7a3a', trim: '#a0d060' },
+    fighter:   { name: 'Guerrero',   style: 'guerrero', color: '#b8432f', trim: '#e0b040' },
+    monk:      { name: 'Monje',      style: 'picaro',   color: '#c87a2a', trim: '#f0d080' },
+    paladin:   { name: 'Paladín',    style: 'guerrero', color: '#3a5ab0', trim: '#f2d36b' },
+    ranger:    { name: 'Explorador', style: 'elfo',     color: '#3f8a3a', trim: '#c9e07a' },
+    rogue:     { name: 'Pícaro',     style: 'picaro',   color: '#3b3f4a', trim: '#a0a8b8' },
+    sorcerer:  { name: 'Hechicero',  style: 'maga',     color: '#a03040', trim: '#ffb060' },
+    warlock:   { name: 'Brujo',      style: 'maga',     color: '#2a1a3a', trim: '#9a6ad0' },
+    wizard:    { name: 'Mago',       style: 'maga',     color: '#6b3fa0', trim: '#f2d36b' },
   };
-  const SKINS = ['#f6d3b3', '#e8b48a', '#c98a5e', '#8d5a3b', '#5c3a26'];
+  // Clases antiguas (antes de las reglas del SRD) → clase nueva
+  const LEGACY_CLASS = { guerrero: 'fighter', maga: 'wizard', elfo: 'ranger', picaro: 'rogue', bardo: 'bard', clerigo: 'cleric' };
+
+  const SPECIES = {
+    dragonborn: { name: 'Dracónido', scale: 1.05 }, dwarf: { name: 'Enano', scale: 0.86 }, elf: { name: 'Elfo', scale: 1 },
+    gnome: { name: 'Gnomo', scale: 0.78 }, goliath: { name: 'Goliat', scale: 1.15 }, halfling: { name: 'Mediano', scale: 0.78 },
+    human: { name: 'Humano', scale: 1 }, orc: { name: 'Orco', scale: 1.06 }, tiefling: { name: 'Tiflin', scale: 1 },
+  };
+  // Tonos de piel: los 5 primeros valen para todos; el resto según la especie
+  const SKINS = ['#f6d3b3', '#e8b48a', '#c98a5e', '#8d5a3b', '#5c3a26', '#8aab62', '#6a8a4a', '#c0605a', '#8a4a8a', '#5a6ab8', '#a8aeb8', '#7e8692'];
+  const SPECIES_SKINS = { orc: [5, 6, 1, 3], tiefling: [7, 8, 9, 1, 3], goliath: [10, 11, 2, 3] };
+  const skinsFor = (species) => SPECIES_SKINS[species] || [0, 1, 2, 3, 4];
+  const DRAGON_COLORS = { black: '#3a3a44', blue: '#3a6ad0', brass: '#c8a040', bronze: '#a87030', copper: '#b8683a', gold: '#e0b830', green: '#3a8a4a', red: '#b83a2a', silver: '#c0c8d0', white: '#e8eef0' };
   const HAIRS = ['#2b2018', '#6b4226', '#c4472d', '#e8c25a', '#d8d8d8', '#3a6fd8', '#d85aa8'];
 
-  // Niveles: hace falta 50·n·(n-1) de experiencia total para llegar al nivel n
-  const xpForLevel = (n) => 50 * n * (n - 1);
-  function levelFromXp(xp) { let n = 1; while (xp >= xpForLevel(n + 1)) n++; return n; }
-  function heroStats(cls, xp) {
-    const k = CLASSES[cls] || CLASSES.guerrero;
-    const level = levelFromXp(xp || 0);
-    return { level, hp: k.hp * 2 + (level - 1) * 4, att: k.att + (level - 1), next: xpForLevel(level + 1), base: xpForLevel(level) };
+  // Normaliza el aspecto que llega de un cliente (o de una versión anterior del juego)
+  function cleanLook(look) {
+    look = look || {};
+    let cls = LEGACY_CLASS[look.cls] || look.cls;
+    if (!Object.prototype.hasOwnProperty.call(CLASSES, cls)) cls = 'fighter';
+    const species = Object.prototype.hasOwnProperty.call(SPECIES, look.species) ? look.species : 'human';
+    const idx = (v, n) => (Number.isInteger(v) && v >= 0 && v < n ? v : 0);
+    const out = { cls, species, skin: idx(look.skin, SKINS.length), hair: idx(look.hair, HAIRS.length) };
+    if (!skinsFor(species).includes(out.skin)) out.skin = skinsFor(species)[0];
+    if (typeof look.sub === 'string' && /^[a-z-]{1,40}$/.test(look.sub)) out.sub = look.sub;
+    return out;
   }
 
   const MAP = createMap();
-  Object.assign(MAP, { createMap, defaultItems, sanitizeItems, CLASSES, SKINS, HAIRS, xpForLevel, levelFromXp, heroStats });
+  Object.assign(MAP, { createMap, defaultItems, sanitizeItems, CLASSES, LEGACY_CLASS, SPECIES, SKINS, SPECIES_SKINS, skinsFor, DRAGON_COLORS, HAIRS, cleanLook });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = MAP;
   else root.MAP = MAP;

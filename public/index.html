@@ -35,7 +35,10 @@
       <button class="tool" data-act="heroes" title="Héroes"><span class="ico">🛡️</span><span>Héroes</span></button>
       <button class="tool" data-act="emotes" title="Gestos"><span class="ico">😄</span><span>Gestos</span></button>
       <button class="tool" data-act="dice" title="Tirar d20"><span class="ico">🎲</span><span>Dado</span></button>
-      <button class="tool" data-act="dungeons" title="Mazmorras"><span class="ico">🗝️</span><span>Mazmorras</span></button>
+      <button class="tool" data-act="sheet" title="Tu ficha de personaje"><span class="ico">📜</span><span>Ficha</span></button>
+      <button class="tool" data-act="manual" title="Manual de reglas"><span class="ico">📖</span><span>Manual</span></button>
+      <button class="tool tavern-only" data-act="world" title="Salir al mundo abierto"><span class="ico">🗺️</span><span>Mundo</span></button>
+      <button class="tool tavern-only" data-act="dungeons" title="Mazmorras"><span class="ico">🗝️</span><span>Mazmorras</span></button>
       <form id="chat-form" autocomplete="off">
         <input id="chat-input" maxlength="200" placeholder="Di algo a la taberna… (Enter)" enterkeyhint="send">
         <button class="btn" type="submit">HABLAR</button>
@@ -100,7 +103,10 @@
 
       <div class="field-title">Clase</div>
       <div id="class-pick" class="class-pick"></div>
+      <div class="field-title">Especie</div>
+      <div id="species-pick" class="class-pick species"></div>
 
+      <p id="login-sheet-note" class="tag small"></p>
       <div class="looks">
         <div><div class="field-title">Piel</div><div id="skin-pick" class="swatches"></div></div>
         <div><div class="field-title">Pelo</div><div id="hair-pick" class="swatches"></div></div>
@@ -143,10 +149,33 @@
     <div class="de-help" id="de-help">Clic o arrastra para pintar · Clic derecho para borrar · Necesitas una entrada y una salida</div>
   </div>
 
+  <!-- Ficha de personaje -->
+  <div id="sheet" class="overlay hidden">
+    <div class="panel sheet-panel">
+      <button id="sheet-close" class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div id="sheet-body"></div>
+    </div>
+  </div>
+
+  <!-- Manual de reglas -->
+  <div id="manual" class="overlay hidden">
+    <div class="panel sheet-panel">
+      <button id="manual-close" class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">MANUAL · REGLAS SRD 5.2</div>
+      <div id="manual-tabs" class="manual-tabs"></div>
+      <div class="manual-tools"><input id="manual-search" placeholder="Buscar…" autocomplete="off"><span id="manual-filters"></span></div>
+      <div id="manual-body" class="manual-body"></div>
+      <p class="credit">Incluye material del System Reference Document 5.2 de Wizards of the Coast LLC (licencia CC-BY-4.0). <a href="rules/LICENSE-SRD.md" target="_blank" rel="noopener">Atribución</a></p>
+    </div>
+  </div>
+
   <script src="map.js"></script>
   <script src="dungeon-data.js"></script>
+  <script src="rules/engine.js"></script>
   <script src="sprites.js"></script>
   <script src="game.js"></script>
+  <script src="sheet.js"></script>
+  <script src="manual.js"></script>
   <script src="dungeon.js"></script>
 </body>
 </html>

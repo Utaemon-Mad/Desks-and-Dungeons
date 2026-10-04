@@ -65,19 +65,24 @@
   // ======================================================================
   // o: { back, frame (0 quieto, 1-2 andando), sit, emote, tick (0/1 para animar gestos) }
   function hero(look, o = {}) {
-    const key = ['h', look.cls, look.skin, look.hair, look.color || '', look.npc ? 1 : 0, o.back ? 1 : 0, o.frame || 0, o.sit ? 1 : 0, o.emote || '', o.tick || 0].join(':');
+    const key = ['h', look.cls, look.species || '', look.sub || '', look.skin, look.hair, look.color || '', look.npc ? 1 : 0, o.back ? 1 : 0, o.frame || 0, o.sit ? 1 : 0, o.emote || '', o.tick || 0].join(':');
     return cached(key, () => drawHero(look, o));
   }
 
   function drawHero(look, o) {
     const { c, g } = canvas(24, 34);
-    const k = MAP.CLASSES[look.cls] || MAP.CLASSES.guerrero;
+    const OLD = ['guerrero', 'maga', 'elfo', 'picaro', 'bardo', 'clerigo'];
+    const cid = MAP.CLASSES[look.cls] ? look.cls : (MAP.LEGACY_CLASS[look.cls] || 'fighter');
+    const k = MAP.CLASSES[cid];
+    const style = MAP.CLASSES[look.cls] ? k.style : (OLD.includes(look.cls) ? look.cls : k.style);
+    const species = look.species || 'human';
     const body = look.color || k.color, trim = k.trim;
     const bodyD = shade(body, -0.28), bodyL = shade(body, 0.18);
-    const skin = MAP.SKINS[look.skin] || MAP.SKINS[0], skinD = shade(skin, -0.18);
+    const dragonColor = species === 'dragonborn' && look.sub ? MAP.DRAGON_COLORS[look.sub.replace('draconic-ancestor-', '')] : null;
+    const skin = dragonColor || MAP.SKINS[look.skin] || MAP.SKINS[0], skinD = shade(skin, -0.18);
     const hair = MAP.HAIRS[look.hair] || MAP.HAIRS[0], hairD = shade(hair, -0.3), hairL = shade(hair, 0.25);
     const pants = '#3a2a20', boots = '#24160e';
-    const robe = look.cls === 'maga' || look.cls === 'clerigo';
+    const robe = style === 'maga' || style === 'clerigo';
     const back = !!o.back;
     const p = painter(g, 0, 2);
     const up = o.sit ? 3 : 0; // el cuerpo baja al sentarse
@@ -98,7 +103,7 @@
 
     p.oy = 2 + up;
     // --- capa por detrás (pícaro, maga) ---
-    if (back && (look.cls === 'picaro' || look.cls === 'maga')) p.rect(7, 18, 10, 9, bodyD);
+    if (back && (style === 'picaro' || style === 'maga')) p.rect(7, 18, 10, 9, bodyD);
 
     // --- cuerpo ---
     if (robe && !o.sit) {
@@ -106,19 +111,19 @@
       p.rect(7, 24, 10, 5, body);
       p.col(16, 24, 28, bodyD); p.col(15, 18, 23, bodyD);
       p.row(23, 8, 15, trim);
-      if (!back && look.cls === 'clerigo') { p.col(12, 19, 22, trim); p.row(20, 11, 13, trim); }
-      if (!back && look.cls === 'maga') p.px(11, 25, trim);
+      if (!back && style === 'clerigo') { p.col(12, 19, 22, trim); p.row(20, 11, 13, trim); }
+      if (!back && style === 'maga') p.px(11, 25, trim);
     } else {
       p.rect(8, 18, 8, 7, body);
       p.col(15, 18, 24, bodyD); p.col(8, 19, 23, bodyL);
       p.row(23, 8, 15, robe ? trim : '#4a2e1a');
       if (!back) p.px(12, 23, trim);
-      if (look.cls === 'guerrero' && !back) { p.rect(9, 18, 6, 4, '#b0b4bc'); p.row(18, 9, 14, '#d4d8e0'); p.col(14, 18, 21, '#8a8e98'); }
-      if (look.cls === 'elfo' && !back) { p.col(10, 18, 22, '#6b4228'); }
-      if (look.cls === 'bardo' && !back) { p.rect(9, 19, 4, 4, '#a0602a'); p.px(10, 20, '#3a1a0a'); p.col(13, 16, 19, '#6b3a1a'); }
+      if (style === 'guerrero' && !back) { p.rect(9, 18, 6, 4, '#b0b4bc'); p.row(18, 9, 14, '#d4d8e0'); p.col(14, 18, 21, '#8a8e98'); }
+      if (style === 'elfo' && !back) { p.col(10, 18, 22, '#6b4228'); }
+      if (style === 'bardo' && !back) { p.rect(9, 19, 4, 4, '#a0602a'); p.px(10, 20, '#3a1a0a'); p.col(13, 16, 19, '#6b3a1a'); }
       if (look.apron) { p.rect(9, 19, 6, 8, '#efe6d0'); p.col(14, 19, 26, '#cfc4aa'); }
     }
-    if (back && look.cls === 'elfo') { p.rect(9, 16, 2, 8, '#6b4228'); p.px(9, 15, '#c9e07a'); p.px(10, 15, '#c9e07a'); }
+    if (back && style === 'elfo') { p.rect(9, 16, 2, 8, '#6b4228'); p.px(9, 15, '#c9e07a'); p.px(10, 15, '#c9e07a'); }
 
     // --- brazos ---
     const em = o.emote;
@@ -138,7 +143,7 @@
       p.rect(16, 18 + sw, 1, 5, body); p.px(16, 23 + sw, skin);
     }
     // bastón de la maga
-    if (look.cls === 'maga' && !back && !em) { p.col(18, 12, 28, '#6b4228'); p.px(18, 11, trim); p.px(18, 10, '#fff6c0'); }
+    if (style === 'maga' && !back && !em) { p.col(18, 12, 28, '#6b4228'); p.px(18, 11, trim); p.px(18, 10, '#fff6c0'); }
 
     // --- cabeza ---
     p.rect(7, 9, 10, 9, skin);
@@ -147,19 +152,21 @@
     if (look.beard && !back) { p.rect(9, 15, 7, 3, look.beard); p.row(18, 10, 14, look.beard); p.px(12, 16, skin); }
 
     // orejas de elfo
-    if (look.cls === 'elfo') { p.px(6, 13, skin); p.px(5, 12, skin); p.px(4, 11, skin); p.px(17, 13, skin); p.px(18, 12, skin); p.px(19, 11, skin); }
+    if (species === 'elf') { p.px(6, 13, skin); p.px(5, 12, skin); p.px(4, 11, skin); p.px(17, 13, skin); p.px(18, 12, skin); p.px(19, 11, skin); }
+    if (species === 'gnome') { p.px(6, 13, skin); p.px(5, 12, skin); p.px(17, 13, skin); p.px(18, 12, skin); }
+    if (species === 'dragonborn' && !back) { p.rect(16, 13, 2, 3, skin); p.px(17, 13, skinD); p.row(16, 15, 17, skinD); }
 
     // --- pelo ---
-    if (!look.bald) {
+    if (!look.bald && species !== 'dragonborn') {
       if (back) {
         p.rect(7, 8, 10, 10, hair); p.row(8, 8, 15, hairL); p.col(16, 9, 17, hairD);
-        if (look.cls === 'maga' || look.cls === 'elfo') p.rect(7, 17, 10, 3, hair);
+        if (style === 'maga' || style === 'elfo') p.rect(7, 17, 10, 3, hair);
       } else {
         p.row(7, 9, 14, hair); p.row(8, 8, 15, hair); p.row(9, 7, 16, hair); p.row(10, 7, 16, hair);
         p.row(11, 7, 10, hair); p.row(11, 13, 16, hair); p.px(14, 12, hair);
         p.col(7, 12, 14, hair); p.col(16, 11, 13, hairD);
         p.row(8, 9, 12, hairL);
-        if (look.cls === 'maga' || look.cls === 'elfo') { p.rect(6, 11, 2, 9, hair); p.col(6, 12, 19, hairD); }
+        if (style === 'maga' || style === 'elfo') { p.rect(6, 11, 2, 9, hair); p.col(6, 12, 19, hairD); }
       }
     }
 
@@ -171,6 +178,17 @@
       p.px(10, 15, '#e88a8a'); p.px(15, 15, '#e88a8a');
       if (em === 'laugh' || em === 'cheers') { p.row(16, 12, 13, '#6a1a1a'); } else p.px(13, 16, skinD);
     }
+
+    // --- rasgos de especie ---
+    if (species === 'dwarf' && !back && !look.beard) { const hc = MAP.HAIRS[look.hair] || MAP.HAIRS[0]; p.rect(9, 15, 7, 3, hc); p.row(18, 10, 14, hc); p.px(12, 19, hc); p.px(12, 16, skin); p.px(13, 16, skin); }
+    if (species === 'orc' && !back) { p.px(11, 16, '#fff6dc'); p.px(11, 15, '#fff6dc'); p.px(14, 16, '#fff6dc'); p.px(14, 15, '#fff6dc'); }
+    if (species === 'tiefling') { const hn = '#3a2a2a'; p.px(9, 7, hn); p.px(8, 6, hn); p.px(8, 5, hn); p.px(9, 4, hn); p.px(14, 7, hn); p.px(15, 6, hn); p.px(15, 5, hn); p.px(14, 4, hn); }
+    if (species === 'dragonborn') {
+      p.rect(7, 8, 10, 3, skin); p.row(8, 9, 14, shade(skin, 0.15));
+      p.px(8, 7, skinD); p.px(10, 6, skinD); p.px(13, 6, skinD); p.px(15, 7, skinD);
+      if (!back) { p.px(9, 11, skinD); p.px(15, 12, skinD); } else { p.rect(7, 11, 10, 6, skin); p.col(11, 9, 16, skinD); }
+    }
+    if (species === 'goliath' && !back) { p.px(9, 12, skinD); p.px(10, 13, skinD); p.px(15, 11, skinD); p.px(8, 16, skinD); }
 
     // --- sombreros y capuchas ---
     switch (look.cls) {

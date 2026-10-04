@@ -684,7 +684,8 @@
     if (!o.noShadow) { c.fillStyle = 'rgba(0,0,0,.35)'; c.beginPath(); c.ellipse(x, y, 13, 5.5, 0, 0, Math.PI * 2); c.fill(); }
     c.translate(Math.round(x), Math.round(y - (o.sitting ? 12 : 0) - bob * PX));
     if (flip) c.scale(-1, 1);
-    c.drawImage(spr, -12 * PX, -32 * PX, spr.width * PX, spr.height * PX);
+    const sc = PX * ((MAP.SPECIES[look.species] || {}).scale || 1);
+    c.drawImage(spr, -12 * sc, -32 * sc, spr.width * sc, spr.height * sc);
     c.restore();
   }
 
@@ -697,7 +698,7 @@
 
   function makeUser(u) {
     return {
-      id: u.id, name: u.name, look: u.look, gold: u.gold, xp: u.xp || 0, where: u.where || null,
+      id: u.id, name: u.name, look: u.look, gold: u.gold, xp: u.xp || 0, where: u.where || null, sheet: u.sheet || null,
       tx: u.x, ty: u.y,          // casilla destino
       px: u.x, py: u.y,          // posición actual (continua)
       path: [], dir: 'S', phase: 0,
@@ -1051,6 +1052,13 @@
         break;
       }
       case 'titems': MAP.setItems(m.items); break;
+      case 'sheet': {
+        const u = users.get(m.id);
+        if (u) { u.sheet = m.sheet; if (m.look) u.look = m.look; renderHeroes(); }
+        if (m.id === myId && m.look) { profile.look = { ...m.look }; save('dd-profile', JSON.stringify(profile)); }
+        DD.emit('sheet', m);
+        break;
+      }
       case 'where': {
         const u = users.get(m.id);
         if (!u) break;
@@ -1062,10 +1070,10 @@
       case 'profile': {
         const u = users.get(m.id);
         if (!u) break;
-        const before = MAP.levelFromXp(u.xp);
+        const before = RULES.levelFromXp(u.xp);
         const gained = m.gold - u.gold;
         u.xp = m.xp; u.gold = m.gold;
-        if (MAP.levelFromXp(u.xp) > before && m.id === myId) { toast(`⭐ ¡Subes a nivel ${MAP.levelFromXp(u.xp)}!`); blip(990, 0.2); }
+        if (RULES.levelFromXp(u.xp) > before && m.id === myId) { toast(`⭐ ¡Subes a nivel ${RULES.levelFromXp(u.xp)}!`); blip(990, 0.2); }
         if (gained > 0 && !u.where) floaters.push({ id: m.id, text: `+${gained} 🪙`, start: now, dur: 1800, color: '#ffd23f' });
         renderHeroes();
         break;
@@ -1161,8 +1169,8 @@
     countEl.textContent = list.length;
     heroListEl.innerHTML = '';
     for (const u of list) {
-      const k = MAP.CLASSES[u.look.cls];
-      const st = MAP.heroStats(u.look.cls, u.xp);
+      const d = u.sheet && RULES.data ? RULES.derive(u.sheet, u.xp) : null;
+      const st = d ? { level: d.level, hp: d.hp, ac: d.ac, base: RULES.data.xpTable[d.level - 1], next: d.nextXp || u.xp } : { level: 1, hp: 0, ac: 0, base: 0, next: 300 };
       const card = document.createElement('div');
       card.className = 'hero' + (u.id === myId ? ' me' : '');
       card.dataset.id = u.id;
@@ -1170,9 +1178,9 @@
       const row = document.createElement('div'); row.className = 'row';
       row.appendChild(portrait(u.look));
       const stats = document.createElement('div'); stats.className = 'stats';
-      stats.innerHTML = `<div class="cls"></div><div>❤️ HP ${st.hp} · 🗡️ ATT ${st.att}</div><div class="xp" title="Experiencia"><i></i><span></span></div><div class="gold">🪙 <span></span></div>`;
-      stats.querySelector('.cls').textContent = `${k.name} · Nivel ${st.level}`;
-      stats.querySelector('.xp i').style.width = Math.round(100 * (u.xp - st.base) / (st.next - st.base)) + '%';
+      stats.innerHTML = `<div class="cls"></div><div>❤️ PG ${st.hp} · 🛡️ CA ${st.ac}</div><div class="xp" title="Experiencia"><i></i><span></span></div><div class="gold">🪙 <span></span></div>`;
+      stats.querySelector('.cls').textContent = d ? `${d.speciesName.replace(/^.*: /, '')} · ${d.className} ${d.level}` : '';
+      stats.querySelector('.xp i').style.width = Math.max(0, Math.min(100, Math.round(100 * (u.xp - st.base) / Math.max(1, st.next - st.base)))) + '%';
       stats.querySelector('.xp span').textContent = `${u.xp}/${st.next} XP`;
       stats.querySelector('.gold span').textContent = u.gold;
       row.appendChild(stats);
@@ -1181,6 +1189,9 @@
         const w = document.createElement('div'); w.className = 'where'; w.textContent = `⚔️ En «${u.where}»`;
         card.appendChild(w);
       }
+      const sheetBtn = document.createElement('button'); sheetBtn.className = 'btn sheet-btn'; sheetBtn.textContent = '📜 FICHA';
+      sheetBtn.onclick = () => DD.emit('open-sheet', u.id);
+      card.appendChild(sheetBtn);
       if (u.id !== myId) {
         const acts = document.createElement('div'); acts.className = 'acts';
         const greet = document.createElement('button'); greet.className = 'btn'; greet.textContent = 'SALUDAR';
@@ -1228,6 +1239,9 @@
     else if (act === 'drink') { closePops(); net.send({ t: 'drink' }); }
     else if (act === 'edit') { closePops(); setEditing(!editing); }
     else if (act === 'dungeons') { closePops(); DD.emit('open-dungeons'); }
+    else if (act === 'sheet') { closePops(); DD.emit('open-sheet', myId); }
+    else if (act === 'manual') { closePops(); DD.emit('open-manual'); }
+    else if (act === 'world') { closePops(); net.send({ t: 'wenter' }); }
     else if (act === 'heroes') {
       closePops();
       if (window.innerWidth <= 820) heroesEl.classList.toggle('open');
@@ -1374,7 +1388,7 @@
   // ======================================================================
   const loginEl = $('#login');
   const profile = (() => { try { return JSON.parse(load('dd-profile')) || {}; } catch { return {}; } })();
-  const look = Object.assign({ cls: 'guerrero', skin: 0, hair: 0 }, profile.look);
+  const look = MAP.cleanLook(Object.assign({ cls: 'fighter', species: 'human', skin: 0, hair: 0 }, profile.look));
 
   function showLogin() {
     loginEl.classList.remove('hidden');
@@ -1388,12 +1402,22 @@
   function buildPickers() {
     const cp = $('#class-pick'); cp.innerHTML = '';
     for (const [id, k] of Object.entries(MAP.CLASSES)) {
+      const c = RULES.data ? RULES.data.byId.classes[id] : null;
       const b = document.createElement('button'); b.type = 'button';
       b.className = look.cls === id ? 'on' : '';
-      b.innerHTML = `<span></span><small>❤️${k.hp * 2} 🗡️${k.att}</small>`;
+      b.innerHTML = '<span></span><small></small>';
       b.firstChild.textContent = k.name;
+      b.lastChild.textContent = c ? `d${c.hitDie} · ${c.primary.map((a) => RULES.data.abilities.find((x) => x.id === a).abbr).join(c.primaryOr ? '/' : '+')}` : '';
       b.onclick = () => { look.cls = id; buildPickers(); };
       cp.appendChild(b);
+    }
+    const spSel = $('#species-pick'); spSel.innerHTML = '';
+    for (const [id, k] of Object.entries(MAP.SPECIES)) {
+      const b = document.createElement('button'); b.type = 'button';
+      b.className = look.species === id ? 'on' : '';
+      b.textContent = k.name;
+      b.onclick = () => { look.species = id; if (!MAP.skinsFor(id).includes(look.skin)) look.skin = MAP.skinsFor(id)[0]; delete look.sub; buildPickers(); };
+      spSel.appendChild(b);
     }
     const sw = (el, colors, prop) => {
       el.innerHTML = '';
@@ -1404,16 +1428,26 @@
         el.appendChild(b);
       });
     };
-    sw($('#skin-pick'), MAP.SKINS, 'skin');
+    const skinEl = $('#skin-pick'); skinEl.innerHTML = '';
+    MAP.skinsFor(look.species).forEach((i) => {
+      const b = document.createElement('button'); b.type = 'button';
+      b.style.background = MAP.SKINS[i]; b.className = look.skin === i ? 'on' : '';
+      b.onclick = () => { look.skin = i; buildPickers(); };
+      skinEl.appendChild(b);
+    });
     sw($('#hair-pick'), MAP.HAIRS, 'hair');
     const pv = $('#preview'), g = pv.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pv.width, pv.height);
-    g.translate(60, 104); g.scale(1.6, 1.6);
+    g.translate(60, 112); g.scale(1.3, 1.3);
     drawHero(g, 0, 0, look, { dir: 'E', t: 0 });
+    $('#login-sheet-note').textContent = profile.look && profile.look.cls === look.cls && profile.look.species === look.species
+      ? 'Entrarás con tu ficha guardada.'
+      : 'Se te dará un personaje listo para jugar; luego puedes personalizarlo entero con 📜 Ficha.';
   }
 
   $('#login-form').addEventListener('submit', (e) => {
     e.preventDefault();
+    if (!RULES.data) { toast('Cargando las reglas…'); return; }
     const name = $('#login-name').value.trim().slice(0, 16);
     if (!name) return;
     const room = $('#login-room').value.trim() || 'taberna';
@@ -1432,4 +1466,8 @@
   if (document.fonts) document.fonts.ready.then(() => { staticLayer = null; if (!loginEl.classList.contains('hidden')) buildPickers(); });
   showLogin();
   requestAnimationFrame(frame);
+  // Reglas del SRD 5.2 (las necesitan la ficha, el manual y el combate)
+  Promise.all([fetch('rules/core.json').then((r) => r.json()), fetch('rules/spells.json').then((r) => r.json())])
+    .then(([core, spells]) => { RULES.setData(core, spells); buildPickers(); DD.emit('rules-ready'); })
+    .catch(() => toast('No se pudieron cargar las reglas. Recarga la página.'));
 })();
