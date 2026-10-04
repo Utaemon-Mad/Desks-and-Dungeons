@@ -381,7 +381,7 @@
 
     return {
       name: sheet.name, level: lv, xp, nextXp: lv < 20 ? D.xpTable[lv] : null, prof,
-      className: c.name, speciesName: sub ? sub.name : sp.name, backgroundName: bg.name,
+      className: c.name, speciesName: sub ? `${sp.name} (${sub.name.split(': ')[1] || sub.name})` : sp.name, speciesShort: sp.name, backgroundName: bg.name,
       score, mod: m, saves, skills, hp, ac, armorProf, speed, initiative: m.dex + (feats.includes('alert') ? prof : 0),
       passive: 10 + skills.find((k) => k.id === 'perception').bonus,
       attacks, casting, spells: spellList, actions, sneak, feats,

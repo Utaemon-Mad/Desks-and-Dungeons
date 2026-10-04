@@ -429,6 +429,7 @@
   // Camino en 8 direcciones (los enemigos y cofres valen como destino)
   function bfs(sx, sy, tx, ty) {
     const { w, h } = game.map;
+    if (tx < 0 || ty < 0 || tx >= w || ty >= h || sx < 0 || sy < 0 || sx >= w || sy >= h) return [];
     const prev = new Int32Array(w * h).fill(-1);
     const q = [sy * w + sx];
     prev[sy * w + sx] = sy * w + sx;
@@ -451,7 +452,7 @@
     }
     if (prev[ty * w + tx] === -1) return [];
     const path = [];
-    for (let i = ty * w + tx; i !== sy * w + sx; i = prev[i]) path.unshift({ x: i % w, y: (i / w) | 0 });
+    for (let i = ty * w + tx, guard = 0; i !== sy * w + sx && guard < w * h; i = prev[i], guard++) path.unshift({ x: i % w, y: (i / w) | 0 });
     return path;
   }
 
@@ -966,4 +967,5 @@
   // Pruebas automáticas: casilla del mapa a coordenadas de ventana
   window.__dTileToScreen = (x, y) => ({ x: game.view.ox + (x - Math.floor(game.cam.x0) + 0.5) * T * game.view.s, y: game.view.oy + (y - Math.floor(game.cam.y0) + 0.5) * T * game.view.s });
   window.__dGame = game;
+  window.__bfs = bfs;
 })();

@@ -432,7 +432,7 @@
     for (const w of WINDOWS) {
       g.save(); g.globalAlpha = 0.92; winPath(g, w); g.fill(); g.restore();
       const a = w.wall === 'L' ? [iso(0, w.a + 0.6), iso(0, w.b + 0.6), iso(2.4, w.b + 1.8), iso(2.4, w.a + 1.8)] : [iso(w.a + 0.6, 0), iso(w.b + 0.6, 0), iso(w.b + 1.8, 2.4), iso(w.a + 1.8, 2.4)];
-      g.save(); g.globalAlpha = fl ? 0.6 : 0.18; g.beginPath(); a.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y))); g.closePath(); g.filter = 'blur(6px)'; g.fill(); g.restore();
+      g.save(); g.globalAlpha = fl ? 0.6 : 0.15; g.beginPath(); a.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y))); g.closePath(); g.fill(); g.restore();
     }
     g.globalCompositeOperation = 'source-over';
     ctx.drawImage(lightCv, 0, 0, lightCv.width, lightCv.height);
@@ -1179,7 +1179,7 @@
       row.appendChild(portrait(u.look));
       const stats = document.createElement('div'); stats.className = 'stats';
       stats.innerHTML = `<div class="cls"></div><div>❤️ PG ${st.hp} · 🛡️ CA ${st.ac}</div><div class="xp" title="Experiencia"><i></i><span></span></div><div class="gold">🪙 <span></span></div>`;
-      stats.querySelector('.cls').textContent = d ? `${d.speciesName.replace(/^.*: /, '')} · ${d.className} ${d.level}` : '';
+      stats.querySelector('.cls').textContent = d ? `${d.speciesShort} · ${d.className} ${d.level}` : '';
       stats.querySelector('.xp i').style.width = Math.max(0, Math.min(100, Math.round(100 * (u.xp - st.base) / Math.max(1, st.next - st.base)))) + '%';
       stats.querySelector('.xp span').textContent = `${u.xp}/${st.next} XP`;
       stats.querySelector('.gold span').textContent = u.gold;

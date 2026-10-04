@@ -399,7 +399,7 @@ wss.on('connection', (ws) => {
         send(ws, { t: 'sheet:saved', ok: true });
         broadcast(room, { t: 'sheet', id: user.id, sheet: v.sheet, look: user.look });
         const d = RULES.derive(v.sheet, user.profile.xp);
-        system(room, `📜 ${user.name} es ahora ${d.speciesName.toLowerCase()} ${d.className.toLowerCase()} de nivel ${d.level}.`);
+        system(room, `📜 ${user.name} es ahora ${d.className.toLowerCase()} ${d.speciesShort.toLowerCase()} de nivel ${d.level}.`);
         break;
       }
 
