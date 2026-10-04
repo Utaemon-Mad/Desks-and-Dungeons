@@ -589,7 +589,7 @@
 
     // ojos
     if (!back) {
-      const blink = (Math.floor(t / 100) + Math.floor(x)) % 40 === 0;
+      const blink = t > 0 && (Math.floor(t / 100) + Math.floor(x)) % 40 === 0;
       c.fillStyle = '#1b1410';
       if (o.emote === 'laugh' || o.emote === 'sleep' || blink) {
         c.fillRect(1, hy + 1, 4, 1.5); c.fillRect(7, hy + 1, 3, 1.5);
