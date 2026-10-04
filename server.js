@@ -435,10 +435,6 @@ wss.on('connection', (ws) => {
     const dice = /^d(\d+)$/.exec(c);
     if (c === 'dado' || c === 'dados') return roll(Number(arg.replace(/^d/i, '')) || 20);
     if (dice) return roll(Number(dice[1]));
-    if (c === 'muro' && arg) {
-      say(room, { t: 'wall', id: user.id, name: user.name, text: arg.slice(0, 40) });
-      return;
-    }
     if (c === 'me' && arg) return say(room, { t: 'action', id: user.id, name: user.name, text: `${user.name} ${arg}` });
     if (c === 'nombre' && arg) {
       const old = user.name;
@@ -448,7 +444,7 @@ wss.on('connection', (ws) => {
       broadcast(room, { t: 'rename', id: user.id, name: user.name });
       return system(room, `${old} ahora se llama ${user.name}.`);
     }
-    send(ws, { t: 'system', text: 'Comandos: /dado [6|20…], /d20, /muro TEXTO, /me acción, /nombre NUEVO', ts: Date.now() });
+    send(ws, { t: 'system', text: 'Comandos: /dado [6|20…], /d20, /me acción, /nombre NUEVO', ts: Date.now() });
   }
 
   ws.on('close', () => {

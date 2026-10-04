@@ -68,13 +68,13 @@ function client(name) {
   assert.strictEqual(ch.text, '¡Hola Ana!');
   assert.strictEqual(ch.name, 'Beto');
 
-  // Dados y muro
+  // Dados
   a.send({ t: 'chat', text: '/d6' });
   const r = await b.next((m) => m.t === 'roll');
   assert.ok(r.value >= 1 && r.value <= 6 && r.sides === 6);
-  a.send({ t: 'chat', text: '/muro estoy aqui' });
-  const w = await b.next((m) => m.t === 'wall');
-  assert.strictEqual(w.text, 'estoy aqui');
+  a.send({ t: 'chat', text: '/muro ya no existe' });
+  const help = await a.next((m) => m.t === 'system' && /Comandos/.test(m.text));
+  assert.ok(!/muro/.test(help.text), 'el muro de letras ya no está');
 
   // Invitar a una ronda cuesta oro
   a.send({ t: 'round', to: wb.id });

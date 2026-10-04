@@ -2,7 +2,7 @@
 // Los muebles se pueden editar: cada sala guarda su propia lista de objetos.
 (function (root) {
   const W = 14; // casillas a lo largo de x (pared derecha)
-  const H = 12; // casillas a lo largo de y (pared izquierda, la del muro de letras)
+  const H = 12; // casillas a lo largo de y (pared izquierda, la de las ventanas)
 
   // dir = hacia dónde mira quien se sienta: E (+x), S (+y), W (-x), N (-y)
   const DIRS = ['E', 'S', 'W', 'N'];
@@ -33,7 +33,7 @@
     // Rincón de los barriles y las cajas
     add('barrel', 0, 0); add('barrel', 1, 0); add('barrel', 0, 1);
     add('crate', 3, 0); add('crate', 4, 0); add('smallcrate', 3, 1);
-    // Sofá contra el muro de letras
+    // Sofá contra la pared de las ventanas
     add('sofa', 0, 8, 'E'); add('sofa', 0, 9, 'E'); add('sofa', 0, 10, 'E');
     // Mesa de partida con el mapa y sus sillas
     for (let x = 3; x <= 5; x++) for (let y = 6; y <= 7; y++) add('maptable', x, y);

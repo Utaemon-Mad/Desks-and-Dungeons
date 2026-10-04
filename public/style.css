@@ -91,7 +91,6 @@ input { font-family: var(--mono); font-size: 20px; }
 .line .who { font-weight: 700; }
 .line.sys { color: #c9b28a; font-style: italic; }
 .line.roll { color: #9fe0ff; }
-.line.wall { color: #ffb36b; }
 .line.action { color: #e6a8ff; }
 .line time { color: #8a7458; margin-right: 4px; }
 

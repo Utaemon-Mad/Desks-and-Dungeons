@@ -6,7 +6,7 @@ Una taberna pixel-art isométrica, en plan red social, para quedar y charlar con
 - Haz clic en el suelo para caminar, o en una silla, un taburete o el sofá para sentarte (también con WASD / flechas).
 - Habla con bocadillos encima de tu personaje; todo queda en la **Crónica** (y quien entra después ve los últimos mensajes).
 - Gestos (saludar, bailar, brindar…), tirar dados (`/d20`, `/dado 6`), pedir una jarra al tabernero.
-- **Muro de letras**: escribe algo con `/muro HOLA` (o haciendo clic en el muro) y las luces lo deletrean letra a letra para todos.
+- **Ambiente de noche**: ventanas góticas a un exterior con lluvia, luna y árboles muertos; relámpagos con trueno de vez en cuando y unos ojos rojos que a veces se asoman. Dentro sólo alumbran las antorchas y las velas.
 - Personajes en **pixel art**, con animaciones de andar, sentarse y gestos.
 - **Editor de la taberna**: quien abre una sala nueva es su dueño y, con el botón 🔨 Editar, puede colocar, girar y quitar barriles, mesas, sillas, sofás, estanterías, plantas…
 - **Mazmorras** (🗝️): bajad juntos a combatir contra **goblins** (goblin, chamán), **orcos** (orco, jefe orco) y **no muertos** (esqueleto, zombi, nigromante que invoca esqueletos). Se ataca chocando contra el enemigo.
@@ -37,7 +37,6 @@ El juego es un único servidor Node (HTTP + WebSocket), así que se puede public
 | Comando | Qué hace |
 | --- | --- |
 | `/d20`, `/d6`, `/dado 12` | Tira un dado y todos ven el resultado |
-| `/muro TEXTO` | Deletrea el texto en el muro de luces |
 | `/me acción` | Narra una acción (`/me pide otra ronda`) |
 | `/nombre Nuevo` | Cambia tu nombre |
 | `/ayuda` | Muestra la ayuda |
