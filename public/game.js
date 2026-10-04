@@ -411,7 +411,8 @@
     g.beginPath();
     [up(D, WALL_H + 10), up(A, WALL_H + 10), up(B, WALL_H + 10), up(B, -18), up(C, -18), up(D, -18)].forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
     g.closePath();
-    g.fillStyle = `rgba(3,3,12,${fl ? 0.25 : 0.86})`;
+    // al editar se aclara para ver bien dónde va cada mueble
+    g.fillStyle = `rgba(3,3,12,${fl ? 0.25 : editing ? 0.35 : 0.86})`;
     g.fill();
     g.globalCompositeOperation = 'destination-out';
     const hole = (x, y, r, a) => {

@@ -30,8 +30,14 @@ function createStore(dir = DATA_DIR) {
     clearTimeout(timers[name]);
     const file = path.join(dir, files[name]);
     const tmp = file + '.tmp';
-    fs.writeFileSync(tmp, JSON.stringify(data[name]));
-    fs.renameSync(tmp, file);
+    try {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(tmp, JSON.stringify(data[name]));
+      fs.renameSync(tmp, file);
+    } catch (err) {
+      // Un fallo de disco no debe tumbar la taberna: se reintenta en el siguiente cambio
+      console.error(`No se pudo guardar ${files[name]}:`, err.message);
+    }
   }
 
   return {
