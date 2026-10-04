@@ -1,4 +1,4 @@
-/* global MAP */
+/* global MAP, RULES, SPRITES */
 (() => {
   'use strict';
 
@@ -393,9 +393,18 @@
     const lamp = up(iso(4.5, 7), 110);
     list.push({ p: { x: lamp.x, y: lamp.y + 40 }, r: 115, warm: true, seed: 3 });
     for (const it of MAP.items) {
-      if (it.type !== 'roundtable') continue;
       const c = iso(it.x + 0.5, it.y + 0.5);
-      list.push({ p: { x: c.x - 5, y: c.y - 40 }, r: 55, warm: true, seed: it.x * 3 + it.y });
+      if (it.type === 'roundtable') list.push({ p: { x: c.x - 5, y: c.y - 40 }, r: 70, warm: true, seed: it.x * 3 + it.y });
+      if (it.type === 'fireplace') list.push({ p: { x: c.x, y: c.y - 10 }, r: 190, warm: true, seed: it.x });
+      if (it.type === 'candelabra') list.push({ p: { x: c.x, y: c.y - 56 }, r: 110, warm: true, seed: it.y });
+      if (it.type === 'chandelier') list.push({ p: { x: c.x, y: c.y - 70 }, r: 170, warm: true, seed: it.x + it.y });
+      if (it.type === 'cauldron') list.push({ p: { x: c.x, y: c.y - 24 }, r: 90, color: [70, 255, 120], seed: it.x });
+    }
+    for (const m of Object.values(MAP.MERCHANTS)) {
+      const pr = m.prop, c = iso(pr.x + 0.5, pr.y + 0.5);
+      if (pr.type === 'cauldron') list.push({ p: { x: c.x, y: c.y - 24 }, r: 105, color: [70, 255, 120], seed: 5 });
+      if (pr.type === 'crystal') list.push({ p: { x: c.x, y: c.y - 38 }, r: 95, color: [170, 90, 255], seed: 7 });
+      if (pr.type === 'rack') { const q = iso(m.x + 0.5, m.y + 0.5); list.push({ p: { x: q.x, y: q.y - 50 }, r: 80, warm: true, seed: 9 }); }
     }
     for (const L of list) L.r *= 0.92 + Math.sin(now / 130 + L.seed * 3) * 0.05 + Math.sin(now / 47 + L.seed) * 0.03;
     return list;
@@ -412,7 +421,7 @@
     [up(D, WALL_H + 10), up(A, WALL_H + 10), up(B, WALL_H + 10), up(B, -18), up(C, -18), up(D, -18)].forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
     g.closePath();
     // al editar se aclara para ver bien dónde va cada mueble
-    g.fillStyle = `rgba(3,3,12,${fl ? 0.25 : editing ? 0.35 : 0.86})`;
+    g.fillStyle = `rgba(3,3,12,${fl ? 0.2 : editing ? 0.3 : 0.66})`;
     g.fill();
     g.globalCompositeOperation = 'destination-out';
     const hole = (x, y, r, a) => {
@@ -442,7 +451,8 @@
     ctx.globalCompositeOperation = 'lighter';
     for (const L of lights) {
       const rg = ctx.createRadialGradient(L.p.x, L.p.y, 0, L.p.x, L.p.y, L.r * 0.8);
-      rg.addColorStop(0, 'rgba(255,150,60,.16)'); rg.addColorStop(1, 'rgba(255,110,30,0)');
+      const [r, gg, b] = L.color || [255, 150, 60];
+      rg.addColorStop(0, `rgba(${r},${gg},${b},.2)`); rg.addColorStop(1, `rgba(${r},${gg},${b},0)`);
       ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(L.p.x, L.p.y, L.r * 0.8, 0, Math.PI * 2); ctx.fill();
     }
     // tinte azul de la luna
@@ -463,6 +473,11 @@
     for (const it of MAP.items) list.push(...itemDrawables(it));
     // El tabernero
     list.push({ depth: MAP.BARKEEP.x + MAP.BARKEEP.y + 0.5, draw: drawBartender });
+    // Los comerciantes y sus puestos
+    for (const [id, m] of Object.entries(MAP.MERCHANTS)) {
+      for (const pr of [m.prop, m.prop2].filter(Boolean)) list.push(...itemDrawables({ type: pr.type, x: pr.x, y: pr.y }));
+      list.push({ depth: m.x + m.y + 0.5, draw: () => drawMerchant(id, m) });
+    }
     return list;
   }
 
@@ -487,8 +502,122 @@
         return [{ depth: d + 0.2, draw: wrap(() => drawSofa(it, false)) }, { depth: d + (front ? 0.85 : 0.25), draw: wrap(() => drawSofa(it, true)) }];
       }
       case 'staff': return editing || ghost ? [{ depth: d + 0.1, draw: () => drawStaffZone(it) }] : [];
+      case 'fireplace': return [{ depth: d + 0.6, draw: wrap(() => drawFireplace(it)) }];
+      case 'candelabra': return [{ depth: d + 0.6, draw: wrap(() => drawCandelabra(it)) }];
+      case 'chandelier': return [{ depth: d + 2.5, draw: wrap(() => drawChandelier(it)) }];
+      case 'chest': return [{ depth: d + 0.6, draw: wrap(() => drawChest(it)) }];
+      case 'rack': return [{ depth: d + 0.6, draw: wrap(() => drawRack(it)) }];
+      case 'cauldron': return [{ depth: d + 0.6, draw: wrap(() => drawCauldron(it)) }];
+      case 'crystal': return [{ depth: d + 0.6, draw: wrap(() => drawCrystal(it)) }];
     }
     return [];
+  }
+
+  // ---------- Muebles nuevos: chimenea, candelabro, lámpara, cofre, armero, caldero y bola de cristal ----------
+  function flame(x, y, h, seed, w = 5) {
+    const t = performance.now() / 90 + seed * 7;
+    const hh = h + Math.sin(t) * h * 0.18 + Math.sin(t * 2.3) * h * 0.1;
+    const sway = Math.sin(t * 0.7) * w * 0.4;
+    ctx.beginPath(); ctx.moveTo(x - w, y); ctx.quadraticCurveTo(x - w, y - hh * 0.6, x + sway, y - hh); ctx.quadraticCurveTo(x + w, y - hh * 0.6, x + w, y); ctx.closePath();
+    ctx.fillStyle = '#e8601c'; ctx.fill();
+    ctx.beginPath(); ctx.moveTo(x - w / 2, y); ctx.quadraticCurveTo(x - w / 2, y - hh * 0.45, x + sway * 0.6, y - hh * 0.7); ctx.quadraticCurveTo(x + w / 2, y - hh * 0.45, x + w / 2, y); ctx.closePath();
+    ctx.fillStyle = '#ffd25a'; ctx.fill();
+  }
+
+  function drawFireplace(it) {
+    const t = isoBox(it.x + 0.02, it.y + 0.05, 0.96, 0.9, 64, '#5a5258', 0, { top: '#6a6268' });
+    // boca del hogar en la cara +y
+    const a = iso(it.x + 0.22, it.y + 0.95), b = iso(it.x + 0.78, it.y + 0.95);
+    poly([a, b, up(b, 32), up(a, 32)], '#140a08', OUT, 1.5);
+    const m = iso(it.x + 0.5, it.y + 0.95);
+    for (let i = -1; i <= 1; i++) flame(m.x + i * 7, m.y - 4, 14 + (i === 0 ? 6 : 0), it.x + i, 5);
+    ellipse(m.x, m.y - 3, 16, 3, '#3a1a0a');
+    // repisa y piedras
+    isoBox(it.x - 0.02, it.y + 0.02, 1.04, 0.98, 5, '#7a6a5a', 46, { top: '#8a7a6a' });
+    ctx.strokeStyle = 'rgba(20,10,10,.45)'; ctx.lineWidth = 1;
+    for (let z = 10; z < 64; z += 12) { const p = iso(it.x + 0.02, it.y + 0.95), q = iso(it.x + 0.98, it.y + 0.95); ctx.beginPath(); ctx.moveTo(p.x, p.y - z); ctx.lineTo(q.x, q.y - z); ctx.stroke(); }
+    void t;
+  }
+
+  function drawCandelabra(it) {
+    const c = iso(it.x + 0.5, it.y + 0.5);
+    ellipse(c.x, c.y, 10, 5, '#3a3036', OUT);
+    rrect(c.x - 2, c.y - 46, 4, 46, 1, '#5a4e40', OUT, 1);
+    ctx.strokeStyle = '#5a4e40'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(c.x - 12, c.y - 44); ctx.quadraticCurveTo(c.x, c.y - 36, c.x + 12, c.y - 44); ctx.stroke();
+    for (const dx of [-12, 0, 12]) {
+      rrect(c.x + dx - 2.5, c.y - (dx ? 54 : 58), 5, 10, 1, '#efe6cf', OUT, 1);
+      flame(c.x + dx, c.y - (dx ? 54 : 58), 7, it.x + dx, 2.5);
+    }
+  }
+
+  function drawChandelier(it) {
+    const c = up(iso(it.x + 0.5, it.y + 0.5), 112);
+    ctx.strokeStyle = '#1a1414'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.moveTo(c.x, c.y - 60); ctx.lineTo(c.x, c.y - 6); ctx.stroke();
+    ellipse(c.x, c.y, 26, 10, null, '#3a2e24', 4);
+    ellipse(c.x, c.y, 26, 10, null, '#6a5232', 1.5);
+    for (let i = 0; i < 6; i++) {
+      const a = i / 6 * Math.PI * 2;
+      const x = c.x + Math.cos(a) * 26, y = c.y + Math.sin(a) * 10;
+      rrect(x - 2, y - 9, 4, 8, 1, '#efe6cf', OUT, 0.8);
+      flame(x, y - 9, 6, i + it.x, 2.2);
+    }
+  }
+
+  function drawChest(it) {
+    const t = isoBox(it.x + 0.15, it.y + 0.2, 0.7, 0.6, 22, '#6a3e1e', 0, { top: '#8a5428' });
+    ctx.strokeStyle = '#c8a040'; ctx.lineWidth = 2.5;
+    const a = iso(it.x + 0.15, it.y + 0.8), b = iso(it.x + 0.85, it.y + 0.8);
+    ctx.beginPath(); ctx.moveTo(a.x, a.y - 14); ctx.lineTo(b.x, b.y - 14); ctx.stroke();
+    const m = iso(it.x + 0.5, it.y + 0.8);
+    rrect(m.x - 3, m.y - 17, 6, 7, 1, '#e8c050', OUT, 1);
+    poly([t.a, t.b, t.c, t.e], null, '#c8a040', 1.5);
+  }
+
+  function drawRack(it) {
+    isoBox(it.x + 0.1, it.y + 0.35, 0.8, 0.3, 8, '#4a2e1a');
+    const p0 = iso(it.x + 0.15, it.y + 0.5), p1 = iso(it.x + 0.85, it.y + 0.5);
+    ctx.strokeStyle = '#4a2e1a'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(p0.x, p0.y - 8); ctx.lineTo(p0.x, p0.y - 52); ctx.moveTo(p1.x, p1.y - 8); ctx.lineTo(p1.x, p1.y - 52); ctx.moveTo(p0.x, p0.y - 46); ctx.lineTo(p1.x, p1.y - 46); ctx.stroke();
+    // katanas, lanza y espada colgadas
+    const blades = [['#dfe4ec', '#8a2a2a', 0.3], ['#c8ccd4', '#2a2a5a', 0.5], ['#e8ecf2', '#6b4228', 0.7]];
+    for (const [steel, hilt, f] of blades) {
+      const q = iso(it.x + f, it.y + 0.5);
+      ctx.strokeStyle = OUT; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(q.x, q.y - 12); ctx.lineTo(q.x + 2, q.y - 58); ctx.stroke();
+      ctx.strokeStyle = steel; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(q.x, q.y - 22); ctx.lineTo(q.x + 2, q.y - 58); ctx.stroke();
+      ctx.strokeStyle = hilt; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(q.x, q.y - 12); ctx.lineTo(q.x, q.y - 22); ctx.stroke();
+      rrect(q.x - 4, q.y - 23, 8, 2, 0, '#c8a040', null);
+    }
+  }
+
+  function drawCauldron(it) {
+    const c = iso(it.x + 0.5, it.y + 0.5);
+    // fuego debajo
+    for (let i = -1; i <= 1; i++) flame(c.x + i * 8, c.y + 2, 9, it.y + i, 4);
+    ctx.beginPath(); ctx.ellipse(c.x, c.y - 14, 22, 18, 0, 0, Math.PI * 2);
+    const g = ctx.createRadialGradient(c.x - 6, c.y - 20, 2, c.x, c.y - 14, 24);
+    g.addColorStop(0, '#4a4a52'); g.addColorStop(1, '#141418');
+    ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = OUT; ctx.lineWidth = 1.5; ctx.stroke();
+    ellipse(c.x, c.y - 28, 20, 8, '#1a1a1e', OUT);
+    const t = performance.now() / 400;
+    ellipse(c.x, c.y - 28, 17, 6, '#3adf6a');
+    for (let i = 0; i < 4; i++) {
+      const bx = c.x + Math.sin(t * 1.3 + i * 2) * 10, by = c.y - 30 - ((t * 20 + i * 9) % 26);
+      ellipse(bx, by, 2.5, 2.5, 'rgba(120,255,140,.55)');
+    }
+  }
+
+  function drawCrystal(it) {
+    isoBox(it.x + 0.15, it.y + 0.15, 0.7, 0.7, 26, '#2a1a3a', 0, { top: '#3a2650' });
+    const c = up(iso(it.x + 0.5, it.y + 0.5), 26);
+    ellipse(c.x, c.y - 2, 9, 4, '#8a6a3a', OUT);
+    const t = performance.now() / 600;
+    const g = ctx.createRadialGradient(c.x - 3, c.y - 16, 1, c.x, c.y - 12, 12);
+    g.addColorStop(0, '#f0d0ff'); g.addColorStop(0.5, `rgba(170,90,255,${0.75 + Math.sin(t) * 0.2})`); g.addColorStop(1, '#3a1a6a');
+    ctx.beginPath(); ctx.arc(c.x, c.y - 12, 11, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill(); ctx.strokeStyle = OUT; ctx.lineWidth = 1.2; ctx.stroke();
+    // velas
+    rrect(c.x - 20, c.y - 8, 4, 8, 1, '#efe6cf', OUT, 0.8); flame(c.x - 18, c.y - 8, 6, 3, 2);
   }
 
   function drawStaffZone(it) {
@@ -661,7 +790,14 @@
     drawHero(ctx, c.x, c.y, bartenderLook, { dir: 'W', t, wiping: true });
   }
 
-  const bartenderLook = { cls: 'bardo', skin: 1, hair: 1, npc: true, color: '#7a4a2a', beard: '#6b4226', bald: true, apron: true };
+  function drawMerchant(id, m) {
+    const c = iso(m.x + 0.5, m.y + 0.5);
+    const t = performance.now();
+    drawHero(ctx, c.x, c.y, { cls: 'mago', skin: id === 'bruja' ? 6 : 1, hair: 0, ...m.look }, { dir: id === 'armero' ? 'S' : 'E', t, idle: true });
+    m._screen = { x: c.x, y: c.y };
+  }
+
+  const bartenderLook = { cls: 'picaro', skin: 1, hair: 1, npc: 'tabernero', color: '#7a4a2a', beard: '#6b4226', bald: true, apron: true };
 
   // ======================================================================
   //  Personajes (sprites pixel art de sprites.js)
@@ -698,7 +834,7 @@
 
   function makeUser(u) {
     return {
-      id: u.id, name: u.name, look: u.look, gold: u.gold, xp: u.xp || 0, where: u.where || null, sheet: u.sheet || null,
+      id: u.id, name: u.name, look: u.look, gold: u.gold, xp: u.xp || 0, level: u.level || 1, where: u.where || null,
       tx: u.x, ty: u.y,          // casilla destino
       px: u.x, py: u.y,          // posición actual (continua)
       path: [], dir: 'S', phase: 0,
@@ -830,6 +966,19 @@
       ctx.fillStyle = f.color; ctx.fillText(f.text, u._screen.x, y);
       ctx.globalAlpha = 1;
     }
+    // nombres de los comerciantes
+    ctx.font = '600 10px "Pixelify Sans", sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    for (const [id, m] of Object.entries(MAP.MERCHANTS)) {
+      if (!m._screen) continue;
+      const S = RULES.SHOPS[id];
+      const hot = hover && (MAP.merchantAt(hover.x, hover.y) === id);
+      const label = (id === 'bruja' ? '🧪 ' : id === 'armero' ? '⚔️ ' : '✨ ') + S.name;
+      const w = ctx.measureText(label).width + 10;
+      const y = m._screen.y - 76;
+      rrect(m._screen.x - w / 2, y - 8, w, 15, 4, hot ? 'rgba(90,40,110,.95)' : 'rgba(30,14,40,.8)', hot ? '#d8a8ff' : '#6a4a8a', 1);
+      ctx.fillStyle = '#f0e0ff'; ctx.fillText(label, m._screen.x, y);
+    }
     // bocadillo del tabernero
     if (barkeep.until > now) {
       const c = iso(12.5, 4.5);
@@ -929,7 +1078,7 @@
 
   // Antorchas de pared (pequeñas: alumbran sólo su rincón)
   const TORCHES = [
-    { x: 4, y: 0, z: 82, r: 95 }, { x: 9.5, y: 0, z: 82, r: 90 }, { x: 0, y: 8, z: 82, r: 90 },
+    { x: 4, y: 0, z: 82, r: 130 }, { x: 11.5, y: 0, z: 82, r: 125 }, { x: 0, y: 8, z: 82, r: 125 }, { x: 0, y: 4.1, z: 82, r: 115 }, { x: 0, y: 11, z: 82, r: 115 },
   ];
 
   function drawTorches(now) {
@@ -969,15 +1118,34 @@
     closePops();
     const t = screenToTile(e.clientX, e.clientY);
     if (editing) { editClick(t.x, t.y); return; }
-    if (!MAP.isStandable(t.x, t.y)) return;
     const me = users.get(myId);
     if (!me) return;
+    // un comerciante: abre su tienda (y te acercas)
+    const shop = MAP.merchantAt(t.x, t.y) || merchantUnder(e.clientX, e.clientY);
+    if (shop) {
+      const m = MAP.MERCHANTS[shop];
+      const spot = [[1, 0], [0, 1], [1, 1], [-1, 0], [0, -1], [2, 0], [0, 2]].map(([dx, dy]) => ({ x: m.prop.x + dx, y: m.prop.y + dy })).find((q) => MAP.isPassable(q.x, q.y));
+      if (spot) { setTarget(me, spot.x, spot.y); net.send({ t: 'move', x: spot.x, y: spot.y }); }
+      DD.emit('open-shop', shop);
+      return;
+    }
+    if (!MAP.isStandable(t.x, t.y)) return;
     if (MAP.isSeat(t.x, t.y) && [...users.values()].some((u) => u.id !== myId && !u.where && u.tx === t.x && u.ty === t.y)) {
       toast('Ese asiento está ocupado.'); return;
     }
     setTarget(me, t.x, t.y);
     net.send({ t: 'move', x: t.x, y: t.y });
   });
+
+  // Clic sobre el cuerpo de un comerciante (que sobresale de su casilla)
+  function merchantUnder(cx, cy) {
+    const wx = (cx - view.ox) / view.scale, wy = (cy - view.oy) / view.scale;
+    for (const [id, m] of Object.entries(MAP.MERCHANTS)) {
+      const c = iso(m.x + 0.5, m.y + 0.5);
+      if (Math.abs(wx - c.x) < 18 && wy < c.y + 4 && wy > c.y - 70) return id;
+    }
+    return null;
+  }
 
   // Mover con el teclado (WASD / flechas) cuando no se está escribiendo
   window.addEventListener('keydown', (e) => {
@@ -1052,11 +1220,25 @@
         break;
       }
       case 'titems': MAP.setItems(m.items); break;
-      case 'sheet': {
+      case 'look': {
         const u = users.get(m.id);
-        if (u) { u.sheet = m.sheet; if (m.look) u.look = m.look; renderHeroes(); }
-        if (m.id === myId && m.look) { profile.look = { ...m.look }; save('dd-profile', JSON.stringify(profile)); }
-        DD.emit('sheet', m);
+        if (u) { u.look = m.look; renderHeroes(); }
+        if (m.id === myId) { const { gear, ...l } = m.look; void gear; profile.look = l; save('dd-profile', JSON.stringify(profile)); }
+        DD.emit('look', m);
+        break;
+      }
+      case 'me': {
+        DD.me = m;
+        const u = users.get(myId);
+        if (u) { u.xp = m.xp; u.gold = m.gold; }
+        renderHeroes();
+        DD.emit('me', m);
+        break;
+      }
+      case 'levelup': {
+        toast(`⭐ ¡Subes a nivel ${m.level}! Pulsa el icono rojo bajo tu retrato para repartir ${m.points} puntos.`);
+        blip(990, 0.25); setTimeout(() => blip(1320, 0.2), 180);
+        DD.emit('levelup', m);
         break;
       }
       case 'where': {
@@ -1070,10 +1252,9 @@
       case 'profile': {
         const u = users.get(m.id);
         if (!u) break;
-        const before = RULES.levelFromXp(u.xp);
         const gained = m.gold - u.gold;
-        u.xp = m.xp; u.gold = m.gold;
-        if (RULES.levelFromXp(u.xp) > before && m.id === myId) { toast(`⭐ ¡Subes a nivel ${RULES.levelFromXp(u.xp)}!`); blip(990, 0.2); }
+        u.xp = m.xp; u.gold = m.gold; if (m.level) u.level = m.level;
+        if (m.id === myId && DD.me) { DD.me.xp = m.xp; DD.me.gold = m.gold; DD.emit('me-stats'); }
         if (gained > 0 && !u.where) floaters.push({ id: m.id, text: `+${gained} 🪙`, start: now, dur: 1800, color: '#ffd23f' });
         renderHeroes();
         break;
@@ -1169,8 +1350,8 @@
     countEl.textContent = list.length;
     heroListEl.innerHTML = '';
     for (const u of list) {
-      const d = u.sheet && RULES.data ? RULES.derive(u.sheet, u.xp) : null;
-      const st = d ? { level: d.level, hp: d.hp, ac: d.ac, base: RULES.data.xpTable[d.level - 1], next: d.nextXp || u.xp } : { level: 1, hp: 0, ac: 0, base: 0, next: 300 };
+      const lvl = RULES.levelFromXp(u.xp);
+      const base = RULES.XP_TABLE[lvl], next = RULES.XP_TABLE[lvl + 1] || base;
       const card = document.createElement('div');
       card.className = 'hero' + (u.id === myId ? ' me' : '');
       card.dataset.id = u.id;
@@ -1178,10 +1359,11 @@
       const row = document.createElement('div'); row.className = 'row';
       row.appendChild(portrait(u.look));
       const stats = document.createElement('div'); stats.className = 'stats';
-      stats.innerHTML = `<div class="cls"></div><div>❤️ PG ${st.hp} · 🛡️ CA ${st.ac}</div><div class="xp" title="Experiencia"><i></i><span></span></div><div class="gold">🪙 <span></span></div>`;
-      stats.querySelector('.cls').textContent = d ? `${d.speciesShort} · ${d.className} ${d.level}` : '';
-      stats.querySelector('.xp i').style.width = Math.max(0, Math.min(100, Math.round(100 * (u.xp - st.base) / Math.max(1, st.next - st.base)))) + '%';
-      stats.querySelector('.xp span').textContent = `${u.xp}/${st.next} XP`;
+      stats.innerHTML = '<div class="cls"></div><div class="xp" title="Experiencia"><i></i><span></span></div><div class="gold">🪙 <span></span></div>';
+      const c1 = RULES.CLASSES[u.look.cls], c2 = u.look.cls2 && RULES.CLASSES[u.look.cls2];
+      stats.querySelector('.cls').textContent = `${c1 ? c1.icon + ' ' + c1.name : ''}${c2 ? ' / ' + c2.name : ''} · nv ${lvl}`;
+      stats.querySelector('.xp i').style.width = Math.max(0, Math.min(100, Math.round(100 * (u.xp - base) / Math.max(1, next - base)))) + '%';
+      stats.querySelector('.xp span').textContent = `${u.xp - base}/${next - base} PX`;
       stats.querySelector('.gold span').textContent = u.gold;
       row.appendChild(stats);
       card.append(name, row);
@@ -1189,18 +1371,23 @@
         const w = document.createElement('div'); w.className = 'where'; w.textContent = `⚔️ En «${u.where}»`;
         card.appendChild(w);
       }
-      const sheetBtn = document.createElement('button'); sheetBtn.className = 'btn sheet-btn'; sheetBtn.textContent = '📜 FICHA';
-      sheetBtn.onclick = () => DD.emit('open-sheet', u.id);
-      card.appendChild(sheetBtn);
-      if (u.id !== myId) {
-        const acts = document.createElement('div'); acts.className = 'acts';
+      const acts = document.createElement('div'); acts.className = 'acts';
+      if (u.id === myId) {
+        const sheetBtn = document.createElement('button'); sheetBtn.className = 'btn'; sheetBtn.textContent = '🧙 PERSONAJE';
+        sheetBtn.onclick = () => DD.emit('open-char', 'ficha');
+        const eq = document.createElement('button'); eq.className = 'btn alt'; eq.textContent = '🎒 EQUIPO';
+        eq.onclick = () => DD.emit('open-char', 'equipo');
+        acts.append(sheetBtn, eq);
+      } else {
         const greet = document.createElement('button'); greet.className = 'btn'; greet.textContent = 'SALUDAR';
         greet.onclick = () => net.send({ t: 'greet', to: u.id });
         const round = document.createElement('button'); round.className = 'btn alt'; round.textContent = 'INVITAR 🍺5';
         round.onclick = () => net.send({ t: 'round', to: u.id });
-        acts.append(greet, round);
-        card.appendChild(acts);
+        const trade = document.createElement('button'); trade.className = 'btn alt'; trade.textContent = '🤝 COMERCIAR';
+        trade.onclick = () => net.send({ t: 'trade:req', to: u.id });
+        acts.append(greet, round, trade);
       }
+      card.appendChild(acts);
       heroListEl.appendChild(card);
     }
     DD.emit('heroes');
@@ -1239,8 +1426,9 @@
     else if (act === 'drink') { closePops(); net.send({ t: 'drink' }); }
     else if (act === 'edit') { closePops(); setEditing(!editing); }
     else if (act === 'dungeons') { closePops(); DD.emit('open-dungeons'); }
-    else if (act === 'sheet') { closePops(); DD.emit('open-sheet', myId); }
-    else if (act === 'manual') { closePops(); DD.emit('open-manual'); }
+    else if (act === 'char') { closePops(); DD.emit('open-char', 'ficha'); }
+    else if (act === 'bag') { closePops(); DD.emit('open-char', 'equipo'); }
+    else if (act === 'guide') { closePops(); DD.emit('open-guide'); }
     else if (act === 'world') { closePops(); net.send({ t: 'wenter' }); }
     else if (act === 'heroes') {
       closePops();
@@ -1272,7 +1460,7 @@
   });
 
   function showHelp() {
-    logLine({ t: 'system', ts: Date.now(), text: 'Haz clic en el suelo para caminar y en una silla, taburete o el sofá para sentarte. Comandos: /dado 6, /d20, /me baila, /nombre Nuevo. Enter para escribir, WASD para moverte.' });
+    logLine({ t: 'system', ts: Date.now(), text: 'Haz clic en el suelo para caminar y en una silla, taburete o el sofá para sentarte. Pulsa sobre los comerciantes para comprar y vender. Comandos: /dado 6, /d20, /me baila, /nombre Nuevo. Enter para escribir, WASD para moverte.' });
   }
 
   // ---------- Sonido ----------
@@ -1298,7 +1486,7 @@
   //  Editor de la taberna (sólo el dueño de la sala)
   // ======================================================================
   const editorEl = $('#editor');
-  const EDIT_ORDER = ['barrel', 'crate', 'smallcrate', 'table', 'maptable', 'roundtable', 'bar', 'bookshelf', 'plant', 'chair', 'stool', 'sofa', 'staff'];
+  const EDIT_ORDER = ['barrel', 'crate', 'smallcrate', 'chest', 'table', 'maptable', 'roundtable', 'bar', 'bookshelf', 'plant', 'chair', 'stool', 'sofa', 'fireplace', 'candelabra', 'chandelier', 'rack', 'cauldron', 'staff'];
 
   function toolPreview(type) {
     const c = document.createElement('canvas');
@@ -1342,6 +1530,7 @@
   function editClick(x, y) {
     if (!MAP.inBounds(x, y)) return;
     if (x === MAP.BARKEEP.x && y === MAP.BARKEEP.y) { toast('Ahí trabaja el tabernero.'); return; }
+    if (MAP.isFixed(x, y)) { toast('Ese es el puesto de un comerciante.'); return; }
     const it = MAP.itemAt(x, y);
     if (editTool === 'erase') { if (it) net.send({ t: 'tedit', op: 'remove', x, y }); return; }
     if (editTool === 'rotate') { if (it && MAP.FURNITURE[it.type].rotates) net.send({ t: 'tedit', op: 'rotate', x, y }); return; }
@@ -1379,7 +1568,7 @@
   Object.defineProperty(DD, 'myId', { get: () => myId });
   Object.defineProperty(DD, 'roomName', { get: () => roomName });
   Object.assign(DD, {
-    net, users, toast, logLine, blip, makeUser,
+    net, users, toast, logLine, blip, makeUser, portrait, drawHero: (c, x, y, l, o) => drawHero(c, x, y, l, o), me: null,
     setScene(sc) { DD.scene = sc; document.body.classList.toggle('in-dungeon', sc !== 'tavern'); hover = null; if (sc !== 'tavern') setEditing(false); },
   });
 
@@ -1388,7 +1577,7 @@
   // ======================================================================
   const loginEl = $('#login');
   const profile = (() => { try { return JSON.parse(load('dd-profile')) || {}; } catch { return {}; } })();
-  const look = MAP.cleanLook(Object.assign({ cls: 'fighter', species: 'human', skin: 0, hair: 0 }, profile.look));
+  const look = MAP.cleanLook(Object.assign({ cls: 'guerrero', species: 'human', skin: 0, hair: 0 }, profile.look));
 
   function showLogin() {
     loginEl.classList.remove('hidden');
@@ -1401,15 +1590,24 @@
 
   function buildPickers() {
     const cp = $('#class-pick'); cp.innerHTML = '';
-    for (const [id, k] of Object.entries(MAP.CLASSES)) {
-      const c = RULES.data ? RULES.data.byId.classes[id] : null;
+    for (const [id, k] of Object.entries(RULES.CLASSES)) {
       const b = document.createElement('button'); b.type = 'button';
       b.className = look.cls === id ? 'on' : '';
+      b.title = k.desc;
       b.innerHTML = '<span></span><small></small>';
-      b.firstChild.textContent = k.name;
-      b.lastChild.textContent = c ? `d${c.hitDie} · ${c.primary.map((a) => RULES.data.abilities.find((x) => x.id === a).abbr).join(c.primaryOr ? '/' : '+')}` : '';
-      b.onclick = () => { look.cls = id; buildPickers(); };
+      b.firstChild.textContent = `${k.icon} ${k.name}`;
+      b.lastChild.textContent = RULES.statName(k.main);
+      b.onclick = () => { look.cls = id; if (look.cls2 === id) delete look.cls2; buildPickers(); };
       cp.appendChild(b);
+    }
+    const c2 = $('#class2-pick'); c2.innerHTML = '';
+    for (const id of [null, ...Object.keys(RULES.CLASSES)]) {
+      if (id === look.cls) continue;
+      const b = document.createElement('button'); b.type = 'button';
+      b.className = (look.cls2 || null) === id ? 'on' : '';
+      b.textContent = id ? `${RULES.CLASSES[id].icon} ${RULES.CLASSES[id].name}` : 'Ninguna';
+      b.onclick = () => { if (id) look.cls2 = id; else delete look.cls2; buildPickers(); };
+      c2.appendChild(b);
     }
     const spSel = $('#species-pick'); spSel.innerHTML = '';
     for (const [id, k] of Object.entries(MAP.SPECIES)) {
@@ -1419,15 +1617,6 @@
       b.onclick = () => { look.species = id; if (!MAP.skinsFor(id).includes(look.skin)) look.skin = MAP.skinsFor(id)[0]; delete look.sub; buildPickers(); };
       spSel.appendChild(b);
     }
-    const sw = (el, colors, prop) => {
-      el.innerHTML = '';
-      colors.forEach((col, i) => {
-        const b = document.createElement('button'); b.type = 'button';
-        b.style.background = col; b.className = look[prop] === i ? 'on' : '';
-        b.onclick = () => { look[prop] = i; buildPickers(); };
-        el.appendChild(b);
-      });
-    };
     const skinEl = $('#skin-pick'); skinEl.innerHTML = '';
     MAP.skinsFor(look.species).forEach((i) => {
       const b = document.createElement('button'); b.type = 'button';
@@ -1435,19 +1624,28 @@
       b.onclick = () => { look.skin = i; buildPickers(); };
       skinEl.appendChild(b);
     });
-    sw($('#hair-pick'), MAP.HAIRS, 'hair');
+    const hairEl = $('#hair-pick'); hairEl.innerHTML = '';
+    MAP.HAIRS.forEach((col, i) => {
+      const b = document.createElement('button'); b.type = 'button';
+      b.style.background = col; b.className = look.hair === i ? 'on' : '';
+      b.onclick = () => { look.hair = i; buildPickers(); };
+      hairEl.appendChild(b);
+    });
+    // vista previa con el equipo inicial de la clase
+    const gear = {};
+    for (const [slot, base] of RULES.CLASSES[look.cls].start) {
+      if (slot === 'arma') gear.w = base; else if (slot === 'mano') gear.o = base; else gear[slot] = base;
+    }
     const pv = $('#preview'), g = pv.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pv.width, pv.height);
     g.translate(60, 112); g.scale(1.3, 1.3);
-    drawHero(g, 0, 0, look, { dir: 'E', t: 0 });
-    $('#login-sheet-note').textContent = profile.look && profile.look.cls === look.cls && profile.look.species === look.species
-      ? 'Entrarás con tu ficha guardada.'
-      : 'Se te dará un personaje listo para jugar; luego puedes personalizarlo entero con 📜 Ficha.';
+    drawHero(g, 0, 0, { ...look, gear }, { dir: 'E', t: 0 });
+    const k = RULES.CLASSES[look.cls];
+    $('#login-sheet-note').textContent = `${k.desc}${look.cls2 ? ` Multiclase con ${RULES.CLASSES[look.cls2].name.toLowerCase()}: sumas sus armas, armaduras y habilidades (las de la segunda clase llegan más tarde).` : ''}`;
   }
 
   $('#login-form').addEventListener('submit', (e) => {
     e.preventDefault();
-    if (!RULES.data) { toast('Cargando las reglas…'); return; }
     const name = $('#login-name').value.trim().slice(0, 16);
     if (!name) return;
     const room = $('#login-room').value.trim() || 'taberna';
@@ -1466,8 +1664,4 @@
   if (document.fonts) document.fonts.ready.then(() => { staticLayer = null; if (!loginEl.classList.contains('hidden')) buildPickers(); });
   showLogin();
   requestAnimationFrame(frame);
-  // Reglas del SRD 5.2 (las necesitan la ficha, el manual y el combate)
-  Promise.all([fetch('rules/core.json').then((r) => r.json()), fetch('rules/spells.json').then((r) => r.json())])
-    .then(([core, spells]) => { RULES.setData(core, spells); buildPickers(); DD.emit('rules-ready'); })
-    .catch(() => toast('No se pudieron cargar las reglas. Recarga la página.'));
 })();
