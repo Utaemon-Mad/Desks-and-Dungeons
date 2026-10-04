@@ -1,4 +1,6 @@
 // Servidor de la taberna: sirve los ficheros del cliente y reparte los mensajes por WebSocket.
+// Lleva los perfiles (personaje, puntos, equipo, inventario, consumibles, bufos), las tiendas, el comercio
+// entre jugadores, el editor de la taberna y las partidas (mazmorras aleatorias y mundo abierto).
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -9,6 +11,7 @@ const DUNGEON = require('./public/dungeon-data.js');
 const RULES = require('./public/rules/engine.js');
 const { createStore } = require('./server/store.js');
 const { Instance } = require('./server/dungeon.js');
+const GEN = require('./server/gen.js');
 const WORLD = require('./server/world.js');
 
 const PORT = Number(process.env.PORT) || 3000;
@@ -18,15 +21,11 @@ const HISTORY_SIZE = 60;
 const MAX_TEXT = 200;
 const START_GOLD = 50;
 const ROUND_PRICE = 5;
-const MAX_DUNGEONS_PER_PLAYER = 20;
+const EMPTY_INSTANCE_MS = 3 * 60 * 1000; // una mazmorra vacía se guarda un rato por si vuelves
+const SHOP_REFRESH_MS = 10 * 60 * 1000;
 
 const store = createStore();
-
-// Siempre hay al menos una mazmorra para jugar
-if (!Object.keys(store.dungeons()).length) {
-  const s = DUNGEON.sample();
-  store.setDungeon('cripta', { id: 'cripta', ...s, author: 'La taberna', authorId: 'system', updated: Date.now() });
-}
+const rnd = () => crypto.randomInt(0, 1e9) / 1e9;
 
 const MIME = {
   '.html': 'text/html; charset=utf-8',
@@ -89,12 +88,14 @@ function cleanText(s, max) {
   return String(s == null ? '' : s).replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max);
 }
 
+const levelOf = (u) => RULES.levelFromXp(u.profile.xp);
+
 function publicUser(u) {
-  return { id: u.id, name: u.name, look: u.look, gold: u.profile.gold, xp: u.profile.xp, sheet: u.profile.sheet, x: u.x, y: u.y, where: u.where ? u.where.name : null };
+  return { id: u.id, name: u.name, look: u.look, gold: u.profile.gold, xp: u.profile.xp, level: levelOf(u), x: u.x, y: u.y, where: u.where ? u.where.name : null };
 }
 
 function send(ws, msg) {
-  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+  if (ws.readyState === ws.OPEN) ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
 }
 
 function broadcast(room, msg, exceptId) {
@@ -119,19 +120,47 @@ function system(room, text) {
   say(room, { t: 'system', text });
 }
 
-// El aspecto del héroe sale de su ficha: clase, especie y linaje, más piel y pelo
-function lookFromSheet(sheet) {
-  return MAP.cleanLook({ cls: sheet.class, species: sheet.species, sub: sheet.subspecies || undefined, skin: sheet.look.skin, hair: sheet.look.hair });
+// ---------- Perfiles ----------
+// { name, xp, gold, char: { cls, cls2, alloc, look }, equip: { slot: item }, bag: [item], cons: { id: n }, buffs: { id: hasta } }
+function lookFrom(profile) {
+  const l = profile.char.look || {};
+  return { ...MAP.cleanLook({ cls: profile.char.cls, cls2: profile.char.cls2, species: l.species, skin: l.skin, hair: l.hair }), gear: RULES.gearLook(profile.equip) };
 }
 
-// Si el jugador no tiene ficha (o eligió otra clase/especie al entrar) se le da un personaje pregenerado
-function ensureSheet(profile, look, name) {
-  const s = profile.sheet;
-  if (s && s.class === look.cls && s.species === look.species) {
-    const v = RULES.validate({ ...s, name: s.name || name, look: { skin: look.skin, hair: look.hair } }, profile.xp);
-    if (v.ok) { profile.sheet = v.sheet; return; }
+function derive(profile) { return RULES.derive(profile); }
+
+// Prepara un perfil (nuevo, de una versión anterior o con otra clase elegida al entrar)
+function setupProfile(profile, look) {
+  const level = RULES.levelFromXp(profile.xp || 0);
+  if (!profile.char || !RULES.CLASSES[profile.char.cls]) {
+    profile.char = RULES.newChar(look.cls, look.cls2, {});
+    profile.equip = {}; profile.bag = []; profile.cons = { 'pocion-vida-p': 3 }; profile.buffs = {};
+    for (const it of RULES.starterItems(profile.char.cls, rnd)) profile.equip[it.slot] = it;
+    delete profile.sheet;
   }
-  profile.sheet = RULES.pregen(look.cls, look.species, { name, look: { skin: look.skin, hair: look.hair }, xp: profile.xp, subspecies: look.sub });
+  profile.char = RULES.cleanChar(profile.char, level);
+  profile.char.look = { species: look.species, skin: look.skin, hair: look.hair };
+  profile.equip = profile.equip || {}; profile.bag = Array.isArray(profile.bag) ? profile.bag : [];
+  profile.cons = profile.cons || {}; profile.buffs = profile.buffs || {};
+  changeClasses(profile, look.cls, look.cls2);
+  for (const [id, until] of Object.entries(profile.buffs)) if (until <= Date.now()) delete profile.buffs[id];
+}
+
+// Cambio de clase: los puntos se devuelven, lo que ya no se puede llevar va a la mochila y se da el equipo inicial que falte
+function changeClasses(profile, cls, cls2) {
+  cls = RULES.classId(cls) || profile.char.cls;
+  cls2 = RULES.classId(cls2);
+  if (cls2 === cls) cls2 = null;
+  if (cls === profile.char.cls && (cls2 || null) === (profile.char.cls2 || null)) return false;
+  const level = RULES.levelFromXp(profile.xp || 0);
+  profile.char.cls = cls; profile.char.cls2 = cls2 || null;
+  profile.char.alloc = Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0]));
+  for (const slot of RULES.SLOT_IDS) {
+    const it = profile.equip[slot];
+    if (it && !RULES.canEquip(it, profile.char, level).ok) { profile.bag.push(it); delete profile.equip[slot]; }
+  }
+  for (const it of RULES.starterItems(cls, rnd)) if (!profile.equip[it.slot]) profile.equip[it.slot] = it;
+  return true;
 }
 
 function freeSpawn(room, except) {
@@ -148,42 +177,60 @@ function freeSpawn(room, except) {
   return { ...room.map.spawn };
 }
 
+function saveUser(user) { store.setPlayer(user.pid, user.profile); }
+
+// El jugador recibe su perfil completo; los demás, lo que se ve
+function sendMe(user) {
+  const p = user.profile;
+  send(user.ws, { t: 'me', char: p.char, equip: p.equip, bag: p.bag, cons: p.cons, buffs: p.buffs, xp: p.xp, gold: p.gold });
+}
+
+function profileChanged(room, user, opts = {}) {
+  saveUser(user);
+  sendMe(user);
+  if (opts.look) {
+    user.look = lookFrom(user.profile);
+    broadcast(room, { t: 'look', id: user.id, look: user.look });
+  }
+  if (user.where) { const inst = room.instances.get(user.where.id); if (inst) inst.refresh(user); }
+}
+
 // ---------- Experiencia y oro ----------
 function reward(room, user, xp, gold) {
   const prof = user.profile;
   const before = RULES.levelFromXp(prof.xp);
   prof.xp = Math.max(0, prof.xp + xp);
   prof.gold = Math.max(0, prof.gold + gold);
-  store.setPlayer(user.pid, prof);
-  broadcast(room, { t: 'profile', id: user.id, xp: prof.xp, gold: prof.gold });
   const after = RULES.levelFromXp(prof.xp);
+  saveUser(user);
+  broadcast(room, { t: 'profile', id: user.id, xp: prof.xp, gold: prof.gold, level: after });
   if (after > before) {
-    // Al subir de nivel la ficha se vuelve a validar (más trucos y conjuros posibles); lo que falte se rellena
-    prof.sheet = RULES.refresh(prof.sheet, prof.xp);
-    store.setPlayer(user.pid, prof);
-    broadcast(room, { t: 'sheet', id: user.id, sheet: prof.sheet });
-    system(room, `⭐ ${user.name} sube a nivel ${after}.`);
-    if (user.where) {
-      const inst = room.instances.get(user.where.id);
-      if (inst) inst.refreshStats(user, prof);
-    }
-  }
+    system(room, `⭐ ${user.name} sube a nivel ${after}. ¡Tiene puntos para repartir!`);
+    send(user.ws, { t: 'levelup', level: after, points: RULES.pointsFree(prof.char, after) });
+    profileChanged(room, user);
+  } else if (gold) sendMe(user);
 }
 
-// ---------- Mazmorras y mundo abierto ----------
-function dungeonSummary(d, pid) {
-  const enemies = d.objects.filter((o) => DUNGEON.enemyKey(o.k)).length;
-  return { id: d.id, name: d.name, author: d.author, mine: d.authorId === pid, enemies, updated: d.updated };
+function give(room, user, item) {
+  if (user.profile.bag.length >= RULES.BAG_SIZE) return false;
+  user.profile.bag.push(item);
+  saveUser(user); sendMe(user);
+  if (item.rarity === 'legendario' || item.rarity === 'conjunto') system(room, `${item.rarity === 'conjunto' ? '🟢' : '🟠'} ${user.name} encuentra «${item.name}».`);
+  return true;
 }
 
-// El mundo de cada sala se genera una vez (con sus cuevas apuntando a las mazmorras que existan)
+function giveCons(user, cid, n) {
+  const c = user.profile.cons;
+  if ((c[cid] || 0) + n < 0) return false;
+  c[cid] = (c[cid] || 0) + n;
+  if (c[cid] <= 0) delete c[cid];
+  saveUser(user); sendMe(user);
+  return true;
+}
+
+// ---------- Partidas ----------
 function worldDef(room) {
-  if (!room.world) {
-    const list = Object.values(store.dungeons()).sort((a, b) => (a.id === 'cripta' ? -1 : b.id === 'cripta' ? 1 : b.updated - a.updated));
-    const def = WORLD.generate(room.name, list.map((d) => d.id));
-    for (const c of def.caves) { const d = store.dungeon(c.dungeon); def.labels.push({ x: c.x, y: c.y - 2, text: `Cueva: ${d ? d.name : '?'}` }); }
-    room.world = def;
-  }
+  if (!room.world) room.world = WORLD.generate(room.name);
   return room.world;
 }
 
@@ -192,12 +239,16 @@ function getInstance(room, def) {
   if (!inst) {
     inst = new Instance(def, {
       send: (u, msg) => send(u.ws, msg),
+      derive: (u) => derive(u.profile),
       reward: (u, xp, gold) => reward(room, u, xp, gold),
+      give: (u, item) => give(room, u, item),
+      giveCons: (u, cid, n) => giveCons(u, cid, n),
       exit: (u, reason, r) => leaveInstance(room, u, reason, r),
-      portal: (u, dungeonId, back) => enterDungeon(room, u, dungeonId, { from: 'world', back }),
+      portal: (u, cave, back) => enterCave(room, u, cave, back),
     });
     room.instances.set(def.id, inst);
   }
+  inst.emptySince = 0;
   return inst;
 }
 
@@ -206,40 +257,50 @@ function detach(room, user) {
   if (inst) {
     inst.leave(user.id);
     inst.flush([user]);
-    if (!inst.size) room.instances.delete(user.where.id);
+    if (!inst.size) {
+      if (inst.kind === 'world') room.instances.delete(inst.id);
+      else inst.emptySince = Date.now();
+    }
   }
 }
 
-function enterDungeon(room, user, id, via = {}) {
-  const d = store.dungeon(String(id));
-  if (!d) { send(user.ws, { t: 'error', text: 'Esa mazmorra ya no existe.' }); return backToWorldOrTavern(room, user, via); }
-  if (user.where && user.where.id !== d.id) detach(room, user);
-  user.where = { id: d.id, name: d.name, from: via.from || null, back: via.back || null };
-  getInstance(room, d).join(user, user.profile);
-  broadcast(room, { t: 'where', id: user.id, where: d.name });
-  system(room, `⚔️ ${user.name} baja a «${d.name}».`);
+function newDungeon(room, theme, level, idHint) {
+  const d = GEN.generate({ theme, level, seed: crypto.randomBytes(6).toString('hex') });
+  d.id = idHint || 'd' + crypto.randomBytes(4).toString('hex');
+  return getInstance(room, d);
+}
+
+function joinInstance(room, user, inst, via = {}) {
+  if (user.where && user.where.id !== inst.id) detach(room, user);
+  user.where = { id: inst.id, name: inst.def.name, from: via.from || null, back: via.back || null };
+  inst.join(user, via.at);
+  broadcast(room, { t: 'where', id: user.id, where: inst.def.name });
+}
+
+function enterCave(room, user, cave, back) {
+  const id = `cave-${cave.x}-${cave.y}`;
+  let inst = room.instances.get(id);
+  if (!inst || inst.bossDead) { if (inst) room.instances.delete(id); inst = newDungeon(room, cave.theme, cave.level, id); }
+  joinInstance(room, user, inst, { from: 'world', back });
+  system(room, `⚔️ ${user.name} entra en «${inst.def.name}» (nivel ${inst.level}).`);
 }
 
 function enterWorld(room, user, at) {
   const def = worldDef(room);
+  const inst = getInstance(room, def);
   if (user.where && user.where.id !== 'world') detach(room, user);
   user.where = { id: 'world', name: def.name };
-  getInstance(room, def).join(user, user.profile, at || def.start);
+  inst.join(user, at || def.start);
   broadcast(room, { t: 'where', id: user.id, where: def.name });
 }
 
-function backToWorldOrTavern(room, user, via) {
-  if (via && via.from === 'world') return enterWorld(room, user, via.back);
-  return toTavern(room, user, 'leave');
-}
-
-// Sale de una partida. Desde una mazmorra a la que se llegó por una cueva se vuelve al mundo (salvo si cae).
+// Sale de una partida: desde una cueva del mundo se vuelve al mundo (salvo si cae o usa el pergamino de retorno)
 function leaveInstance(room, user, reason, r) {
   if (!user.where) return;
   const where = user.where;
   detach(room, user);
   if (reason === 'win') system(room, `🏆 ${user.name} completa «${where.name}»: +${r.xp} de experiencia y +${r.gold} de oro.`);
-  if (reason !== 'down' && reason !== 'town' && where.from === 'world') {
+  if (reason !== 'down' && reason !== 'town' && reason !== 'return' && where.from === 'world') {
     user.where = null;
     send(user.ws, { t: 'dexit', reason, silent: true });
     return enterWorld(room, user, where.back);
@@ -251,12 +312,12 @@ function toTavern(room, user, reason, name) {
   if (user.where) detach(room, user);
   name = name || (user.where && user.where.name) || '';
   user.where = null;
-  user.combat = null; // descanso largo: vida, espacios de conjuro y rasgos se recuperan
+  user.combat = null; // en la taberna se descansa: vida y energía al máximo
   const pos = freeSpawn(room, user);
   user.x = pos.x; user.y = pos.y;
   let lost = 0;
   if (reason === 'down') {
-    lost = Math.floor(user.profile.gold * DUNGEON.REWARDS.deathGoldLoss);
+    lost = Math.floor(user.profile.gold * DUNGEON.deathGoldLoss);
     if (lost) reward(room, user, 0, -lost);
     system(room, `💀 ${user.name} cae en «${name}» y vuelve a la taberna${lost ? ` (pierde ${lost} de oro)` : ''}.`);
   } else if (reason !== 'win') {
@@ -268,8 +329,51 @@ function toTavern(room, user, reason, name) {
 
 setInterval(() => {
   const now = Date.now();
-  for (const room of rooms.values()) for (const inst of room.instances.values()) inst.tick(now);
-}, 100);
+  for (const room of rooms.values()) {
+    for (const [id, inst] of room.instances) {
+      if (inst.size) inst.tick(now);
+      else if (inst.emptySince && now - inst.emptySince > EMPTY_INSTANCE_MS) room.instances.delete(id);
+    }
+  }
+}, 50);
+
+// ---------- Tiendas ----------
+function shopFor(user, npc) {
+  const level = levelOf(user);
+  const d = derive(user.profile);
+  const scale = RULES.priceScale(level);
+  if (npc === 'armero') {
+    const bucket = Math.floor(Date.now() / SHOP_REFRESH_MS);
+    const seed = RULES.seeded(`shop:${user.pid}:${bucket}:${level}:${user.profile.char.cls}:${user.profile.char.cls2}`);
+    const stock = RULES.armeroStock(seed, level, [user.profile.char.cls, user.profile.char.cls2].filter(Boolean));
+    const bought = (user.shopBought && user.shopBought.bucket === bucket) ? user.shopBought.set : new Set();
+    return { npc, kind: 'items', items: stock.map((it, i) => ({ ...it, price: RULES.itemBuyPrice(it, d.discount), sold: bought.has(i) })), bucket, refresh: (bucket + 1) * SHOP_REFRESH_MS };
+  }
+  if (npc === 'bruja') {
+    return { npc, kind: 'cons', list: Object.entries(RULES.CONSUMABLES).filter(([, c]) => c.shop === 'bruja').map(([id, c]) => ({ id, price: RULES.buyPrice(c.price * scale, d.discount) })) };
+  }
+  if (npc === 'mago') {
+    return {
+      npc, kind: 'magic',
+      list: Object.entries(RULES.CONSUMABLES).filter(([, c]) => c.shop === 'mago').map(([id, c]) => ({ id, price: RULES.buyPrice(c.price * scale, d.discount) })),
+      buffs: Object.entries(RULES.BUFFS).map(([id, b]) => ({ id, price: RULES.buyPrice(b.price * scale, d.discount) })),
+    };
+  }
+  return null;
+}
+
+// ---------- Comercio entre jugadores ----------
+const trades = new Map();
+
+function tradeState(t) {
+  const side = (u) => ({ id: u.id, name: u.name, gold: t.offer[u.id].gold, items: t.offer[u.id].items.map((id) => u.profile.bag.find((it) => it.id === id)).filter(Boolean), ok: !!t.ok[u.id] });
+  return { t: 'trade:state', id: t.id, a: side(t.a), b: side(t.b) };
+}
+function sendTrade(t) { const m = tradeState(t); send(t.a.ws, m); send(t.b.ws, m); }
+function endTrade(t, text) {
+  trades.delete(t.id);
+  for (const u of [t.a, t.b]) { if (u.trade === t) u.trade = null; send(u.ws, { t: 'trade:end', text }); }
+}
 
 // ---------- Conexiones ----------
 const EMOTES = new Set(['wave', 'dance', 'cheers', 'laugh', 'heart', 'fight', 'think', 'sleep']);
@@ -280,6 +384,8 @@ wss.on('connection', (ws) => {
   let room = null;
   let tokens = 8; // limitador de mensajes (cubo de fichas)
   let lastRefill = Date.now();
+  let gameTokens = 40; // órdenes de partida (más frecuentes)
+  let gameRefill = Date.now();
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
 
@@ -293,8 +399,18 @@ wss.on('connection', (ws) => {
     tokens -= cost;
     return true;
   }
+  function allowGame() {
+    const now = Date.now();
+    gameTokens = Math.min(40, gameTokens + (now - gameRefill) / 50);
+    gameRefill = now;
+    if (gameTokens < 1) return false;
+    gameTokens -= 1;
+    return true;
+  }
 
   const isOwner = () => room.ownerId === user.pid;
+  const inst = () => (user.where ? room.instances.get(user.where.id) : null);
+  const err = (text) => send(ws, { t: 'error', text });
 
   ws.on('message', (raw) => {
     let msg;
@@ -316,12 +432,12 @@ wss.on('connection', (ws) => {
       const profile = store.player(pid) || { xp: 0, gold: START_GOLD };
       profile.name = name;
       const look = MAP.cleanLook(msg.look);
-      ensureSheet(profile, look, name);
+      setupProfile(profile, look);
       store.setPlayer(pid, profile);
       // Quien entra primero en una sala nueva es su dueño y puede editar los muebles
       if (!room.ownerId) { room.ownerId = pid; saveRoom(room); }
       const pos = freeSpawn(room);
-      user = { id: crypto.randomBytes(6).toString('hex'), pid, name, look: lookFromSheet(profile.sheet), profile, x: pos.x, y: pos.y, where: null, ws };
+      user = { id: crypto.randomBytes(6).toString('hex'), pid, name, look: lookFrom(profile), profile, x: pos.x, y: pos.y, where: null, ws, trade: null };
       room.users.set(user.id, user);
       send(ws, {
         t: 'welcome', id: user.id, room: roomName, owner: isOwner(),
@@ -329,6 +445,7 @@ wss.on('connection', (ws) => {
         users: [...room.users.values()].map(publicUser),
         history: room.history,
       });
+      sendMe(user);
       broadcast(room, { t: 'join', user: publicUser(user) }, user.id);
       system(room, `${user.name} entra en la taberna.`);
       return;
@@ -387,31 +504,210 @@ wss.on('connection', (ws) => {
         break;
       }
 
-      // ----- Ficha de personaje -----
-      case 'sheet:save': {
+      // ----- Personaje -----
+      case 'char:points': {
+        // { alloc: { fue: 2, vit: 3 } } suma puntos libres
+        const lvl = levelOf(user);
+        const add = msg.alloc || {};
+        let want = 0;
+        for (const k of RULES.STAT_IDS) want += Math.max(0, Math.floor(Number(add[k]) || 0));
+        if (!want) return;
+        if (want > RULES.pointsFree(user.profile.char, lvl)) return err('No tienes tantos puntos.');
+        for (const k of RULES.STAT_IDS) user.profile.char.alloc[k] += Math.max(0, Math.floor(Number(add[k]) || 0));
+        profileChanged(room, user);
+        break;
+      }
+      case 'char:respec': {
+        if (user.where) return err('Vuelve a la taberna para reiniciar tus puntos.');
+        const cost = 10 * levelOf(user);
+        if (user.profile.gold < cost) return err(`Reiniciar los puntos cuesta ${cost} de oro.`);
+        user.profile.gold -= cost;
+        user.profile.char.alloc = Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0]));
+        profileChanged(room, user);
+        broadcast(room, { t: 'profile', id: user.id, xp: user.profile.xp, gold: user.profile.gold, level: levelOf(user) });
+        break;
+      }
+      case 'char:save': {
         if (!allow(1)) return;
-        if (user.where) return send(ws, { t: 'sheet:saved', ok: false, errors: ['Vuelve a la taberna para cambiar tu ficha.'] });
-        const v = RULES.validate(msg.sheet, user.profile.xp);
-        if (!v.ok) return send(ws, { t: 'sheet:saved', ok: false, errors: v.errors });
-        user.profile.sheet = v.sheet;
-        store.setPlayer(user.pid, user.profile);
-        user.look = lookFromSheet(v.sheet);
-        send(ws, { t: 'sheet:saved', ok: true });
-        broadcast(room, { t: 'sheet', id: user.id, sheet: v.sheet, look: user.look });
-        const d = RULES.derive(v.sheet, user.profile.xp);
-        system(room, `📜 ${user.name} es ahora ${d.className.toLowerCase()} ${d.speciesShort.toLowerCase()} de nivel ${d.level}.`);
+        if (user.where) return err('Vuelve a la taberna para cambiar de clase o de aspecto.');
+        const look = MAP.cleanLook({ ...msg.look });
+        const changed = changeClasses(user.profile, look.cls, look.cls2);
+        user.profile.char.look = { species: look.species, skin: look.skin, hair: look.hair };
+        profileChanged(room, user, { look: true });
+        if (changed) {
+          const c = user.profile.char;
+          system(room, `📜 ${user.name} es ahora ${RULES.CLASSES[c.cls].name.toLowerCase()}${c.cls2 ? ' y ' + RULES.CLASSES[c.cls2].name.toLowerCase() : ''}.`);
+        }
+        break;
+      }
+
+      // ----- Inventario y equipo -----
+      case 'inv:equip': {
+        if (user.trade) return err('Termina el comercio primero.');
+        const p = user.profile;
+        const i = p.bag.findIndex((it) => it.id === msg.id);
+        if (i < 0) return;
+        const it = p.bag[i];
+        const ok = RULES.canEquip(it, p.char, levelOf(user));
+        if (!ok.ok) return err(ok.reason);
+        p.bag.splice(i, 1);
+        const out = [];
+        if (p.equip[it.slot]) out.push(p.equip[it.slot]);
+        // a dos manos no deja llevar nada en la izquierda (y al revés)
+        if (it.slot === 'arma' && RULES.WEAPONS[it.base].hands === 2 && p.equip.mano) { out.push(p.equip.mano); delete p.equip.mano; }
+        if (it.slot === 'mano' && p.equip.arma && RULES.WEAPONS[p.equip.arma.base].hands === 2) { out.push(p.equip.arma); delete p.equip.arma; }
+        if (p.bag.length + out.length > RULES.BAG_SIZE) { p.bag.splice(i, 0, it); return err('No cabe en la mochila lo que te quitas.'); }
+        p.equip[it.slot] = it;
+        p.bag.push(...out);
+        profileChanged(room, user, { look: true });
+        break;
+      }
+      case 'inv:unequip': {
+        const p = user.profile;
+        if (!RULES.SLOTS[msg.slot] || !p.equip[msg.slot]) return;
+        if (p.bag.length >= RULES.BAG_SIZE) return err('Tu mochila está llena.');
+        p.bag.push(p.equip[msg.slot]);
+        delete p.equip[msg.slot];
+        profileChanged(room, user, { look: true });
+        break;
+      }
+      case 'inv:drop': {
+        if (user.trade) return err('Termina el comercio primero.');
+        const p = user.profile;
+        const i = p.bag.findIndex((it) => it.id === msg.id);
+        if (i < 0) return;
+        p.bag.splice(i, 1);
+        profileChanged(room, user);
+        break;
+      }
+
+      // ----- Tiendas (en la taberna) -----
+      case 'shop:open': {
+        if (user.where) return;
+        const s = shopFor(user, msg.npc);
+        if (s) send(ws, { t: 'shop', ...s });
+        break;
+      }
+      case 'shop:buy': {
+        if (user.where || !allow(0.5)) return;
+        const s = shopFor(user, msg.npc);
+        if (!s) return;
+        const p = user.profile;
+        if (msg.npc === 'armero') {
+          const it = s.items[msg.i];
+          if (!it || it.sold) return err('Ya no está a la venta.');
+          if (p.gold < it.price) return err('No tienes oro suficiente.');
+          if (p.bag.length >= RULES.BAG_SIZE) return err('Tu mochila está llena.');
+          p.gold -= it.price;
+          const { price, sold, ...item } = it; void price; void sold;
+          item.id = crypto.randomBytes(5).toString('hex');
+          p.bag.push(item);
+          if (!user.shopBought || user.shopBought.bucket !== s.bucket) user.shopBought = { bucket: s.bucket, set: new Set() };
+          user.shopBought.set.add(msg.i);
+        } else if (msg.buff) {
+          const b = s.buffs && s.buffs.find((x) => x.id === msg.buff);
+          if (!b) return;
+          if (p.gold < b.price) return err('No tienes oro suficiente.');
+          p.gold -= b.price;
+          p.buffs[b.id] = Math.max(Date.now(), p.buffs[b.id] || 0) + RULES.BUFFS[b.id].min * 60000;
+          system(room, `✨ El Hombre de la Túnica murmura algo… ${user.name} recibe ${RULES.BUFFS[b.id].name}.`);
+        } else {
+          const c = s.list.find((x) => x.id === msg.id);
+          const n = Math.max(1, Math.min(20, Math.floor(Number(msg.n) || 1)));
+          if (!c) return;
+          if (p.gold < c.price * n) return err('No tienes oro suficiente.');
+          p.gold -= c.price * n;
+          p.cons[c.id] = (p.cons[c.id] || 0) + n;
+        }
+        profileChanged(room, user);
+        broadcast(room, { t: 'profile', id: user.id, xp: p.xp, gold: p.gold, level: levelOf(user) });
+        send(ws, { t: 'shop', ...shopFor(user, msg.npc) });
+        break;
+      }
+      case 'shop:sell': {
+        if (user.where || user.trade) return;
+        const p = user.profile;
+        const ids = Array.isArray(msg.ids) ? msg.ids : [msg.id];
+        let total = 0;
+        for (const id of ids.slice(0, RULES.BAG_SIZE)) {
+          const i = p.bag.findIndex((it) => it.id === id);
+          if (i < 0) continue;
+          total += p.bag[i].value;
+          p.bag.splice(i, 1);
+        }
+        if (!total) return;
+        p.gold += total;
+        profileChanged(room, user);
+        broadcast(room, { t: 'profile', id: user.id, xp: p.xp, gold: p.gold, level: levelOf(user) });
+        send(ws, { t: 'sold', gold: total });
+        break;
+      }
+
+      // ----- Comercio entre jugadores (en la taberna) -----
+      case 'trade:req': {
+        const other = room.users.get(msg.to);
+        if (!other || other === user || !allow()) return;
+        if (user.where || other.where) return err('Los dos tenéis que estar en la taberna.');
+        if (user.trade || other.trade) return err('Alguien ya está comerciando.');
+        other.tradeInvite = user.id;
+        send(other.ws, { t: 'trade:invite', from: user.id, name: user.name });
+        send(ws, { t: 'system', text: `Has propuesto comerciar a ${other.name}.`, ts: Date.now() });
+        break;
+      }
+      case 'trade:accept': {
+        const other = room.users.get(msg.from);
+        if (!other || user.tradeInvite !== other.id || other.trade || user.trade || other.where || user.where) return err('La propuesta ya no vale.');
+        user.tradeInvite = null;
+        const t = { id: crypto.randomBytes(4).toString('hex'), a: other, b: user, offer: { [other.id]: { items: [], gold: 0 }, [user.id]: { items: [], gold: 0 } }, ok: {} };
+        trades.set(t.id, t);
+        other.trade = t; user.trade = t;
+        sendTrade(t);
+        break;
+      }
+      case 'trade:offer': {
+        const t = user.trade;
+        if (!t) return;
+        const items = (Array.isArray(msg.items) ? msg.items : []).filter((id) => user.profile.bag.some((it) => it.id === id)).slice(0, 12);
+        const gold = Math.max(0, Math.min(user.profile.gold, Math.floor(Number(msg.gold) || 0)));
+        t.offer[user.id] = { items: [...new Set(items)], gold };
+        t.ok = {};
+        sendTrade(t);
+        break;
+      }
+      case 'trade:ok': {
+        const t = user.trade;
+        if (!t) return;
+        t.ok[user.id] = true;
+        if (!(t.ok[t.a.id] && t.ok[t.b.id])) return sendTrade(t);
+        // los dos aceptan: se comprueba todo y se intercambia
+        const A = t.a, B = t.b, oa = t.offer[A.id], ob = t.offer[B.id];
+        const has = (u, o) => o.items.every((id) => u.profile.bag.some((it) => it.id === id)) && u.profile.gold >= o.gold;
+        if (!has(A, oa) || !has(B, ob)) return endTrade(t, 'El comercio se ha cancelado: algo cambió.');
+        if (A.profile.bag.length - oa.items.length + ob.items.length > RULES.BAG_SIZE || B.profile.bag.length - ob.items.length + oa.items.length > RULES.BAG_SIZE) return endTrade(t, 'No cabe todo en las mochilas.');
+        const take = (u, ids) => { const out = u.profile.bag.filter((it) => ids.includes(it.id)); u.profile.bag = u.profile.bag.filter((it) => !ids.includes(it.id)); return out; };
+        const fromA = take(A, oa.items), fromB = take(B, ob.items);
+        A.profile.bag.push(...fromB); B.profile.bag.push(...fromA);
+        A.profile.gold += ob.gold - oa.gold; B.profile.gold += oa.gold - ob.gold;
+        for (const u of [A, B]) { profileChanged(room, u); broadcast(room, { t: 'profile', id: u.id, xp: u.profile.xp, gold: u.profile.gold, level: levelOf(u) }); }
+        endTrade(t, '¡Trato hecho!');
+        system(room, `🤝 ${A.name} y ${B.name} cierran un trato.`);
+        break;
+      }
+      case 'trade:cancel': {
+        if (user.trade) endTrade(user.trade, `${user.name} cancela el comercio.`);
+        else if (msg.from) { const o = room.users.get(msg.from); user.tradeInvite = null; if (o) send(o.ws, { t: 'system', text: `${user.name} no quiere comerciar ahora.`, ts: Date.now() }); }
         break;
       }
 
       // ----- Editor de la taberna (sólo el dueño de la sala) -----
       case 'tedit': {
-        if (!isOwner()) return send(ws, { t: 'error', text: 'Sólo el dueño de la taberna puede mover los muebles.' });
+        if (!isOwner()) return err('Sólo el dueño de la taberna puede mover los muebles.');
         if (!allow(0.25)) return;
         const items = room.map.items.map((it) => ({ ...it }));
         const at = (x, y) => items.findIndex((it) => it.x === x && it.y === y);
         if (msg.op === 'place') {
           const f = MAP.FURNITURE[msg.type];
-          if (!f || !MAP.inBounds(msg.x, msg.y)) return;
+          if (!f || f.hidden || !MAP.inBounds(msg.x, msg.y) || room.map.isFixed(msg.x, msg.y)) return;
           const i = at(msg.x, msg.y);
           if (i >= 0) items.splice(i, 1);
           items.push({ type: msg.type, x: msg.x, y: msg.y, dir: f.rotates ? msg.dir : undefined });
@@ -432,7 +728,6 @@ wss.on('connection', (ws) => {
         room.map.setItems(items);
         saveRoom(room);
         broadcast(room, { t: 'titems', items: room.map.items });
-        // Quien se haya quedado encima de un mueble nuevo se aparta
         for (const u of room.users.values()) {
           if (!u.where && !room.map.isStandable(u.x, u.y)) {
             const pos = freeSpawn(room, u);
@@ -443,45 +738,28 @@ wss.on('connection', (ws) => {
         break;
       }
 
-      // ----- Mazmorras -----
-      case 'dlist': {
-        const list = Object.values(store.dungeons()).map((d) => dungeonSummary(d, user.pid)).sort((a, b) => b.updated - a.updated);
-        send(ws, { t: 'dlist', list });
+      // ----- Mazmorras y mundo -----
+      case 'dmenu': {
+        const list = [...room.instances.values()].filter((i) => i.kind === 'dungeon' && !i.bossDead).map((i) => i.summary());
+        send(ws, { t: 'dmenu', list, maxLevel: levelOf(user) + 3 });
         break;
       }
-      case 'dget': {
-        const d = store.dungeon(String(msg.id));
-        if (!d) return send(ws, { t: 'error', text: 'Esa mazmorra ya no existe.' });
-        send(ws, { t: 'dget', dungeon: { id: d.id, name: d.name, tiles: d.tiles, objects: d.objects, mine: d.authorId === user.pid } });
+      case 'dnew': {
+        if (user.where || !allow(2)) return;
+        const level = Math.max(1, Math.min(levelOf(user) + 3, Math.floor(Number(msg.level) || 1)));
+        const themes = Object.keys(RULES.THEMES);
+        const theme = RULES.THEMES[msg.theme] ? msg.theme : themes[crypto.randomInt(0, themes.length)];
+        const i = newDungeon(room, theme, level);
+        joinInstance(room, user, i);
+        system(room, `⚔️ ${user.name} baja a «${i.def.name}» (nivel ${level}). Podéis uniros desde 🗝️ Mazmorras.`);
         break;
       }
-      case 'dsave': {
-        if (!allow(2)) return;
-        const v = DUNGEON.validate(msg.dungeon);
-        if (!v.ok) return send(ws, { t: 'dsaved', ok: false, error: v.error });
-        let id = typeof msg.dungeon.id === 'string' ? msg.dungeon.id : null;
-        const existing = id && store.dungeon(id);
-        if (!existing || existing.authorId !== user.pid) {
-          // Mazmorra nueva (o copia de una ajena)
-          const mine = Object.values(store.dungeons()).filter((d) => d.authorId === user.pid).length;
-          if (mine >= MAX_DUNGEONS_PER_PLAYER) return send(ws, { t: 'dsaved', ok: false, error: `Ya tienes ${MAX_DUNGEONS_PER_PLAYER} mazmorras. Borra alguna antes.` });
-          id = crypto.randomBytes(5).toString('hex');
-        }
-        store.setDungeon(id, { id, ...v.dungeon, author: user.name, authorId: user.pid, updated: Date.now() });
-        send(ws, { t: 'dsaved', ok: true, id });
-        system(room, `🗺️ ${user.name} ha guardado la mazmorra «${v.dungeon.name}».`);
-        break;
-      }
-      case 'ddelete': {
-        const d = store.dungeon(String(msg.id));
-        if (!d || d.authorId !== user.pid) return send(ws, { t: 'error', text: 'Sólo puedes borrar tus propias mazmorras.' });
-        store.deleteDungeon(d.id);
-        send(ws, { t: 'dlist', list: Object.values(store.dungeons()).map((x) => dungeonSummary(x, user.pid)).sort((a, b) => b.updated - a.updated) });
-        break;
-      }
-      case 'denter': {
+      case 'djoin': {
         if (user.where) return;
-        enterDungeon(room, user, msg.id);
+        const i = room.instances.get(String(msg.id));
+        if (!i || i.kind !== 'dungeon' || i.bossDead) return err('Esa partida ya ha terminado.');
+        joinInstance(room, user, i);
+        system(room, `⚔️ ${user.name} se une a la partida en «${i.def.name}».`);
         break;
       }
       case 'wenter': {
@@ -490,18 +768,11 @@ wss.on('connection', (ws) => {
         system(room, `🗺️ ${user.name} sale de la taberna a «${room.world.name}».`);
         break;
       }
-      case 'dact': {
-        if (!user.where) return;
-        const inst = room.instances.get(user.where.id);
-        if (inst) inst.action(user.id, msg);
-        break;
-      }
-      case 'dmove': {
-        if (!user.where) return;
-        const inst = room.instances.get(user.where.id);
-        if (inst) inst.move(user.id, msg.dx, msg.dy);
-        break;
-      }
+      case 'dgo': { const i = inst(); if (i && allowGame()) i.go(user.id, msg.x, msg.y); break; }
+      case 'dattack': { const i = inst(); if (i && allowGame()) i.attack(user.id, String(msg.id)); break; }
+      case 'ddir': { const i = inst(); if (i && allowGame()) i.dir(user.id, msg.dx, msg.dy); break; }
+      case 'dskill': { const i = inst(); if (i && allowGame()) i.skill(user.id, msg); break; }
+      case 'duse': { const i = inst(); if (i && allowGame()) i.use(user.id, String(msg.cid), msg); break; }
       case 'dleave': {
         if (!user.where) return;
         if (user.where.id === 'world') toTavern(room, user, 'leave');
@@ -533,7 +804,7 @@ wss.on('connection', (ws) => {
       const old = user.name;
       user.name = cleanText(arg, 16) || old;
       user.profile.name = user.name;
-      store.setPlayer(user.pid, user.profile);
+      saveUser(user);
       broadcast(room, { t: 'rename', id: user.id, name: user.name });
       return system(room, `${old} ahora se llama ${user.name}.`);
     }
@@ -543,9 +814,10 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     clearTimeout(joinTimer);
     if (!user) return;
+    if (user.trade) endTrade(user.trade, `${user.name} se ha ido.`);
     if (user.where) {
-      const inst = room.instances.get(user.where.id);
-      if (inst) { inst.leave(user.id); if (!inst.size) room.instances.delete(user.where.id); }
+      const i = room.instances.get(user.where.id);
+      if (i) { i.leave(user.id); if (!i.size) { if (i.kind === 'world') room.instances.delete(i.id); else i.emptySince = Date.now(); } }
     }
     room.users.delete(user.id);
     broadcast(room, { t: 'leave', id: user.id });

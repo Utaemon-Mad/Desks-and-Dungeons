@@ -31,7 +31,7 @@ function noiseField(rand, w, h, scale) {
   };
 }
 
-function generate(roomName, dungeonIds) {
+function generate(roomName) {
   const rand = seeded('world:' + roomName);
   const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
   const n1 = noiseField(rand, W, H, 14), n2 = noiseField(rand, W, H, 6), m1 = noiseField(rand, W, H, 11), m2 = noiseField(rand, W, H, 4);
@@ -89,57 +89,60 @@ function generate(roomName, dungeonIds) {
   // Zonas de enemigos
   const goblinCamp = pick((ch) => ch === 'T' || ch === ';', 14);
   clearArea(goblinCamp, 3); set(goblinCamp.x, goblinCamp.y, 'F');
-  groups.push({ spawn: [['goblin-warrior', -2, -1], ['goblin-warrior', 2, 1], ['goblin-minion', -1, 2], ['goblin-minion', 1, -2], ['goblin-boss', 0, 2]].map(([k, dx, dy]) => ({ k, x: goblinCamp.x + dx, y: goblinCamp.y + dy })) });
+  groups.push({ lvl: 1, spawn: [['goblin-warrior', -2, -1], ['goblin-archer', 2, 1], ['goblin-minion', -1, 2], ['goblin-minion', 1, -2], ['goblin-shaman', 0, 2]].map(([k, dx, dy]) => ({ k, x: goblinCamp.x + dx, y: goblinCamp.y + dy })) });
   labels.push({ x: goblinCamp.x, y: goblinCamp.y - 4, text: 'Campamento goblin' });
 
   const orcFort = pick((ch) => ch === 'h' || ch === 'P', 18);
   clearArea(orcFort, 4, 'h');
   for (let a = 0; a < 24; a++) { const ang = a / 24 * Math.PI * 2; if (a % 6 === 0) continue; set(Math.round(orcFort.x + Math.cos(ang) * 4), Math.round(orcFort.y + Math.sin(ang) * 4), 'R'); }
   set(orcFort.x, orcFort.y, 'F');
-  groups.push({ spawn: [['orc', -2, 0], ['orc', 2, 0], ['orc', 0, -2], ['orc-war-chief', 0, 2], ['hobgoblin-warrior', -2, 2]].map(([k, dx, dy]) => ({ k, x: orcFort.x + dx, y: orcFort.y + dy })) });
+  groups.push({ lvl: 5, spawn: [['orc', -2, 0], ['orc', 2, 0], ['orc-archer', 0, -2], ['orc-war-chief', 0, 2], ['orc-shaman', -2, 2]].map(([k, dx, dy]) => ({ k, x: orcFort.x + dx, y: orcFort.y + dy })) });
   labels.push({ x: orcFort.x, y: orcFort.y - 6, text: 'Fuerte orco' });
 
   const grave = pick((ch) => ch === ',' || ch === ';' || ch === 'h', 16);
   clearArea(grave, 4, 'g');
   for (let i = 0; i < 14; i++) { const dx = ri(-3, 3), dy = ri(-3, 3); if ((dx + dy) % 2 === 0 && (dx || dy)) set(grave.x + dx, grave.y + dy, 't'); }
-  groups.push({ spawn: [['skeleton', -2, -1], ['skeleton', 2, -1], ['zombie', -1, 2], ['zombie', 1, 2], ['ghoul', 0, 0], ['wight', 0, -3]].map(([k, dx, dy]) => ({ k, x: grave.x + dx, y: grave.y + dy })) });
+  groups.push({ lvl: 4, spawn: [['skeleton', -2, -1], ['skeleton-archer', 2, -1], ['zombie', -1, 2], ['zombie', 1, 2], ['ghoul', 0, 0], ['wight', 0, -3]].map(([k, dx, dy]) => ({ k, x: grave.x + dx, y: grave.y + dy })) });
   labels.push({ x: grave.x, y: grave.y - 5, text: 'Cementerio' });
 
   const den = pick((ch) => ch === 'T', 12);
   clearArea(den, 2, ';');
-  groups.push({ spawn: [['wolf', -1, 0], ['wolf', 1, 0], ['wolf', 0, 1], ['dire-wolf', 0, -1]].map(([k, dx, dy]) => ({ k, x: den.x + dx, y: den.y + dy })) });
+  groups.push({ lvl: 2, spawn: [['wolf', -1, 0], ['wolf', 1, 0], ['wolf', 0, 1], ['dire-wolf', 0, -1]].map(([k, dx, dy]) => ({ k, x: den.x + dx, y: den.y + dy })) });
   labels.push({ x: den.x, y: den.y - 3, text: 'Guarida de lobos' });
 
   const nest = pick((ch) => ch === 'T', 15);
   clearArea(nest, 2, ';');
-  groups.push({ spawn: [['giant-spider', -1, 0], ['giant-spider', 1, 1]].map(([k, dx, dy]) => ({ k, x: nest.x + dx, y: nest.y + dy })) });
+  groups.push({ lvl: 3, spawn: [['giant-spider', -1, 0], ['giant-spider', 1, 1], ['giant-spider', 0, -1]].map(([k, dx, dy]) => ({ k, x: nest.x + dx, y: nest.y + dy })) });
   labels.push({ x: nest.x, y: nest.y - 3, text: 'Nido de arañas' });
 
   const bandits = pick((ch) => ch === ',' || ch === ';', 10);
   clearArea(bandits, 2); set(bandits.x, bandits.y, 'F');
-  groups.push({ spawn: [['bandit', -1, -1], ['bandit', 1, -1], ['bandit', -1, 1], ['bandit-captain', 1, 1]].map(([k, dx, dy]) => ({ k, x: bandits.x + dx, y: bandits.y + dy })) });
+  groups.push({ lvl: 2, spawn: [['bandit', -1, -1], ['bandit-archer', 1, -1], ['bandit', -1, 1], ['bandit-captain', 1, 1]].map(([k, dx, dy]) => ({ k, x: bandits.x + dx, y: bandits.y + dy })) });
   labels.push({ x: bandits.x, y: bandits.y - 3, text: 'Campamento bandido' });
 
   const lair = pick((ch, p) => (ch === 'M' || ch === 'P' || ch === 'h') && Math.min(p.x, p.y, W - 1 - p.x, H - 1 - p.y) > 3, 28);
   clearArea(lair, 3, 'h'); set(lair.x, lair.y, 'D');
-  groups.push({ spawn: [{ k: 'young-red-dragon', x: lair.x, y: lair.y + 1 }] });
+  groups.push({ lvl: 10, spawn: [{ k: 'young-red-dragon', x: lair.x, y: lair.y + 1 }] });
   labels.push({ x: lair.x, y: lair.y - 4, text: 'Guarida del dragón' });
 
   // Bestias sueltas
   for (let i = 0; i < 4; i++) {
     const p = pick((ch) => ch === ',' || ch === ';', 9);
-    groups.push({ spawn: [{ k: i % 2 ? 'wolf' : 'brown-bear', x: p.x, y: p.y }] });
+    groups.push({ lvl: 2 + i, spawn: [{ k: i % 2 ? 'wolf' : 'brown-bear', x: p.x, y: p.y }] });
   }
   const owl = pick((ch) => ch === 'T', 18);
   clearArea(owl, 1, ';');
-  groups.push({ spawn: [{ k: 'owlbear', x: owl.x, y: owl.y }] });
+  groups.push({ lvl: 6, spawn: [{ k: 'owlbear', x: owl.x, y: owl.y }] });
 
-  // Cuevas: una por mazmorra (hasta 6), en colinas o junto a montañas
-  for (const id of dungeonIds.slice(0, 6)) {
-    const p = pick((ch, q) => (ch === 'h' || ch === 'P') && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => get(q.x + dx, q.y + dy) !== 'M'), 10);
+  // Cuevas: una mazmorra aleatoria de cada tema, cada vez más difícil cuanto más lejos del pueblo
+  const CAVES = [['cuevas', 1, 10], ['nido', 3, 14], ['cripta', 4, 16], ['fortaleza', 6, 20], ['volcan', 9, 24]];
+  const THEME_NAMES = { cuevas: 'Cuevas goblin', nido: 'Nido de bestias', cripta: 'Cripta', fortaleza: 'Fortaleza orca', volcan: 'Guarida del dragón' };
+  for (const [theme, lvl, minD] of CAVES) {
+    const p = pick((ch, q) => (ch === 'h' || ch === 'P') && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => get(q.x + dx, q.y + dy) !== 'M'), minD);
     clearArea(p, 1, 'h');
     set(p.x, p.y, 'C');
-    caves.push({ x: p.x, y: p.y, dungeon: id });
+    caves.push({ x: p.x, y: p.y, theme, level: lvl });
+    labels.push({ x: p.x, y: p.y - 2, text: `${THEME_NAMES[theme]} (nv ${lvl})` });
   }
 
   // Caminos del pueblo a cada lugar (A* barato; cruza agua con puentes y abre paso entre árboles)

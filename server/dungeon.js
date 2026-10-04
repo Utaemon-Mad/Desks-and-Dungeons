@@ -1,75 +1,69 @@
-// Una partida en marcha (mazmorra o mundo abierto) con las reglas del SRD 5.2 en tiempo real:
-// tiradas d20 contra CA, salvaciones contra CD, daño con dados, conjuros con espacios y monstruos con sus bloques oficiales.
+// Una partida en marcha (mazmorra aleatoria o mundo abierto) en tiempo real.
+// El servidor mueve a los héroes (clic para ir, clic en un enemigo para atacarlo sin parar, o teclas),
+// lleva la IA de los monstruos, los proyectiles que se pueden esquivar, los ataques especiales de los jefes
+// (avisados en el suelo antes de golpear), las habilidades de clase y el botín.
 const crypto = require('crypto');
 const DUNGEON = require('../public/dungeon-data.js');
 const RULES = require('../public/rules/engine.js');
+const { PROPS } = require('./gen.js');
 
-const SRD_MONSTERS = require('../public/rules/monsters.json');
-const MONSTERS = Object.fromEntries([...SRD_MONSTERS, ...DUNGEON.HOMEBREW].map((m) => [m.id, m]));
-
-const FAST = process.env.DD_TEST_FAST ? 0.1 : 1; // las pruebas automáticas aceleran el tiempo
-const MOVE_COOLDOWN = 160 * FAST;      // ms entre pasos
-const ACTION_COOLDOWN = 1300 * FAST;   // ms entre acciones (un "turno")
-const MONSTER_TURN = 1600 / FAST;      // ms entre ataques de un monstruo (en pruebas, casi nunca)
-const SUMMON_EVERY = 7000;
-const MAX_SUMMONS = 3;
-const RAGE_MS = 60000;
+const FAST = process.env.DD_TEST_FAST ? 0.25 : 1; // las pruebas automáticas aceleran los tiempos de espera
 const RESPAWN_MS = 3 * 60 * 1000;
+const PROJ_SPEED = 9;          // casillas por segundo
+const AGGRO = 7, LEASH = 14;
+const MAX_SUMMONS = 6;
+const FLUSH_MS = 100;
 
-const rng = (n) => crypto.randomInt(1, n + 1);
-const randInt = (a, b) => crypto.randomInt(a, b + 1);
+const rnd = () => crypto.randomInt(0, 1e9) / 1e9;
+const randInt = (a, b) => crypto.randomInt(Math.min(a, b), Math.max(a, b) + 1);
+const roll = (r) => r[0] + rnd() * (r[1] - r[0]);
 const cheb = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
 const OPAQUE = new Set(['#', 'T', 'P', 'M', 'R', 'k']);
 const dirName = (dx, dy) => (Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N');
-const d20 = (lucky) => { let r = rng(20); if (lucky && r === 1) r = rng(20); return r; };
-
-// Velocidad en pies → milisegundos por casilla
-function stepMs(speed) {
-  const ft = Math.max(...Object.entries(speed || {}).filter(([k]) => k !== 'hover').map(([, v]) => parseInt(v, 10) || 0), 20);
-  return Math.round(650 * 30 / ft);
-}
-
-// Ajuste de daño por resistencias, inmunidades y vulnerabilidades del monstruo
-function adjustDamage(mon, type, amount) {
-  const has = (list) => (list || []).some((s) => String(s).toLowerCase().includes(type));
-  if (has(mon.immune)) return 0;
-  if (has(mon.resist)) amount = Math.floor(amount / 2);
-  if (has(mon.vulnerable)) amount *= 2;
-  return amount;
-}
 
 class Instance {
-  // def: { id, name, tiles, w, h, kind: 'dungeon'|'world', objects, groups? }
-  // hooks: { send(user, msg), reward(user, xp, gold), exit(user, reason, info), portal(user, dungeonId) }
+  // def: mazmorra de server/gen.js ({ kind:'dungeon', theme, level, tiles, start, props, spawns, chests, potions })
+  //   o el mundo ({ kind:'world', tiles, start, groups:[{ spawn, lvl }], caves })
+  // hooks: { send(user,msg), derive(user), reward(user,xp,gold), give(user,item)->bool, giveCons(user,cid,n)->bool,
+  //          exit(user, reason, info), portal(user, cave) }
   constructor(def, hooks) {
     this.def = def;
-    this.w = def.w || DUNGEON.W;
-    this.h = def.h || DUNGEON.H;
+    this.id = def.id;
+    this.w = def.w; this.h = def.h;
     this.kind = def.kind || 'dungeon';
+    this.level = def.level || 1;
     this.hooks = hooks;
     this.players = new Map();
     this.enemies = new Map();
     this.chests = new Map();
-    this.potions = new Map();
-    this.coins = new Map();
+    this.loot = new Map();
+    this.projectiles = [];
+    this.teles = [];
+    this.auras = [];
     this.events = [];
     this.dirty = false;
+    this.lastFlush = 0;
     this.seq = 0;
-    this.start = { x: 1, y: 1 };
-    this.exit = null;
+    this.start = def.start || { x: 1, y: 1 };
+    this.portal = null;
+    this.bossDead = false;
     this.groups = [];
+    this.blocked = new Set();
+    this.created = Date.now();
     const now = Date.now();
-    for (const o of def.objects || []) {
-      const id = 'o' + ++this.seq;
-      if (o.k === 'start') this.start = { x: o.x, y: o.y };
-      else if (o.k === 'exit') this.exit = { x: o.x, y: o.y };
-      else if (o.k === 'chest') this.chests.set(id, { id, x: o.x, y: o.y, open: false });
-      else if (o.k === 'potion') this.potions.set(id, { id, x: o.x, y: o.y });
-      else if (DUNGEON.enemyKey(o.k)) this.addEnemy(DUNGEON.enemyKey(o.k), o.x, o.y, now);
+    for (const p of def.props || []) if (PROPS[p.k] && PROPS[p.k].b) this.blocked.add(p.y * this.w + p.x);
+    for (const c of def.chests || []) { const id = 'c' + ++this.seq; this.chests.set(id, { id, x: c.x, y: c.y, open: false }); }
+    for (const p of def.potions || []) this.dropAt(p.x, p.y, { cons: 'pocion-vida-p' });
+    if (def.spawns) {
+      const packs = new Map();
+      for (const s of def.spawns) {
+        const id = this.addEnemy(s.k, s.x, s.y, this.level, now, { elite: s.elite });
+        if (id && s.pack) { if (!packs.has(s.pack)) packs.set(s.pack, []); packs.get(s.pack).push(id); this.enemies.get(id).pack = s.pack; }
+      }
     }
     for (const g of def.groups || []) {
-      const group = { spawn: g.spawn, alive: new Set(), respawnAt: 0 };
+      const group = { spawn: g.spawn, lvl: g.lvl || 1, alive: new Set(), respawnAt: 0, id: 'g' + this.groups.length };
       this.groups.push(group);
       this.spawnGroup(group, now);
     }
@@ -77,48 +71,31 @@ class Instance {
 
   get size() { return this.players.size; }
 
-  spawnGroup(group, now) {
-    for (const s of group.spawn) {
-      const pos = this.freeNear(s.x, s.y);
-      const id = this.addEnemy(s.k, pos.x, pos.y, now);
-      if (id) { this.enemies.get(id).group = group; group.alive.add(id); }
-    }
-  }
-
-  addEnemy(k, x, y, now, summoned = false) {
-    const mon = MONSTERS[k];
-    if (!mon) return null;
-    const id = 'e' + ++this.seq;
-    const combat = RULES.monsterCombat(mon);
-    this.enemies.set(id, {
-      id, k, x, y, hp: mon.hp, maxHp: mon.hp, dir: 'S', mon, combat, summoned,
-      step: stepMs(mon.speed), nextStep: now + 500 + Math.random() * 700, nextAttack: now + 800 + Math.random() * 600, nextSummon: now + SUMMON_EVERY,
-      home: { x, y },
-    });
-    return id;
-  }
-
+  // ---------- Mapa ----------
   tile(x, y) {
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) return '#';
     return this.def.tiles[y * this.w + x];
   }
-
+  walkTile(x, y) { return DUNGEON.walkable(this.tile(x, y)) && !this.blocked.has(y * this.w + x); }
   enemyAt(x, y) { for (const e of this.enemies.values()) if (e.x === x && e.y === y) return e; return null; }
   playerAt(x, y) { for (const p of this.players.values()) if (p.x === x && p.y === y) return p; return null; }
   chestAt(x, y) { for (const c of this.chests.values()) if (c.x === x && c.y === y) return c; return null; }
-  free(x, y) { return DUNGEON.walkable(this.tile(x, y)) && !this.enemyAt(x, y) && !this.playerAt(x, y) && !this.chestAt(x, y); }
+  // Un héroe puede pisar casillas con otros héroes (así no hay atascos en los pasillos); los enemigos no
+  freeForPlayer(x, y) { return this.walkTile(x, y) && !this.enemyAt(x, y) && !this.chestAt(x, y); }
+  freeForEnemy(x, y) { return this.walkTile(x, y) && this.tile(x, y) !== '^' && !this.enemyAt(x, y) && !this.playerAt(x, y) && !this.chestAt(x, y); }
+  noCorner(x, y, dx, dy) { return !(dx && dy) || (this.walkTile(x + dx, y) && this.walkTile(x, y + dy)); }
 
-  freeNear(x, y) {
-    for (let r = 0; r < 8; r++) {
+  freeNear(x, y, test = (a, b) => this.freeForEnemy(a, b)) {
+    for (let r = 0; r < 10; r++) {
       for (let dx = -r; dx <= r; dx++) for (let dy = -r; dy <= r; dy++) {
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
-        if (this.free(x + dx, y + dy)) return { x: x + dx, y: y + dy };
+        if (test(x + dx, y + dy)) return { x: x + dx, y: y + dy };
       }
     }
     return { x, y };
   }
 
-  // Línea de visión (Bresenham): muros, árboles, montañas y ruinas tapan
+  // Línea de visión (Bresenham): muros, árboles y montañas tapan
   los(a, b) {
     let x0 = a.x, y0 = a.y;
     const dx = Math.abs(b.x - x0), dy = -Math.abs(b.y - y0), sx = x0 < b.x ? 1 : -1, sy = y0 < b.y ? 1 : -1;
@@ -133,106 +110,322 @@ class Instance {
     return true;
   }
 
+  // A* en 8 direcciones sin cortar esquinas. passable(x,y) decide; el destino siempre vale.
+  path(from, to, passable, maxNodes = 3000) {
+    const W = this.w;
+    if (from.x === to.x && from.y === to.y) return [];
+    const start = from.y * W + from.x, goal = to.y * W + to.x;
+    const g = new Map([[start, 0]]), prev = new Map();
+    const open = [[Math.max(Math.abs(to.x - from.x), Math.abs(to.y - from.y)), start]];
+    let nodes = 0, best = start, bestH = Infinity;
+    while (open.length && nodes++ < maxNodes) {
+      let bi = 0;
+      for (let i = 1; i < open.length; i++) if (open[i][0] < open[bi][0]) bi = i;
+      const [, cur] = open.splice(bi, 1)[0];
+      if (cur === goal) { best = goal; break; }
+      const cx = cur % W, cy = (cur / W) | 0;
+      const h = Math.max(Math.abs(to.x - cx), Math.abs(to.y - cy));
+      if (h < bestH) { bestH = h; best = cur; }
+      for (const [dx, dy] of DIRS) {
+        const nx = cx + dx, ny = cy + dy;
+        const ni = ny * W + nx;
+        if (ni !== goal && !passable(nx, ny)) continue;
+        if (ni === goal && !this.walkTile(nx, ny) && !this.chestAt(nx, ny)) continue;
+        if (!this.noCorner(cx, cy, dx, dy)) continue;
+        const ng = g.get(cur) + (dx && dy ? 1.41 : 1);
+        if (!g.has(ni) || ng < g.get(ni)) {
+          g.set(ni, ng); prev.set(ni, cur);
+          open.push([ng + Math.max(Math.abs(to.x - nx), Math.abs(to.y - ny)), ni]);
+        }
+      }
+    }
+    // si no se llega, el camino lleva lo más cerca posible
+    const out = [];
+    for (let i = best; i !== start && prev.has(i); i = prev.get(i)) out.unshift({ x: i % W, y: (i / W) | 0 });
+    return out;
+  }
+
+  // ---------- Enemigos ----------
+  spawnGroup(group, now) {
+    for (const s of group.spawn) {
+      const pos = this.freeNear(s.x, s.y);
+      const id = this.addEnemy(s.k, pos.x, pos.y, group.lvl, now, { elite: s.elite });
+      if (id) { const e = this.enemies.get(id); e.group = group; e.pack = group.id; group.alive.add(id); }
+    }
+  }
+
+  addEnemy(k, x, y, level, now, o = {}) {
+    const m = RULES.monsterAt(k, level, o.elite);
+    if (!m) return null;
+    const id = 'e' + ++this.seq;
+    this.enemies.set(id, {
+      id, k: m.k, m, x, y, hp: m.hp, maxHp: m.hp, dir: 'S', sm: m.ms, summoned: !!o.summoned,
+      nextStep: now + 300 + rnd() * 600, nextAttack: now + 700 + rnd() * 700, nextSpecial: now + 4000, nextHeal: now + 3000, nextSummon: now + 5000,
+      home: { x, y }, aggro: null, stunUntil: 0, slowUntil: 0, vulnUntil: 0, vuln: 0, dots: [],
+    });
+    return id;
+  }
+
   // ---------- Héroes ----------
-  join(user, profile, at) {
-    const d = RULES.derive(profile.sheet, profile.xp);
-    const c = user.combat || (user.combat = freshCombat(d));
-    const pos = at ? this.freeNear(at.x, at.y) : this.freeNear(this.start.x, this.start.y);
-    const p = { user, x: pos.x, y: pos.y, d, dir: 'S', nextMove: 0, nextAction: 0, sneakAt: 0 };
+  join(user, at) {
+    const d = this.hooks.derive(user);
+    const c = user.combat || (user.combat = { hp: d.hp, en: d.en, cds: {} });
+    c.hp = Math.min(c.hp, d.hp); c.en = Math.min(c.en, d.en);
+    const pos = this.freeNear((at || this.start).x, (at || this.start).y, (x, y) => this.freeForPlayer(x, y));
+    const p = {
+      user, x: pos.x, y: pos.y, d, dir: 'S', sm: d.moveMs, nextStep: 0, nextAttack: 0, path: [], goal: null, kdir: null,
+      target: null, pending: null, tbuffs: {}, critNext: false, regenUntil: 0, lastHurt: 0,
+    };
     this.players.set(user.id, p);
-    this.hooks.send(user, { t: 'dstart', dungeon: { id: this.def.id, name: this.def.name, tiles: this.def.tiles, w: this.w, h: this.h, kind: this.kind, labels: this.def.labels || [] }, ...this.snapshot(), you: this.privateState(p) });
+    const def = this.def;
+    this.hooks.send(user, {
+      t: 'dstart',
+      dungeon: { id: this.id, name: def.name, tiles: def.tiles, w: this.w, h: this.h, kind: this.kind, theme: def.theme || null, level: this.level, labels: def.labels || [], props: def.props || [] },
+      ...this.snapshot(), you: this.privateState(p),
+    });
     this.event({ e: 'join', id: user.id });
-    void c;
   }
 
   leave(userId) {
     if (!this.players.delete(userId)) return;
+    for (const e of this.enemies.values()) if (e.aggro === userId) e.aggro = null;
     this.event({ e: 'leave', id: userId });
   }
 
-  // La ficha cambió (subida de nivel): se recalcula manteniendo el daño recibido
-  refreshStats(user, profile) {
+  // La ficha cambió (nivel, puntos, equipo o bufos): se recalcula manteniendo la vida perdida
+  refresh(user) {
     const p = this.players.get(user.id);
     if (!p) return;
-    const d = RULES.derive(profile.sheet, profile.xp);
+    const d = this.hooks.derive(user);
     const c = user.combat;
-    const gained = d.hp - c.maxHp;
-    c.maxHp = d.hp;
-    if (gained > 0) c.hp = Math.min(c.maxHp, c.hp + gained);
-    c.slots = d.casting ? d.casting.slots.map((n, i) => Math.max(0, n - ((p.d.casting ? p.d.casting.slots[i] : 0) - (c.slots[i] || 0)))) : [];
+    if (d.hp > p.d.hp) c.hp += d.hp - p.d.hp;
+    c.hp = Math.min(c.hp, d.hp); c.en = Math.min(c.en, d.en);
     p.d = d;
     this.dirty = true;
     this.sendPrivate(p);
   }
 
   event(ev) { this.events.push(ev); this.dirty = true; }
+  whisper(p, text) { this.hooks.send(p.user, { t: 'dwhisper', text }); }
 
-  move(userId, dx, dy) {
+  // ---------- Órdenes del jugador ----------
+  // Teclas: dirección mantenida (0,0 = parar)
+  dir(userId, dx, dy) {
     const p = this.players.get(userId);
-    if (!p || !Number.isInteger(dx) || !Number.isInteger(dy) || Math.max(Math.abs(dx), Math.abs(dy)) !== 1) return;
+    if (!p) return;
+    dx = Math.sign(Number(dx) || 0); dy = Math.sign(Number(dy) || 0);
+    p.kdir = dx || dy ? [dx, dy] : null;
+    if (p.kdir) { p.path = []; p.goal = null; p.target = null; p.pending = null; }
+  }
+
+  go(userId, x, y) {
+    const p = this.players.get(userId);
+    if (!p || !Number.isInteger(x) || !Number.isInteger(y)) return;
+    p.kdir = null; p.target = null; p.pending = null;
+    p.goal = { x, y };
+    p.path = this.path(p, p.goal, (a, b) => this.freeForPlayer(a, b));
+  }
+
+  attack(userId, id) {
+    const p = this.players.get(userId);
+    if (!p || !this.enemies.has(id)) return;
+    p.kdir = null; p.path = []; p.goal = null; p.pending = null;
+    p.target = id;
+  }
+
+  skill(userId, a) {
+    const p = this.players.get(userId);
+    if (!p || !a) return;
+    const ab = p.d.abilities.find((x) => x.id === a.id);
+    if (!ab) return;
+    if (!ab.ready) return this.whisper(p, `${ab.name} se aprende a nivel ${ab.unlock}.`);
     const now = Date.now();
-    p.dir = dirName(dx, dy);
-    const tx = p.x + dx, ty = p.y + dy;
-    const enemy = this.enemyAt(tx, ty);
-    if (enemy) {
-      // chocar con un enemigo = atacar con el arma cuerpo a cuerpo elegida
-      const wi = p.d.attacks.findIndex((a, i) => i === (p.weaponIndex ?? -1) && a.kind === 'melee');
-      const melee = wi >= 0 ? wi : p.d.attacks.findIndex((a) => a.kind === 'melee');
-      return this.action(userId, { act: 'attack', weapon: melee, target: enemy.id });
-    }
-    const chest = this.chestAt(tx, ty);
-    if (chest) {
-      if (!chest.open && now >= p.nextMove) {
-        p.nextMove = now + MOVE_COOLDOWN;
-        chest.open = true;
-        const gold = randInt(...DUNGEON.REWARDS.chest.gold);
-        this.hooks.reward(p.user, DUNGEON.REWARDS.chest.xp, gold);
-        this.event({ e: 'loot', id: p.user.id, gold, xp: DUNGEON.REWARDS.chest.xp, x: tx, y: ty });
+    const c = p.user.combat;
+    if ((c.cds[ab.id] || 0) > now) return;
+    if (c.en < ab.cost) return this.whisper(p, 'No te queda energía.');
+    p.kdir = null;
+    p.pending = { ab, target: typeof a.target === 'string' ? a.target : null, x: Number.isInteger(a.x) ? a.x : null, y: Number.isInteger(a.y) ? a.y : null };
+    this.tryPending(p, now);
+  }
+
+  use(userId, cid, a = {}) {
+    const p = this.players.get(userId);
+    const C = RULES.CONSUMABLES[cid];
+    if (!p || !C) return;
+    const now = Date.now();
+    const c = p.user.combat;
+    if ((c.cds['cons:' + cid] || 0) > now) return;
+    if (C.spell && C.spell.kind !== 'return' && C.spell.kind !== 'healAll' && !this.nearestEnemy(p, C.spell.range)) return this.whisper(p, 'No hay enemigos a tiro.');
+    if (!this.hooks.giveCons(p.user, cid, -1)) return this.whisper(p, `No te quedan: ${C.name}.`);
+    c.cds['cons:' + cid] = now + (C.spell ? 1500 : 1000);
+    if (C.heal) this.heal(p, Math.round(p.d.hp * C.heal), C.name);
+    if (C.energy) c.en = Math.min(p.d.en, c.en + Math.round(p.d.en * C.energy));
+    if (C.regen) { p.regenUntil = now + C.regen; this.event({ e: 'fx', kind: 'buff', x: p.x, y: p.y, color: '#5aa03a' }); }
+    if (C.spell) {
+      const s = C.spell;
+      if (s.kind === 'return') { this.event({ e: 'fx', kind: 'portal', x: p.x, y: p.y }); return this.leaveTo(p, 'return'); }
+      if (s.kind === 'healAll') { for (const o of this.players.values()) if (cheb(o, p) <= s.radius) this.heal(o, Math.round(o.d.hp * s.pct), C.name); this.event({ e: 'fx', kind: 'nova', x: p.x, y: p.y, radius: s.radius, color: '#7dff8a' }); }
+      if (s.kind === 'blast') {
+        const t = (a.target && this.enemies.get(a.target)) || this.nearestEnemy(p, s.range);
+        this.event({ e: 'fx', kind: 'blast', x: t.x, y: t.y, radius: s.radius, from: { x: p.x, y: p.y }, color: '#ff7a2a' });
+        for (const e of this.enemiesNear(t, s.radius)) this.damageEnemy(p, e, this.spellRoll(p) * s.mult, { magic: true, name: C.name });
       }
-      return;
+      if (s.kind === 'chain') {
+        const list = [...this.enemies.values()].filter((e) => cheb(e, p) <= s.range && this.los(p, e)).sort((x, y) => cheb(x, p) - cheb(y, p)).slice(0, s.targets);
+        let from = { x: p.x, y: p.y };
+        for (const e of list) { this.event({ e: 'fx', kind: 'bolt', from, to: { x: e.x, y: e.y }, color: '#fff27a' }); from = { x: e.x, y: e.y }; this.damageEnemy(p, e, this.spellRoll(p) * s.mult, { magic: true, name: C.name }); }
+      }
     }
-    if (now < p.nextMove) return;
-    if (!DUNGEON.walkable(this.tile(tx, ty)) || this.playerAt(tx, ty)) return;
-    if (dx && dy && !(DUNGEON.walkable(this.tile(p.x + dx, p.y)) && DUNGEON.walkable(this.tile(p.x, p.y + dy)))) return; // no cortar esquinas
-    p.nextMove = now + MOVE_COOLDOWN * (dx && dy ? 1.4 : 1);
-    p.x = tx; p.y = ty;
+    this.sendPrivate(p);
+  }
+
+  nearestEnemy(p, range) {
+    let best = null, bd = Infinity;
+    for (const e of this.enemies.values()) { const d = cheb(e, p); if (d <= range && d < bd && this.los(p, e)) { bd = d; best = e; } }
+    return best;
+  }
+  enemiesNear(c, r) { return [...this.enemies.values()].filter((e) => cheb(e, c) <= r && this.los(c, e)); }
+
+  // ---------- Tiempo ----------
+  tick(now) {
+    const dt = 0.05;
+    for (const g of this.groups) {
+      if (!g.alive.size && g.respawnAt && now >= g.respawnAt) {
+        const near = [...this.players.values()].some((p) => g.spawn.some((s) => cheb(p, s) < 14));
+        if (!near) { g.respawnAt = 0; this.spawnGroup(g, now); this.dirty = true; } else g.respawnAt = now + 20000;
+      }
+    }
+    for (const p of [...this.players.values()]) this.tickPlayer(p, now, dt);
+    for (const e of [...this.enemies.values()]) if (this.enemies.has(e.id)) this.tickEnemy(e, now, dt);
+    this.tickProjectiles(now);
+    this.tickTeles(now);
+    this.tickAuras(now);
+    if (this.dirty && now - this.lastFlush >= FLUSH_MS) this.flush();
+  }
+
+  tickPlayer(p, now, dt) {
+    const c = p.user.combat;
+    // regeneración (más rápida fuera de combate)
+    const calm = now - p.lastHurt > 5000 ? 2.5 : 1;
+    const regen = p.d.hpRegen * calm * (p.regenUntil > now ? 5 : 1);
+    if (c.hp < p.d.hp) { c.hp = Math.min(p.d.hp, c.hp + regen * dt); this.privDirty(p); }
+    if (c.en < p.d.en) { c.en = Math.min(p.d.en, c.en + p.d.enRegen * dt); this.privDirty(p); }
+    for (const [k, b] of Object.entries(p.tbuffs)) if (b.until <= now) { delete p.tbuffs[k]; this.dirty = true; }
+
+    if (p.pending) this.tryPending(p, now);
+    // atacar al objetivo si está a tiro
+    if (p.target) {
+      const t = this.enemies.get(p.target);
+      if (!t) p.target = null;
+      else if (this.inReach(p, t, p.d.weapon.range)) {
+        if (now >= p.nextAttack) this.weaponAttack(p, t, now);
+        if (p.d.weapon.kind === 'melee' || cheb(p, t) <= p.d.weapon.range) return; // quieto mientras pega
+      }
+    }
+    if (now < p.nextStep) return;
+    let step = null;
+    if (p.kdir) {
+      const [dx, dy] = p.kdir;
+      const tries = dx && dy ? [[dx, dy], [dx, 0], [0, dy]] : [[dx, dy], ...(dx ? [[dx, 1], [dx, -1]] : [[1, dy], [-1, dy]])];
+      for (const [sx, sy] of tries) {
+        const nx = p.x + sx, ny = p.y + sy;
+        if (this.freeForPlayer(nx, ny) && this.noCorner(p.x, p.y, sx, sy)) { step = [sx, sy]; break; }
+        const ch = this.chestAt(nx, ny);
+        if (ch && sx === dx && sy === dy) { this.openChest(p, ch); p.nextStep = now + 250; return; }
+      }
+    } else {
+      const goal = p.pending ? this.pendingPoint(p) : p.target ? this.enemies.get(p.target) : p.goal;
+      if (goal) {
+        const passable = (x, y) => this.freeForPlayer(x, y);
+        if (!p.path.length || p.pathGoal !== goal.x + ',' + goal.y) { p.path = this.path(p, goal, passable); p.pathGoal = goal.x + ',' + goal.y; }
+        while (p.path.length && p.path[0].x === p.x && p.path[0].y === p.y) p.path.shift();
+        const n = p.path[0];
+        if (n) {
+          const dx = n.x - p.x, dy = n.y - p.y;
+          const ch = this.chestAt(n.x, n.y);
+          if (ch && !ch.open && Math.max(Math.abs(dx), Math.abs(dy)) === 1) { this.openChest(p, ch); p.path = []; p.goal = null; p.nextStep = now + 250; return; }
+          if (Math.max(Math.abs(dx), Math.abs(dy)) === 1 && this.freeForPlayer(n.x, n.y) && this.noCorner(p.x, p.y, dx, dy)) step = [dx, dy];
+          else p.path = this.path(p, goal, passable); // algo se cruzó: se busca otro camino
+        } else if (p.goal && !p.target && !p.pending) p.goal = null;
+      }
+    }
+    if (!step) return;
+    const [dx, dy] = step;
+    const slow = 1;
+    p.sm = Math.round(p.d.moveMs * (dx && dy ? 1.41 : 1) * slow);
+    p.nextStep = now + p.sm;
+    p.x += dx; p.y += dy;
+    p.dir = dirName(dx, dy);
     this.dirty = true;
     this.onEnter(p);
   }
 
+  pendingPoint(p) {
+    const pd = p.pending;
+    if (pd.target) return this.enemies.get(pd.target) || this.players.get(pd.target) || null;
+    if (pd.x !== null) return { x: pd.x, y: pd.y };
+    return null;
+  }
+
+  inReach(p, t, range) { const d = cheb(p, t); return d <= range && (d <= 1 || this.los(p, t)); }
+
   onEnter(p) {
     const ch = this.tile(p.x, p.y);
-    const t = DUNGEON.TILES[ch];
-    if (t && t.damage) this.hurtPlayer(p, RULES.roll(t.damage, { rng }).total, null, 'pinchos', 'piercing');
-    if (!this.players.has(p.user.id)) return;
-    if (t && t.portal === 'tavern') return this.leaveTo(p, 'town');
-    if (t && t.portal === 'dungeon') {
+    const T = DUNGEON.TILES[ch];
+    if (T && T.trap) {
+      const dmg = Math.round((3 + this.level * 2.5) * (0.8 + rnd() * 0.4));
+      this.hurtPlayer(p, dmg, { name: 'Pinchos' });
+      if (!this.players.has(p.user.id)) return;
+    }
+    if (T && T.portal === 'tavern') return this.leaveTo(p, 'town');
+    if (T && T.portal === 'dungeon') {
       const cave = (this.def.caves || []).find((c) => c.x === p.x && c.y === p.y);
-      if (cave) { this.players.delete(p.user.id); this.event({ e: 'leave', id: p.user.id }); return this.hooks.portal(p.user, cave.dungeon, { x: p.x, y: p.y }); }
+      if (cave) { this.players.delete(p.user.id); this.event({ e: 'leave', id: p.user.id }); return this.hooks.portal(p.user, cave, { x: p.x, y: p.y + 1 }); }
     }
-    for (const pot of this.potions.values()) {
-      if (pot.x === p.x && pot.y === p.y) {
-        this.potions.delete(pot.id);
-        this.heal(p, RULES.roll(DUNGEON.REWARDS.potion, { rng }).total, 'Poción de curación');
-      }
-    }
-    for (const c of this.coins.values()) {
-      if (c.x === p.x && c.y === p.y) {
-        this.coins.delete(c.id);
-        this.hooks.reward(p.user, 0, c.amount);
-        this.event({ e: 'loot', id: p.user.id, gold: c.amount, xp: 0, x: p.x, y: p.y });
-      }
-    }
-    if (this.exit && p.x === this.exit.x && p.y === this.exit.y) {
-      const r = { gold: DUNGEON.REWARDS.exit.gold, xp: DUNGEON.REWARDS.exit.xpPerLevel * p.d.level };
+    for (const l of [...this.loot.values()]) if (l.x === p.x && l.y === p.y) this.pickUp(p, l);
+    if (this.portal && p.x === this.portal.x && p.y === this.portal.y) {
+      const r = { xp: Math.round(40 * this.level * (1 + 0.1 * this.level)), gold: Math.round(30 + 12 * this.level) };
       this.hooks.reward(p.user, r.xp, r.gold);
       this.event({ e: 'loot', id: p.user.id, gold: r.gold, xp: r.xp, x: p.x, y: p.y });
       this.leaveTo(p, 'win', r);
     }
   }
 
+  pickUp(p, l) {
+    if (l.gold) { this.hooks.reward(p.user, 0, l.gold); this.event({ e: 'loot', id: p.user.id, gold: l.gold, x: l.x, y: l.y }); this.loot.delete(l.id); return; }
+    if (l.cons) {
+      if (!this.hooks.giveCons(p.user, l.cons, l.n || 1)) return;
+      this.event({ e: 'loot', id: p.user.id, cons: l.cons, x: l.x, y: l.y }); this.loot.delete(l.id); return;
+    }
+    if (l.item) {
+      if (!this.hooks.give(p.user, l.item)) { if (!l.warned) { l.warned = true; this.whisper(p, 'Tu inventario está lleno. Vende o tira algo.'); } return; }
+      this.event({ e: 'loot', id: p.user.id, item: { name: l.item.name, rarity: l.item.rarity }, x: l.x, y: l.y });
+      this.loot.delete(l.id);
+    }
+  }
+
+  dropAt(x, y, what) {
+    // cada cosa en su casilla libre más cercana
+    const taken = (a, b) => [...this.loot.values()].some((l) => l.x === a && l.y === b);
+    const pos = this.freeNear(x, y, (a, b) => this.walkTile(a, b) && !taken(a, b) && !this.chestAt(a, b) && this.tile(a, b) !== '^');
+    const id = 'l' + ++this.seq;
+    this.loot.set(id, { id, x: pos.x, y: pos.y, ...what });
+    this.dirty = true;
+  }
+
+  openChest(p, ch) {
+    if (ch.open) return;
+    ch.open = true;
+    const gold = Math.round(randInt(12, 25) * (1 + 0.4 * (this.level - 1)));
+    this.dropAt(ch.x, ch.y, { gold });
+    for (const it of RULES.rollLoot(rnd, { ilvl: this.level, mf: p.d.mf, classes: this.partyClasses(), chest: true })) this.dropAt(ch.x, ch.y, { item: it });
+    if (rnd() < 0.5) this.dropAt(ch.x, ch.y, { cons: rnd() < 0.7 ? 'pocion-vida-p' : 'pocion-energia' });
+    this.event({ e: 'chest', id: ch.id, by: p.user.id, x: ch.x, y: ch.y });
+  }
+
   leaveTo(p, reason, info) {
     this.players.delete(p.user.id);
+    for (const e of this.enemies.values()) if (e.aggro === p.user.id) e.aggro = null;
     this.event({ e: 'leave', id: p.user.id });
     this.hooks.exit(p.user, reason, info);
   }
@@ -240,370 +433,510 @@ class Instance {
   heal(p, amount, source) {
     const c = p.user.combat;
     const before = c.hp;
-    c.hp = Math.min(c.maxHp, c.hp + amount);
-    this.event({ e: 'heal', id: p.user.id, amount: c.hp - before, source });
+    c.hp = Math.min(p.d.hp, c.hp + amount);
+    const got = Math.round(c.hp - before);
+    if (got > 0) this.event({ e: 'heal', id: p.user.id, amount: got, source });
+    this.privDirty(p);
   }
 
-  // ---------- Acciones de los héroes ----------
-  action(userId, a) {
-    const p = this.players.get(userId);
-    if (!p || !a) return;
-    const now = Date.now();
-    if (now < p.nextAction) return;
-    const c = p.user.combat;
-    if (a.act === 'weapon') { p.weaponIndex = Number.isInteger(a.weapon) ? a.weapon : 0; return; }
-    let done = false;
-    if (a.act === 'attack') done = this.weaponAttack(p, a);
-    else if (a.act === 'spell') done = this.castSpell(p, a);
-    else if (a.act === 'feature') done = this.useFeature(p, a);
-    if (done) { p.nextAction = now + ACTION_COOLDOWN; this.sendPrivate(p); }
-    void c;
-  }
+  privDirty(p) { p.privDirty = true; this.dirty = true; }
 
-  targetEnemy(p, id, rangeFt, longFt) {
-    const e = this.enemies.get(id);
-    if (!e) return null;
-    const dist = cheb(p, e);
-    const max = RULES.tiles(longFt || rangeFt);
-    if (dist > max) { this.whisper(p, 'Está demasiado lejos.'); return null; }
-    if (!this.los(p, e)) { this.whisper(p, 'No tienes línea de visión.'); return null; }
-    return { e, far: longFt && dist > RULES.tiles(rangeFt) };
-  }
+  // ---------- Ataques de los héroes ----------
+  buffSum(p, k) { let v = 0; for (const b of Object.values(p.tbuffs)) v += (b[k] || 0); return v; }
 
-  weaponAttack(p, a) {
-    const w = p.d.attacks[a.weapon] || p.d.attacks[0];
-    const t = this.enemies.get(a.target);
-    if (!t) return false;
-    const dist = cheb(p, t);
-    let range = w.range, long = null;
-    if (w.kind === 'ranged') { const W = RULES.data.byId.weapons[w.id]; long = W && W.range[1] ? W.range[1] : null; }
-    else if (w.thrown && dist > 1) { range = w.thrown; const W = RULES.data.byId.weapons[w.id]; long = W.thrown[1]; }
-    const tg = this.targetEnemy(p, a.target, range, long);
-    if (!tg) return false;
+  // Tirada de daño con el arma o con hechizos (con bufos de grupo y Bendición de fuerza ya en la ficha)
+  weaponRoll(p) { return roll(p.d.dmg) * (1 + this.buffSum(p, 'dmgPct') / 100); }
+  spellRoll(p) { return roll(p.d.spell) * (1 + this.buffSum(p, 'dmgPct') / 100); }
+
+  weaponAttack(p, t, now) {
+    const d = p.d;
     p.dir = dirName(t.x - p.x, t.y - p.y);
-    // a distancia con un enemigo al lado o más allá del alcance normal: desventaja
-    const adjacentFoe = w.kind === 'ranged' && [...this.enemies.values()].some((e) => cheb(e, p) <= 1);
-    const disadv = tg.far || adjacentFoe;
-    const lucky = p.d.halfling;
-    let roll = d20(lucky);
-    if (disadv) roll = Math.min(roll, d20(lucky));
-    const total = roll + w.hit;
-    const crit = roll === 20;
-    const hit = crit || (roll !== 1 && total >= t.mon.ac);
-    const ev = { e: 'attack', by: p.user.id, target: t.id, name: w.name, roll, bonus: w.hit, total, ac: t.mon.ac, hit, crit, disadv };
-    if (hit) {
-      let dmg = RULES.roll(w.dice, { rng, crit }).total + w.mod;
-      const c = p.user.combat;
-      if (c.ragingUntil > Date.now() && w.ability === 'str' && w.kind === 'melee') dmg += p.d.actions.find((x) => x.id === 'rage').bonus;
-      // Ataque furtivo: arma sutil o a distancia, una vez por turno, si otro héroe está junto al objetivo
-      const W = RULES.data.byId.weapons[w.id];
-      if (p.d.sneak && Date.now() >= p.sneakAt && W && (W.properties.includes('finesse') || W.kind === 'ranged')
-        && [...this.players.values()].some((o) => o !== p && cheb(o, t) <= 1)) {
-        dmg += RULES.roll(p.d.sneak, { rng, crit }).total;
-        ev.sneak = true;
-        p.sneakAt = Date.now() + 5000;
-      }
-      ev.dmg = adjustDamage(t.mon, w.type, Math.max(1, dmg));
-      ev.type = w.type;
-    }
-    this.event(ev);
-    if (hit) this.damageEnemy(p, t, ev.dmg);
-    return true;
+    p.nextAttack = now + d.atkMs;
+    const chance = Math.max(55, Math.min(99, 90 + d.hit - 4 * Math.max(0, t.m.level - d.level)));
+    const kind = d.weapon.kind;
+    if (rnd() * 100 >= chance) { this.event({ e: 'hit', by: p.user.id, t: t.id, miss: true, kind }); return; }
+    this.damageEnemy(p, t, this.weaponRoll(p), { kind, magic: kind === 'magic' });
   }
 
-  castSpell(p, a) {
-    const known = p.d.spells.find((s) => s.id === a.id);
-    const fx = RULES.COMBAT_SPELLS[a.id];
-    if (!known || !fx) return false;
+  // Aplica el daño a un enemigo: crítico, debilidad (marca), armadura, robo de vida
+  damageEnemy(p, e, base, o = {}) {
+    if (!this.enemies.has(e.id)) return 0;
+    let dmg = base;
+    let crit = false;
+    if (!o.noCrit && (p.critNext || rnd() * 100 < p.d.crit)) { crit = true; dmg *= p.d.critMult; p.critNext = false; }
+    if (e.vulnUntil > Date.now()) dmg *= 1 + e.vuln / 100;
+    if (o.undead && e.m.undead) dmg *= 1 + o.undead;
+    dmg *= 1 - RULES.reduction(o.magic ? e.m.armor * 0.5 : e.m.armor, p.d.level);
+    dmg = Math.max(1, Math.round(dmg));
+    e.hp -= dmg;
+    e.aggro = e.aggro || p.user.id;
+    this.wakePack(e, p.user.id);
+    this.event({ e: 'hit', by: p.user.id, t: e.id, dmg, crit, kind: o.kind || 'ability', fx: o.fx || null, name: o.name || null });
+    const ls = p.d.lifesteal / 100 + (o.leech || 0);
+    if (ls > 0) this.heal(p, Math.max(1, Math.round(dmg * ls)), o.leech ? o.name : 'Robo de vida');
+    if (e.hp <= 0) this.killEnemy(p, e);
+    return dmg;
+  }
+
+  // ---------- Habilidades ----------
+  tryPending(p, now) {
+    const pd = p.pending;
+    const ab = pd.ab;
     const c = p.user.combat;
-    const spell = RULES.spells[a.id];
-    // espacio de conjuro (los trucos no gastan; el de Iniciado en la magia es gratis una vez)
-    let slotUsed = 0;
-    if (spell.level > 0) {
-      if (known.freeCast && !c.freeCast[a.id]) { c.freeCast[a.id] = true; slotUsed = -1; }
-      else {
-        const idx = c.slots.findIndex((n, i) => i + 1 >= spell.level && n > 0);
-        if (idx < 0) { this.whisper(p, `No te quedan espacios de nivel ${spell.level} o superior.`); return false; }
-        c.slots[idx]--; slotUsed = idx + 1;
+    const target = pd.target ? (this.enemies.get(pd.target) || this.players.get(pd.target)) : null;
+    if (pd.target && !target) { p.pending = null; return; }
+    const range = ab.kind === 'strike' ? p.d.weapon.range : ab.range || 0;
+    const self = ['nova', 'buff', 'healAll', 'aura'].includes(ab.kind);
+    const needsEnemy = ['strike', 'bolt', 'mark', 'dash', 'blink'].includes(ab.kind);
+    let enemy = target && this.enemies.has(target.id) ? target : null;
+    if (needsEnemy && !enemy) {
+      enemy = p.target && this.enemies.get(p.target) || this.nearestEnemy(p, Math.max(range, 1));
+      if (!enemy) { p.pending = null; return this.whisper(p, 'Elige un enemigo.'); }
+      pd.target = enemy.id;
+    }
+    let point = null;
+    if (!self) {
+      if (ab.kind === 'heal') point = target && !this.enemies.has(target.id) ? target : p;
+      else point = enemy || (pd.x !== null ? { x: pd.x, y: pd.y } : null);
+      if (!point) { const e = this.nearestEnemy(p, range); if (!e) { p.pending = null; return this.whisper(p, 'No hay enemigos a tiro.'); } point = e; pd.target = e.id; enemy = e; }
+      const dist = cheb(p, point);
+      const reach = ab.kind === 'dash' || ab.kind === 'blink' ? range : range;
+      if (dist > reach || (dist > 1 && !this.los(p, point))) return; // hay que acercarse (tickPlayer anda hacia el punto)
+    }
+    // ¡se lanza!
+    p.pending = null;
+    c.en -= ab.cost;
+    c.cds[ab.id] = now + ab.cd * FAST * (1 - p.d.cdr / 100);
+    p.nextAttack = Math.max(p.nextAttack, now + 350);
+    if (point) p.dir = dirName(point.x - p.x, point.y - p.y) || p.dir;
+    this.event({ e: 'cast', by: p.user.id, name: ab.name, id: ab.id });
+    const dmgFor = () => (ab.weapon || ab.kind === 'strike' ? this.weaponRoll(p) : this.spellRoll(p)) * (ab.mult || 1);
+    const magic = !(ab.weapon || ab.kind === 'strike');
+    const color = { fire: '#ff7a2a', cold: '#9ad8ff', holy: '#fff2a0', void: '#a05aff', blood: '#ff3a4a', lightning: '#fff27a' }[ab.fx] || '#ffffff';
+    switch (ab.kind) {
+      case 'strike': {
+        let mult = 1;
+        if (ab.flank && [...this.players.values()].some((o) => o !== p && cheb(o, enemy) <= 1)) mult += ab.flank;
+        const dealt = this.damageEnemy(p, enemy, dmgFor() * mult, { name: ab.name, leech: ab.leech, kind: 'ability' });
+        if (ab.dot && this.enemies.has(enemy.id)) this.addDot(p, enemy, this.weaponRoll(p) * ab.dot, ab.dur);
+        if (ab.stun && this.enemies.has(enemy.id)) enemy.stunUntil = now + ab.stun;
+        void dealt;
+        break;
       }
-    }
-    const tier = spell.level === 0 ? RULES.cantripTier(p.d.level) : 1;
-    const dice = fx.beams ? fx.dice : RULES.scaleDice(fx.dice, tier);
-    const base = { by: p.user.id, name: spell.name, spell: spell.id, slot: slotUsed };
-
-    if (fx.kind === 'heal') {
-      const amount = () => RULES.roll(dice, { rng }).total + (fx.addMod ? known.mod : 0);
-      const allies = [...this.players.values()].filter((o) => cheb(o, p) <= RULES.tiles(fx.range));
-      let targets;
-      if (fx.multi) targets = allies.sort((x, y) => (x.user.combat.hp / x.user.combat.maxHp) - (y.user.combat.hp / y.user.combat.maxHp)).slice(0, fx.multi);
-      else { const t = this.players.get(a.target) || p; if (cheb(t, p) > RULES.tiles(fx.range)) { this.whisper(p, 'Está demasiado lejos.'); refund(); return false; } targets = [t]; }
-      this.event({ e: 'cast', ...base });
-      for (const t of targets) this.heal(t, Math.max(1, amount()), spell.name);
-      return true;
-    }
-
-    // punto objetivo (enemigo o casilla) para áreas y para hechizos de cono/línea que salen del lanzador
-    let tx, ty;
-    const target = a.target ? this.enemies.get(a.target) : null;
-    if (target) { tx = target.x; ty = target.y; } else if (Number.isInteger(a.x) && Number.isInteger(a.y)) { tx = a.x; ty = a.y; } else { refund(); return false; }
-    const selfArea = fx.area && (fx.area.shape === 'cone' || fx.area.shape === 'line');
-    if (!selfArea && cheb(p, { x: tx, y: ty }) > RULES.tiles(fx.range)) { this.whisper(p, 'Está demasiado lejos.'); refund(); return false; }
-    if (!selfArea && !this.los(p, { x: tx, y: ty })) { this.whisper(p, 'No tienes línea de visión.'); refund(); return false; }
-    p.dir = dirName(tx - p.x, ty - p.y);
-    this.event({ e: 'cast', ...base, x: tx, y: ty, area: fx.area || null, from: { x: p.x, y: p.y } });
-
-    if (fx.kind === 'attack' || fx.kind === 'auto') {
-      if (!target) { refund(); return false; }
-      const count = fx.beams ? tier : fx.count || 1;
-      let drained = 0;
-      for (let i = 0; i < count && this.enemies.has(target.id); i++) {
-        if (fx.kind === 'auto') {
-          const dmg = adjustDamage(target.mon, fx.type, RULES.roll(dice, { rng }).total);
-          this.event({ e: 'attack', ...base, target: target.id, auto: true, hit: true, dmg, type: fx.type });
-          this.damageEnemy(p, target, dmg);
-          continue;
+      case 'bolt': {
+        for (let i = 0; i < (ab.count || 1) && this.enemies.has(enemy.id); i++) {
+          this.event({ e: 'fx', kind: 'bolt', from: { x: p.x, y: p.y }, to: { x: enemy.x, y: enemy.y }, color, delay: i * 90 });
+          this.damageEnemy(p, enemy, dmgFor(), { magic: true, name: ab.name, leech: ab.leech, undead: ab.undead, fx: ab.fx });
         }
-        const roll = d20(p.d.halfling);
-        const total = roll + known.attack;
-        const crit = roll === 20;
-        const hit = crit || (roll !== 1 && total >= target.mon.ac);
-        const ev = { e: 'attack', ...base, target: target.id, roll, bonus: known.attack, total, ac: target.mon.ac, hit, crit };
-        if (hit) { ev.dmg = adjustDamage(target.mon, fx.type, RULES.roll(dice, { rng, crit }).total + (fx.addMod ? known.mod : 0)); ev.type = fx.type; drained += ev.dmg; }
-        else if (fx.missHalf) { ev.dmg = adjustDamage(target.mon, fx.type, Math.floor(RULES.roll(dice, { rng }).total / 2)); ev.type = fx.type; }
-        this.event(ev);
-        if (ev.dmg) this.damageEnemy(p, target, ev.dmg);
+        break;
       }
-      if (fx.drain && drained) this.heal(p, Math.floor(drained / 2), spell.name);
-      if (fx.then) this.areaSave(p, known, fx.then, tx, ty, base);
-      return true;
-    }
-    if (fx.kind === 'save') {
-      this.areaSave(p, known, fx, tx, ty, base, dice);
-      return true;
-    }
-    return true;
-
-    function refund() { if (slotUsed > 0) c.slots[slotUsed - 1]++; if (slotUsed === -1) c.freeCast[a.id] = false; }
-  }
-
-  // Salvación de todos los enemigos del área (o del objetivo) contra la CD
-  areaSave(p, known, fx, tx, ty, base, diceOverride) {
-    const targets = fx.area ? this.inArea(p, fx.area, tx, ty) : [this.enemyAt(tx, ty)].filter(Boolean);
-    const dc = known.dc !== undefined ? known.dc : fx.dc;
-    for (const t of targets) {
-      const roll = rng(20);
-      const bonus = t.combat.saves[fx.save] || 0;
-      const total = roll + bonus;
-      const success = total >= dc;
-      const full = RULES.roll(diceOverride || fx.dice, { rng }).total;
-      let dmg = success ? (fx.half ? Math.floor(full / 2) : 0) : full;
-      dmg = adjustDamage(t.mon, fx.type, dmg);
-      this.event({ e: 'save', ...base, target: t.id, ability: fx.save, roll, bonus, total, dc, success, dmg, type: fx.type });
-      if (dmg) this.damageEnemy(p, t, dmg);
-    }
-  }
-
-  inArea(p, area, tx, ty) {
-    const r = RULES.tiles(area.size);
-    const list = [];
-    for (const e of this.enemies.values()) {
-      if (area.shape === 'sphere' || area.shape === 'emanation') {
-        const cx = area.shape === 'emanation' ? p.x : tx, cy = area.shape === 'emanation' ? p.y : ty;
-        if (Math.max(Math.abs(e.x - cx), Math.abs(e.y - cy)) <= r && this.los({ x: cx, y: cy }, e)) list.push(e);
-      } else if (area.shape === 'cone') {
-        const dx = tx - p.x, dy = ty - p.y, ex = e.x - p.x, ey = e.y - p.y;
-        const dist = Math.max(Math.abs(ex), Math.abs(ey));
-        if (dist < 1 || dist > r) continue;
-        const cos = (dx * ex + dy * ey) / (Math.hypot(dx, dy) * Math.hypot(ex, ey) || 1);
-        if (cos >= 0.7 && this.los(p, e)) list.push(e);
-      } else if (area.shape === 'line') {
-        const len = Math.hypot(tx - p.x, ty - p.y) || 1;
-        for (let i = 1; i <= r; i++) {
-          const x = Math.round(p.x + (tx - p.x) / len * i), y = Math.round(p.y + (ty - p.y) / len * i);
+      case 'mark': {
+        enemy.vuln = ab.vuln; enemy.vulnUntil = now + ab.dur;
+        if (ab.dot) this.addDot(p, enemy, this.spellRoll(p) * ab.dot, ab.dur);
+        this.event({ e: 'fx', kind: 'mark', x: enemy.x, y: enemy.y, id: enemy.id, color: ab.dot ? '#a05aff' : '#ff4a4a' });
+        enemy.aggro = enemy.aggro || p.user.id;
+        break;
+      }
+      case 'blast': case 'nova': {
+        const c0 = ab.kind === 'nova' ? { x: p.x, y: p.y } : point;
+        this.event({ e: 'fx', kind: ab.kind === 'nova' ? 'nova' : 'blast', x: c0.x, y: c0.y, radius: ab.radius, from: { x: p.x, y: p.y }, color });
+        for (const e of this.enemiesNear(c0, ab.radius)) {
+          if (ab.mult) this.damageEnemy(p, e, dmgFor(), { magic, name: ab.name, fx: ab.fx });
+          if (!this.enemies.has(e.id)) continue;
+          if (ab.stun) e.stunUntil = now + ab.stun;
+          if (ab.slow) e.slowUntil = now + ab.slow;
+          if (ab.dot) this.addDot(p, e, this.spellRoll(p) * ab.dot, ab.dur);
+        }
+        break;
+      }
+      case 'cone': {
+        const dx = point.x - p.x, dy = point.y - p.y;
+        const hits = [...this.enemies.values()].filter((e) => {
+          const ex = e.x - p.x, ey = e.y - p.y, dist = Math.max(Math.abs(ex), Math.abs(ey));
+          if (dist < 1 || dist > ab.range) return false;
+          return (dx * ex + dy * ey) / (Math.hypot(dx, dy) * Math.hypot(ex, ey) || 1) >= 0.75 && this.los(p, e);
+        }).slice(0, 6);
+        for (const e of hits) { this.event({ e: 'fx', kind: 'arrow', from: { x: p.x, y: p.y }, to: { x: e.x, y: e.y } }); this.damageEnemy(p, e, dmgFor(), { name: ab.name, kind: 'ranged' }); }
+        break;
+      }
+      case 'line': {
+        const len = Math.hypot(point.x - p.x, point.y - p.y) || 1;
+        const hit = new Set();
+        let end = { x: p.x, y: p.y };
+        for (let i = 1; i <= ab.range; i++) {
+          const x = Math.round(p.x + (point.x - p.x) / len * i), y = Math.round(p.y + (point.y - p.y) / len * i);
           if (OPAQUE.has(this.tile(x, y))) break;
-          if (e.x === x && e.y === y) { list.push(e); break; }
+          end = { x, y };
+          const e = this.enemyAt(x, y);
+          if (e && !hit.has(e.id)) hit.add(e.id);
         }
+        this.event({ e: 'fx', kind: 'arrow', from: { x: p.x, y: p.y }, to: end, pierce: true });
+        for (const id of hit) { const e = this.enemies.get(id); if (e) this.damageEnemy(p, e, dmgFor(), { name: ab.name, kind: 'ranged' }); }
+        break;
+      }
+      case 'heal': {
+        const t = point && this.players.get(point.user ? point.user.id : '') || p;
+        this.heal(t, Math.round((t.d.hp * ab.pct + roll(p.d.spell) * 0.5) * p.d.healPow), ab.name);
+        this.event({ e: 'fx', kind: 'heal', x: t.x, y: t.y });
+        break;
+      }
+      case 'healAll': {
+        for (const o of this.players.values()) if (cheb(o, p) <= ab.radius) { this.heal(o, Math.round(o.d.hp * ab.pct * p.d.healPow), ab.name); this.event({ e: 'fx', kind: 'heal', x: o.x, y: o.y }); }
+        this.event({ e: 'fx', kind: 'nova', x: p.x, y: p.y, radius: ab.radius, color: '#7dff8a' });
+        break;
+      }
+      case 'buff': {
+        for (const o of this.players.values()) if (cheb(o, p) <= ab.radius) o.tbuffs[ab.id] = { ...ab.buff, until: now + ab.dur };
+        this.event({ e: 'fx', kind: 'nova', x: p.x, y: p.y, radius: ab.radius, color: ab.buff.dr ? '#7ad0ff' : '#ff6a3a' });
+        break;
+      }
+      case 'aura': {
+        this.auras.push({ owner: p.user.id, radius: ab.radius, mult: ab.mult, until: now + ab.dur, next: now + 1000, name: ab.name });
+        this.event({ e: 'fx', kind: 'aura', id: p.user.id, until: ab.dur, radius: ab.radius });
+        break;
+      }
+      case 'dash': case 'blink': {
+        // casilla libre junto al objetivo (para el paso sombrío, por detrás)
+        const options = DIRS.map(([dx, dy]) => ({ x: enemy.x + dx, y: enemy.y + dy })).filter((s) => this.freeForPlayer(s.x, s.y));
+        if (!options.length) break;
+        options.sort((a, b) => (ab.kind === 'blink' ? cheb(b, p) - cheb(a, p) : cheb(a, p) - cheb(b, p)));
+        const from = { x: p.x, y: p.y };
+        p.x = options[0].x; p.y = options[0].y; p.sm = 120; p.path = [];
+        this.event({ e: 'fx', kind: ab.kind, from, to: { x: p.x, y: p.y }, id: p.user.id });
+        if (ab.kind === 'blink') p.critNext = true;
+        else { this.damageEnemy(p, enemy, dmgFor(), { name: ab.name }); if (this.enemies.has(enemy.id)) enemy.stunUntil = now + ab.stun; }
+        p.target = enemy.id;
+        this.onEnter(p);
+        break;
       }
     }
-    return list;
+    this.sendPrivate(p);
   }
 
-  useFeature(p, a) {
-    const f = p.d.actions.find((x) => x.id === a.id);
-    if (!f) return false;
-    const c = p.user.combat;
-    if (f.uses !== undefined && (c.uses[f.id] ?? f.uses) <= 0) { this.whisper(p, `Ya no te quedan usos de ${f.name}.`); return false; }
-    const spend = () => { c.uses[f.id] = (c.uses[f.id] ?? f.uses) - 1; };
-    if (f.id === 'second-wind') { spend(); this.event({ e: 'feature', by: p.user.id, name: f.name }); this.heal(p, RULES.roll(f.dice, { rng }).total, f.name); return true; }
-    if (f.id === 'rage') { spend(); c.ragingUntil = Date.now() + RAGE_MS; this.event({ e: 'feature', by: p.user.id, name: f.name, rage: true }); return true; }
-    if (f.id === 'lay-on-hands') {
-      const t = this.players.get(a.target) || p;
-      if (cheb(t, p) > 1) { this.whisper(p, 'Tienes que tocarle (casilla de al lado).'); return false; }
-      const pool = c.uses[f.id] ?? f.pool;
-      const need = t.user.combat.maxHp - t.user.combat.hp;
-      const amt = Math.min(pool, need);
-      if (amt <= 0) { this.whisper(p, pool <= 0 ? 'Tu reserva está vacía.' : 'No le hace falta.'); return false; }
-      c.uses[f.id] = pool - amt;
-      this.event({ e: 'feature', by: p.user.id, name: f.name });
-      this.heal(t, amt, f.name);
-      return true;
-    }
-    if (f.id === 'breath-weapon') {
-      let tx, ty;
-      const target = a.target ? this.enemies.get(a.target) : null;
-      if (target) { tx = target.x; ty = target.y; } else if (Number.isInteger(a.x)) { tx = a.x; ty = a.y; } else return false;
-      spend();
-      const base = { by: p.user.id, name: f.name };
-      this.event({ e: 'cast', ...base, x: tx, y: ty, area: f.area, from: { x: p.x, y: p.y } });
-      this.areaSave(p, { dc: f.dc }, { save: 'dex', half: true, dice: f.dice, type: f.type, area: f.area }, tx, ty, base);
-      return true;
-    }
-    return false;
+  addDot(p, e, total, dur) {
+    const ticks = Math.max(1, Math.round(dur / 1000));
+    e.dots.push({ by: p.user.id, per: total / ticks, left: ticks, next: Date.now() + 1000 });
   }
 
-  whisper(p, text) { this.hooks.send(p.user, { t: 'dwhisper', text }); }
+  tickAuras(now) {
+    for (let i = this.auras.length - 1; i >= 0; i--) {
+      const a = this.auras[i];
+      const p = this.players.get(a.owner);
+      if (!p || now > a.until) { this.auras.splice(i, 1); continue; }
+      if (now < a.next) continue;
+      a.next = now + 1000;
+      for (const e of this.enemiesNear(p, a.radius)) this.damageEnemy(p, e, this.spellRoll(p) * a.mult, { magic: true, name: a.name, noCrit: true, fx: 'holy' });
+    }
+  }
 
-  damageEnemy(p, enemy, dmg) {
-    enemy.hp -= dmg;
-    if (enemy.hp > 0) return;
-    this.enemies.delete(enemy.id);
-    if (enemy.group) { enemy.group.alive.delete(enemy.id); if (!enemy.group.alive.size) enemy.group.respawnAt = Date.now() + RESPAWN_MS; }
-    const xpTotal = enemy.summoned ? Math.ceil(enemy.mon.xp / 3) : enemy.mon.xp;
-    // la experiencia se reparte entre los héroes presentes
+  // ---------- Muerte de un enemigo: experiencia, oro y botín ----------
+  partyClasses() {
+    const list = [...this.players.values()];
+    if (!list.length) return [];
+    const p = list[Math.floor(rnd() * list.length)];
+    return [p.d.cls, p.d.cls2].filter(Boolean);
+  }
+
+  killEnemy(p, e) {
+    this.enemies.delete(e.id);
+    if (e.group) { e.group.alive.delete(e.id); if (!e.group.alive.size) e.group.respawnAt = Date.now() + RESPAWN_MS; }
     const party = [...this.players.values()];
-    const share = Math.max(1, Math.floor(xpTotal / Math.max(1, party.length)));
-    this.event({ e: 'die', id: enemy.id, k: enemy.k, x: enemy.x, y: enemy.y, by: p.user.id, xp: share });
-    for (const o of party) this.hooks.reward(o.user, share, 0);
-    if (!enemy.summoned) {
-      const id = 'c' + ++this.seq;
-      const amount = randInt(Math.max(1, Math.ceil(enemy.mon.xp / 25)), Math.max(2, Math.ceil(enemy.mon.xp / 10)));
-      this.coins.set(id, { id, x: enemy.x, y: enemy.y, amount });
+    const total = e.summoned ? e.m.xp / 3 : e.m.xp;
+    const share = total * (1 + 0.2 * (party.length - 1)) / Math.max(1, party.length);
+    let shown = 0;
+    for (const o of party) {
+      const xp = Math.max(1, Math.round(share * RULES.xpPenalty(o.d.level, e.m.level)));
+      if (o === p) shown = xp;
+      this.hooks.reward(o.user, xp, 0);
+    }
+    this.event({ e: 'die', id: e.id, k: e.k, x: e.x, y: e.y, by: p.user.id, xp: shown || Math.round(share), boss: e.m.boss || undefined, elite: e.m.elite || undefined });
+    if (e.summoned) return;
+    const gold = randInt(e.m.gold[0], e.m.gold[1]);
+    if (gold > 0) this.dropAt(e.x, e.y, { gold });
+    const items = RULES.rollLoot(rnd, { ilvl: e.m.level, mf: p.d.mf, classes: this.partyClasses(), elite: e.m.elite, boss: e.m.boss, sets: e.m.sets });
+    for (const it of items) this.dropAt(e.x, e.y, { item: it });
+    if (rnd() < (e.m.boss ? 1 : 0.08)) this.dropAt(e.x, e.y, { cons: e.m.boss ? 'pocion-vida-g' : 'pocion-vida-p', n: 1 });
+    if (e.m.boss && this.kind === 'dungeon') {
+      this.bossDead = true;
+      const spot = this.freeNear(e.x, e.y, (a, b) => this.walkTile(a, b) && ![...this.loot.values()].some((l) => l.x === a && l.y === b));
+      this.portal = spot;
+      this.event({ e: 'portal', x: spot.x, y: spot.y, name: e.m.name });
+      // el resto de la sala huye: no queda nadie que pelee por su señor
+      for (const o of [...this.enemies.values()]) if (o.summoned) { this.enemies.delete(o.id); this.event({ e: 'die', id: o.id, k: o.k, x: o.x, y: o.y, xp: 0 }); }
     }
   }
 
-  hurtPlayer(p, dmg, by, name, type) {
+  // ---------- Daño a los héroes ----------
+  hurtPlayer(p, dmg, o = {}) {
     const c = p.user.combat;
-    if (c.ragingUntil > Date.now() && ['bludgeoning', 'piercing', 'slashing'].includes(type)) dmg = Math.floor(dmg / 2);
+    const now = Date.now();
+    p.lastHurt = now;
+    if (o.canDodge && rnd() * 100 < p.d.dodge) { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true }); return; }
+    if (o.magic) dmg *= 1 - p.d.magicRes / 100;
+    else if (o.level) dmg *= 1 - RULES.reduction(p.d.armor, o.level);
+    let blocked = false;
+    if (!o.magic && p.d.block && rnd() * 100 < p.d.block) { dmg *= 0.35; blocked = true; }
+    dmg *= 1 - Math.min(60, this.buffSum(p, 'dr')) / 100;
+    dmg = Math.max(1, Math.round(dmg));
     c.hp -= dmg;
-    if (c.hp <= 0 && p.d.relentless && !c.relentlessUsed) { c.hp = 1; c.relentlessUsed = true; this.event({ e: 'feature', by: p.user.id, name: 'Aguante incansable' }); }
+    this.event({ e: 'hit', by: o.by || null, t: p.user.id, dmg, block: blocked || undefined, name: o.name || null, kind: o.kind || 'melee' });
+    this.privDirty(p);
     if (c.hp > 0) return;
     c.hp = 0;
     this.event({ e: 'down', id: p.user.id });
     this.leaveTo(p, 'down');
   }
 
-  // ---------- Turno de los monstruos ----------
-  tick(now) {
-    for (const g of this.groups) {
-      if (!g.alive.size && g.respawnAt && now >= g.respawnAt) {
-        const near = [...this.players.values()].some((p) => g.spawn.some((s) => cheb(p, s) < 14));
-        if (!near) { g.respawnAt = 0; this.spawnGroup(g, now); this.dirty = true; } else g.respawnAt = now + 20000;
-      }
-    }
-    const range = this.kind === 'world' ? 9 : 8;
-    for (const e of [...this.enemies.values()]) {
-      if (!this.enemies.has(e.id)) continue;
-      let target = null, best = Infinity;
-      for (const p of this.players.values()) {
-        const d = cheb(e, p);
-        if (d < best && d <= range && this.los(e, p)) { best = d; target = p; }
-      }
-      if (!target) {
-        // vuelve despacio a su sitio
-        if (this.kind === 'world' && now >= e.nextStep && cheb(e, e.home) > 3) { e.nextStep = now + e.step * 2; this.stepToward(e, e.home); }
-        continue;
-      }
-      const melee = e.combat.attacks.filter((a) => a.melee);
-      const ranged = e.combat.attacks.filter((a) => a.range > 0);
-      const reach = melee.length ? Math.max(...melee.map((a) => RULES.tiles(a.reach))) : 0;
-      if (now >= e.nextAttack) {
-        let atk = null;
-        if (best <= reach && melee.length) atk = melee[0];
-        else if (ranged.length && best <= RULES.tiles(ranged[0].range) && best > 1) atk = ranged[0];
-        if (atk) {
-          e.nextAttack = now + MONSTER_TURN + Math.random() * 400;
-          e.dir = dirName(target.x - e.x, target.y - e.y);
-          const n = atk.melee ? e.combat.multi : 1;
-          for (let i = 0; i < n && this.players.has(target.user.id); i++) {
-            const a = atk.melee && melee.length > 1 && i > 0 ? melee[i % melee.length] : atk;
-            const roll = rng(20);
-            const total = roll + a.hit;
-            const ac = target.d.ac;
-            const crit = roll === 20;
-            const hit = crit || (roll !== 1 && total >= ac);
-            const ev = { e: 'attack', by: e.id, target: target.user.id, name: a.name, roll, bonus: a.hit, total, ac, hit, crit };
-            if (hit) { ev.dmg = Math.max(1, RULES.roll(a.dice, { rng, crit }).total); ev.type = a.type; }
-            this.event(ev);
-            if (hit) this.hurtPlayer(target, ev.dmg, e.id, a.name, a.type);
-          }
-          continue;
-        }
-      }
-      const sum = DUNGEON.ENEMIES[e.k] && DUNGEON.ENEMIES[e.k].summons;
-      if (sum && now >= e.nextSummon) {
-        e.nextSummon = now + SUMMON_EVERY;
-        const alive = [...this.enemies.values()].filter((o) => o.summoned).length;
-        if (alive < MAX_SUMMONS) {
-          const spot = DIRS.map(([dx, dy]) => ({ x: e.x + dx, y: e.y + dy })).find((s) => this.free(s.x, s.y));
-          if (spot) { const id = this.addEnemy(sum, spot.x, spot.y, now, true); this.event({ e: 'summon', id, x: spot.x, y: spot.y }); }
-        }
-      }
-      // acercarse (los que atacan a distancia se quedan a su alcance)
-      const wantsDistance = !melee.length || (ranged.length && best > 1 && best <= RULES.tiles(ranged[0].range) && e.combat.attacks[0] === ranged[0]);
-      if (!wantsDistance && best > reach && now >= e.nextStep) { e.nextStep = now + e.step; this.stepToward(e, target); }
-    }
-    for (const p of this.players.values()) {
-      const c = p.user.combat;
-      if (c.ragingUntil && now > c.ragingUntil) { c.ragingUntil = 0; this.sendPrivate(p); }
-    }
-    if (this.dirty) this.flush();
+  // ---------- Monstruos ----------
+  wakePack(e, userId) {
+    if (!e.pack) return;
+    for (const o of this.enemies.values()) if (o.pack === e.pack && !o.aggro && cheb(o, e) <= 8) o.aggro = userId;
   }
 
-  stepToward(e, target) {
-    let move = null, moveD = cheb(e, target);
+  tickEnemy(e, now, dt) {
+    const m = e.m;
+    // venenos y quemaduras
+    for (let i = e.dots.length - 1; i >= 0; i--) {
+      const d = e.dots[i];
+      if (now < d.next) continue;
+      d.next += 1000; d.left--;
+      const p = this.players.get(d.by);
+      if (p) this.damageEnemy(p, e, d.per, { noCrit: true, magic: true, kind: 'dot' });
+      else { e.hp -= Math.round(d.per); this.dirty = true; }
+      if (d.left <= 0) e.dots.splice(i, 1);
+      if (!this.enemies.has(e.id)) return;
+    }
+    if (m.regen && e.hp < e.maxHp) { e.hp = Math.min(e.maxHp, e.hp + m.regen * dt); }
+    if (e.stunUntil > now) return;
+
+    // objetivo
+    let target = e.aggro && this.players.get(e.aggro);
+    if (target && (cheb(e, target) > LEASH)) { target = null; e.aggro = null; }
+    if (!target) {
+      let best = Infinity;
+      for (const p of this.players.values()) {
+        const d = cheb(e, p);
+        if (d < best && d <= AGGRO && this.los(e, p)) { best = d; target = p; }
+      }
+      if (target) { e.aggro = target.user.id; this.wakePack(e, target.user.id); }
+    }
+    if (!target) {
+      if (now >= e.nextStep && cheb(e, e.home) > 2) { this.enemyStep(e, e.home, now, 2); }
+      return;
+    }
+    const dist = cheb(e, target);
+    const sees = dist <= 1 || this.los(e, target);
+
+    // especiales de los jefes
+    if (m.boss && now >= e.nextSpecial) { this.bossSpecial(e, target, now); return; }
+    if (m.summons && (m.ai === 'summoner') && now >= e.nextSummon) {
+      e.nextSummon = now + 8000;
+      this.summon(e, m.summons, 1, now);
+    }
+    // curanderos
+    if (m.ai === 'healer' && now >= e.nextHeal) {
+      const hurt = [...this.enemies.values()].find((o) => o !== e && o.hp < o.maxHp * 0.6 && cheb(o, e) <= 5);
+      if (hurt) {
+        e.nextHeal = now + 6000;
+        const amt = Math.round(hurt.maxHp * 0.25);
+        hurt.hp = Math.min(hurt.maxHp, hurt.hp + amt);
+        this.event({ e: 'eheal', id: hurt.id, by: e.id, amount: amt });
+        return;
+      }
+    }
+
+    if (m.range > 1) {
+      // a distancia: mantener entre 3 y su alcance, con línea de visión
+      if (dist <= 2 && now >= e.nextStep && this.enemyFlee(e, target, now)) return;
+      if ((dist > m.range || !sees) && now >= e.nextStep) { this.enemyStep(e, target, now); return; }
+      if (dist <= m.range && sees && now >= e.nextAttack) this.enemyShoot(e, target, now);
+      return;
+    }
+    // cuerpo a cuerpo
+    if (dist <= 1 && this.noCorner(e.x, e.y, Math.sign(target.x - e.x), Math.sign(target.y - e.y))) {
+      if (now >= e.nextAttack) {
+        e.nextAttack = now + m.atk * (0.9 + rnd() * 0.2);
+        e.dir = dirName(target.x - e.x, target.y - e.y);
+        this.event({ e: 'swing', id: e.id, t: target.user.id });
+        this.hurtPlayer(target, roll(m.dmg), { by: e.id, level: m.level, canDodge: true, magic: m.magic, kind: 'melee' });
+      }
+      return;
+    }
+    if (now >= e.nextStep) this.enemyStep(e, target, now);
+  }
+
+  stepMs(e, now) { return Math.round(e.m.ms * (e.slowUntil > now ? 2 : 1)); }
+
+  enemyStep(e, target, now, stopAt = 1) {
+    if (cheb(e, target) <= stopAt - 1) return false;
+    let move = null, moveD = cheb(e, target) - (stopAt > 1 ? 0 : 0);
     for (const [dx, dy] of DIRS) {
       const nx = e.x + dx, ny = e.y + dy;
-      if (!this.free(nx, ny)) continue;
-      if (dx && dy && !(DUNGEON.walkable(this.tile(e.x + dx, e.y)) && DUNGEON.walkable(this.tile(e.x, e.y + dy)))) continue;
+      if (!this.freeForEnemy(nx, ny) || !this.noCorner(e.x, e.y, dx, dy)) continue;
       const d = Math.max(Math.abs(nx - target.x), Math.abs(ny - target.y)) + (dx && dy ? 0.01 : 0);
       if (d < moveD) { moveD = d; move = [dx, dy]; }
     }
-    if (move) { e.x += move[0]; e.y += move[1]; e.dir = dirName(move[0], move[1]); this.dirty = true; }
+    if (!move) {
+      // atasco: camino de verdad (rodeando a los demás)
+      const path = this.path(e, target, (x, y) => this.freeForEnemy(x, y), 600);
+      const n = path[0];
+      if (n && this.freeForEnemy(n.x, n.y) && Math.max(Math.abs(n.x - e.x), Math.abs(n.y - e.y)) === 1) move = [n.x - e.x, n.y - e.y];
+    }
+    if (!move) { e.nextStep = now + 250; return false; }
+    e.sm = Math.round(this.stepMs(e, now) * (move[0] && move[1] ? 1.41 : 1));
+    e.nextStep = now + e.sm;
+    e.x += move[0]; e.y += move[1]; e.dir = dirName(move[0], move[1]);
+    this.dirty = true;
+    return true;
   }
 
+  enemyFlee(e, target, now) {
+    let best = null, bestD = cheb(e, target);
+    for (const [dx, dy] of DIRS) {
+      const nx = e.x + dx, ny = e.y + dy;
+      if (!this.freeForEnemy(nx, ny) || !this.noCorner(e.x, e.y, dx, dy)) continue;
+      const d = Math.max(Math.abs(nx - target.x), Math.abs(ny - target.y));
+      if (d > bestD && this.los({ x: nx, y: ny }, target)) { bestD = d; best = [dx, dy]; }
+    }
+    if (!best) return false;
+    e.sm = Math.round(this.stepMs(e, now) * 1.2);
+    e.nextStep = now + e.sm;
+    e.x += best[0]; e.y += best[1];
+    e.dir = dirName(target.x - e.x, target.y - e.y);
+    this.dirty = true;
+    return true;
+  }
+
+  // Proyectil hacia la casilla donde estaba el héroe: si se mueve a tiempo, lo esquiva
+  enemyShoot(e, target, now, o = {}) {
+    e.nextAttack = now + e.m.atk * (0.9 + rnd() * 0.2);
+    e.dir = dirName(target.x - e.x, target.y - e.y);
+    const to = o.to || { x: target.x, y: target.y };
+    const dist = Math.max(1, Math.hypot(to.x - e.x, to.y - e.y));
+    const dur = Math.round(dist * 1000 / PROJ_SPEED);
+    const id = 'p' + ++this.seq;
+    this.projectiles.push({ id, from: { x: e.x, y: e.y }, to, at: now + dur, by: e.id, dmg: roll(e.m.dmg) * (o.mult || 1), magic: e.m.magic, level: e.m.level, name: e.m.name, kind: e.m.proj || 'arrow' });
+    this.event({ e: 'proj', id, from: { x: e.x, y: e.y }, to, dur, kind: e.m.proj || 'arrow' });
+  }
+
+  tickProjectiles(now) {
+    for (let i = this.projectiles.length - 1; i >= 0; i--) {
+      const pr = this.projectiles[i];
+      if (now < pr.at) continue;
+      this.projectiles.splice(i, 1);
+      const p = this.playerAt(pr.to.x, pr.to.y);
+      if (p) this.hurtPlayer(p, pr.dmg, { by: pr.by, level: pr.level, magic: pr.magic, canDodge: true, kind: 'proj' });
+    }
+  }
+
+  // Ataques especiales de los jefes: avisan en el suelo y golpean al rato
+  bossSpecial(e, target, now) {
+    const m = e.m;
+    const enraged = e.hp < e.maxHp * 0.35;
+    e.nextSpecial = now + (enraged ? 4500 : 7000) * (0.85 + rnd() * 0.3);
+    e.nextAttack = Math.max(e.nextAttack, now + 1200);
+    const opts = m.specials.filter((s) => s !== 'summon' || [...this.enemies.values()].filter((o) => o.summoned).length < MAX_SUMMONS);
+    const s = opts[Math.floor(rnd() * opts.length)];
+    const cells = [];
+    if (s === 'slam' || s === 'nova') {
+      const r = s === 'slam' ? 2 : 3;
+      for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if ((dx || dy) && this.walkTile(e.x + dx, e.y + dy)) cells.push([e.x + dx, e.y + dy]);
+      this.tele(e, s, cells, s === 'slam' ? 1100 : 1300, roll(m.dmg) * (s === 'slam' ? 2.2 : 1.8), s === 'nova' || m.magic, now);
+    } else if (s === 'breath') {
+      const dx = target.x - e.x, dy = target.y - e.y;
+      for (let y = -5; y <= 5; y++) for (let x = -5; x <= 5; x++) {
+        const dist = Math.max(Math.abs(x), Math.abs(y));
+        if (dist < 1 || dist > 5 || !this.walkTile(e.x + x, e.y + y)) continue;
+        if ((dx * x + dy * y) / (Math.hypot(dx, dy) * Math.hypot(x, y) || 1) >= 0.6) cells.push([e.x + x, e.y + y]);
+      }
+      this.tele(e, s, cells, 1100, roll(m.dmg) * 2.5, true, now);
+    } else if (s === 'volley') {
+      for (const p of this.players.values()) {
+        if (cheb(p, e) > 9 || !this.los(e, p)) continue;
+        for (const [ox, oy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].slice(0, 3)) this.enemyShoot(e, p, now, { to: { x: p.x + ox, y: p.y + oy } });
+      }
+      e.nextAttack = now + 900;
+    } else if (s === 'summon') {
+      this.summon(e, m.summons, 2 + Math.floor(this.players.size / 2), now);
+    } else if (s === 'charge') {
+      let far = target;
+      for (const p of this.players.values()) if (cheb(p, e) > cheb(far, e) && this.los(e, p)) far = p;
+      const spot = DIRS.map(([dx, dy]) => ({ x: far.x + dx, y: far.y + dy })).filter((q) => this.freeForEnemy(q.x, q.y)).sort((a, b) => cheb(a, e) - cheb(b, e))[0];
+      if (spot) {
+        const from = { x: e.x, y: e.y };
+        e.x = spot.x; e.y = spot.y; e.sm = 150;
+        this.event({ e: 'fx', kind: 'dash', from, to: spot, id: e.id });
+        this.hurtPlayer(far, roll(m.dmg) * 1.5, { by: e.id, level: m.level, name: 'Embestida' });
+      }
+    }
+    this.event({ e: 'special', id: e.id, s, name: m.name });
+  }
+
+  tele(e, kind, cells, ms, dmg, magic, now) {
+    const id = 't' + ++this.seq;
+    this.teles.push({ id, by: e.id, cells, at: now + ms, dmg, magic, level: e.m.level, kind });
+    this.event({ e: 'tele', id, kind, cells, dur: ms });
+  }
+
+  tickTeles(now) {
+    for (let i = this.teles.length - 1; i >= 0; i--) {
+      const t = this.teles[i];
+      if (now < t.at) continue;
+      this.teles.splice(i, 1);
+      if (!this.enemies.has(t.by)) continue;
+      const set = new Set(t.cells.map(([x, y]) => x + ',' + y));
+      this.event({ e: 'boom', id: t.id, kind: t.kind });
+      for (const p of [...this.players.values()]) if (set.has(p.x + ',' + p.y)) this.hurtPlayer(p, t.dmg, { by: t.by, level: t.level, magic: t.magic, kind: t.kind });
+    }
+  }
+
+  summon(e, k, n, now) {
+    for (let i = 0; i < n; i++) {
+      const spot = DIRS.map(([dx, dy]) => ({ x: e.x + dx * 2, y: e.y + dy * 2 })).concat(DIRS.map(([dx, dy]) => ({ x: e.x + dx, y: e.y + dy }))).filter((s) => this.freeForEnemy(s.x, s.y) && this.los(e, s));
+      if (!spot.length) return;
+      const s = spot[Math.floor(rnd() * spot.length)];
+      const id = this.addEnemy(k, s.x, s.y, e.m.level, now, { summoned: true });
+      const ne = this.enemies.get(id);
+      ne.aggro = e.aggro; ne.nextAttack = now + 1000;
+      this.event({ e: 'summon', id, x: s.x, y: s.y });
+    }
+  }
+
+  // ---------- Estado para los clientes ----------
   privateState(p) {
     const c = p.user.combat;
-    return { hp: c.hp, maxHp: c.maxHp, slots: c.slots, uses: c.uses, freeCast: c.freeCast, raging: c.ragingUntil > Date.now(), ready: p.nextAction };
+    return { hp: Math.round(c.hp), maxHp: p.d.hp, en: Math.floor(c.en), maxEn: p.d.en, cds: c.cds, now: Date.now(), nextAttack: p.nextAttack, atkMs: p.d.atkMs, tbuffs: Object.keys(p.tbuffs), crit: p.critNext };
   }
 
-  sendPrivate(p) { this.hooks.send(p.user, { t: 'dme', ...this.privateState(p) }); }
+  sendPrivate(p) { p.privDirty = false; this.hooks.send(p.user, { t: 'dme', ...this.privateState(p) }); }
 
   snapshot() {
+    const now = Date.now();
     return {
-      players: [...this.players.values()].map((p) => ({ id: p.user.id, name: p.user.name, look: p.user.look, x: p.x, y: p.y, hp: p.user.combat.hp, maxHp: p.user.combat.maxHp, ac: p.d.ac, dir: p.dir, raging: p.user.combat.ragingUntil > Date.now() })),
-      enemies: [...this.enemies.values()].map((e) => ({ id: e.id, k: e.k, x: e.x, y: e.y, hp: e.hp, maxHp: e.maxHp, dir: e.dir, summoned: e.summoned || undefined })),
+      players: [...this.players.values()].map((p) => ({ id: p.user.id, name: p.user.name, look: p.user.look, x: p.x, y: p.y, sm: p.sm, hp: Math.round(p.user.combat.hp), maxHp: p.d.hp, dir: p.dir, lvl: p.d.level, buffs: Object.keys(p.tbuffs) })),
+      enemies: [...this.enemies.values()].map((e) => ({ id: e.id, k: e.k, x: e.x, y: e.y, sm: e.sm, hp: Math.max(0, Math.round(e.hp)), maxHp: e.maxHp, dir: e.dir, lvl: e.m.level, elite: e.m.elite || undefined, boss: e.m.boss || undefined, stun: e.stunUntil > now || undefined, mark: e.vulnUntil > now || undefined, summoned: e.summoned || undefined })),
       chests: [...this.chests.values()],
-      potions: [...this.potions.values()],
-      coins: [...this.coins.values()].map(({ id, x, y }) => ({ id, x, y })),
-      exit: this.exit,
+      loot: [...this.loot.values()].map((l) => ({ id: l.id, x: l.x, y: l.y, gold: l.gold ? 1 : undefined, cons: l.cons, r: l.item ? l.item.rarity : undefined, slot: l.item ? l.item.slot : undefined, name: l.item ? l.item.name : undefined })),
+      portal: this.portal,
       start: this.start,
     };
   }
 
-  // Envía el estado a todos los que están dentro (y a quien acaba de salir, para que vea su último evento)
   flush(extraUsers = []) {
     const msg = { t: 'dsnap', ...this.snapshot(), events: this.events };
     this.events = [];
     this.dirty = false;
-    for (const p of this.players.values()) { this.hooks.send(p.user, msg); }
-    for (const u of extraUsers) this.hooks.send(u, msg);
-    for (const p of this.players.values()) this.hooks.send(p.user, { t: 'dme', ...this.privateState(p) });
+    this.lastFlush = Date.now();
+    const data = JSON.stringify(msg);
+    for (const p of this.players.values()) this.hooks.send(p.user, data);
+    for (const u of extraUsers) this.hooks.send(u, data);
+    for (const p of this.players.values()) if (p.privDirty) this.sendPrivate(p);
+  }
+
+  // Resumen para la lista de partidas abiertas
+  summary() {
+    return { id: this.id, name: this.def.name, theme: this.def.theme, level: this.level, players: [...this.players.values()].map((p) => p.user.name), bossDead: this.bossDead };
   }
 }
 
-// Estado de combate que dura hasta volver a la taberna (descanso largo)
-function freshCombat(d) {
-  return { hp: d.hp, maxHp: d.hp, slots: d.casting ? d.casting.slots.slice() : [], uses: {}, freeCast: {}, ragingUntil: 0, relentlessUsed: false };
-}
-
-module.exports = { Instance, MONSTERS, freshCombat };
+module.exports = { Instance };

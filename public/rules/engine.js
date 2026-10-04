@@ -1,517 +1,741 @@
-// Motor de reglas (SRD 5.2): valida fichas de personaje, calcula sus valores y resuelve tiradas.
-// Se usa igual en el servidor (Node) y en el navegador. Los datos vienen de core.json (scripts/build-srd.js).
+// Reglas propias de Desks & Dungeons: 7 características, 7 clases (con multiclase de dos), objetos con
+// rarezas, conjuntos de clase, botín, monstruos escalados por nivel, habilidades, tiendas y bufos.
+// Lo usan el servidor (que manda) y el navegador (para mostrar fichas, objetos y precios).
 (function (root) {
   'use strict';
 
-  let D = null;          // core.json
-  let SPELLS = null;     // spells.json (indexado por id)
-  const ABIL = ['str', 'dex', 'con', 'int', 'wis', 'cha'];
+  const MAX_LEVEL = 50;
+  const BAG_SIZE = 36;
+  const POINTS_START = 5;      // puntos libres al crear el personaje
+  const POINTS_PER_LEVEL = 5;  // puntos por cada nivel ganado
 
-  function setData(core, spells) {
-    D = core;
-    D.byId = {};
-    for (const k of ['classes', 'species', 'backgrounds', 'feats', 'weapons', 'armor', 'skills']) {
-      D.byId[k] = Object.fromEntries(D[k].map((x) => [x.id, x]));
-    }
-    if (spells) SPELLS = Object.fromEntries(spells.map((s) => [s.id, s]));
+  // ======================================================================
+  //  Características
+  // ======================================================================
+  const STATS = [
+    { id: 'fue', name: 'Fuerza', abbr: 'FUE', desc: 'Daño con espadas, hachas, mazas y armas pesadas.' },
+    { id: 'des', name: 'Destreza', abbr: 'DES', desc: 'Daño con dagas, arcos y ballestas; puntería y esquiva.' },
+    { id: 'con', name: 'Constitución', abbr: 'CON', desc: 'Armadura natural: reduce el daño que recibes.' },
+    { id: 'vit', name: 'Vitalidad', abbr: 'VIT', desc: 'Puntos de vida y regeneración de vida.' },
+    { id: 'res', name: 'Resistencia', abbr: 'RES', desc: 'Energía para las habilidades, su recuperación y defensa contra la magia.' },
+    { id: 'car', name: 'Carisma', abbr: 'CAR', desc: 'Poder de hechizos y curaciones, y mejores precios en las tiendas.' },
+    { id: 'sue', name: 'Suerte', abbr: 'SUE', desc: 'Golpes críticos, esquiva y mejor botín.' },
+  ];
+  const STAT_IDS = STATS.map((s) => s.id);
+  const statName = (id) => (STATS.find((s) => s.id === id) || {}).name || id;
+
+  // Otros atributos que dan los objetos, conjuntos y bufos
+  const EXTRA = {
+    hp: { name: 'Vida', fmt: (v) => `+${v} de vida` },
+    en: { name: 'Energía', fmt: (v) => `+${v} de energía` },
+    armor: { name: 'Armadura', fmt: (v) => `+${v} de armadura` },
+    dmgPct: { name: 'Daño', fmt: (v) => `+${v}% de daño` },
+    crit: { name: 'Crítico', fmt: (v) => `+${v}% de probabilidad de crítico` },
+    critDmg: { name: 'Daño crítico', fmt: (v) => `+${v}% de daño crítico` },
+    speed: { name: 'Velocidad de ataque', fmt: (v) => `+${v}% de velocidad de ataque` },
+    move: { name: 'Velocidad', fmt: (v) => `+${v}% de velocidad al andar` },
+    lifesteal: { name: 'Robo de vida', fmt: (v) => `${v}% del daño te cura` },
+    mf: { name: 'Hallazgo', fmt: (v) => `+${v}% de probabilidad de botín` },
+    hpRegen: { name: 'Regeneración', fmt: (v) => `+${v} de vida por segundo` },
+    enRegen: { name: 'Recuperación', fmt: (v) => `+${v} de energía por segundo` },
+    cdr: { name: 'Enfriamiento', fmt: (v) => `-${v}% de espera de habilidades` },
+    dodge: { name: 'Esquiva', fmt: (v) => `+${v}% de esquiva` },
+    armorPct: { name: 'Armadura %', fmt: (v) => `+${v}% de armadura` },
+    hpPct: { name: 'Vida %', fmt: (v) => `+${v}% de vida máxima` },
+    healPct: { name: 'Curación', fmt: (v) => `+${v}% a tus curaciones` },
+  };
+  function fmtStat(k, v) {
+    if (STAT_IDS.includes(k)) return `+${v} ${statName(k)}`;
+    return EXTRA[k] ? EXTRA[k].fmt(v) : `${k} ${v}`;
   }
 
   // ======================================================================
-  //  Dados
+  //  Clases
   // ======================================================================
-  const defaultRng = (n) => 1 + Math.floor(Math.random() * n);
+  const ARMOR_TYPES = { tela: 'Tela', cuero: 'Cuero', malla: 'Malla', placas: 'Placas' };
 
-  // "2d6+3", "1d4+1", "3d8", "5" → total. crit duplica los dados.
-  function roll(expr, opts = {}) {
-    const rng = opts.rng || defaultRng;
-    let total = 0;
-    const rolls = [];
-    String(expr).replace(/\s+/g, '').split(/(?=[+-])/).forEach((term) => {
-      const sign = term[0] === '-' ? -1 : 1;
-      const t = term.replace(/^[+-]/, '');
-      const m = /^(\d*)d(\d+)$/.exec(t);
-      if (m) {
-        const n = (parseInt(m[1] || '1', 10)) * (opts.crit ? 2 : 1);
-        for (let i = 0; i < n; i++) { const r = rng(parseInt(m[2], 10)); rolls.push(r); total += sign * r; }
-      } else if (t) total += sign * (parseInt(t, 10) || 0);
-    });
-    return { total: Math.max(0, total), rolls };
-  }
-
-  function scaleDice(expr, times) {
-    if (times <= 1) return expr;
-    return String(expr).replace(/(\d*)d(\d+)/g, (_, n, d) => `${(parseInt(n || '1', 10)) * times}d${d}`);
-  }
+  const CLASSES = {
+    guerrero: {
+      name: 'Guerrero', icon: '⚔️', main: 'fue', hp: 1.15, base: { fue: 4, con: 3, vit: 3 }, favored: ['fue', 'vit', 'con'],
+      armor: ['tela', 'cuero', 'malla', 'placas'], weapons: ['espada', 'hacha', 'maza', 'espadon', 'martillo', 'lanza', 'escudo'],
+      start: [['arma', 'espada'], ['mano', 'escudo'], ['pecho', 'malla']],
+      desc: 'Lucha en primera línea con armas pesadas y armadura de placas.',
+    },
+    mago: {
+      name: 'Mago', icon: '🔮', main: 'car', hp: 0.9, base: { car: 5, res: 3, sue: 2 }, favored: ['car', 'res', 'sue'],
+      armor: ['tela'], weapons: ['baston', 'varita', 'orbe', 'daga'],
+      start: [['arma', 'baston'], ['pecho', 'tela']],
+      desc: 'Lanza hechizos a distancia: proyectiles, bolas de fuego y escarcha.',
+    },
+    explorador: {
+      name: 'Explorador', icon: '🏹', main: 'des', hp: 1, base: { des: 5, sue: 2, vit: 3 }, favored: ['des', 'sue', 'vit'],
+      armor: ['tela', 'cuero', 'malla'], weapons: ['arco', 'ballesta', 'daga', 'espada', 'lanza'],
+      start: [['arma', 'arco'], ['pecho', 'cuero']],
+      desc: 'Arquero certero que acribilla a los enemigos antes de que lleguen.',
+    },
+    picaro: {
+      name: 'Pícaro', icon: '🗡️', main: 'des', hp: 0.95, base: { des: 5, sue: 3, res: 2 }, favored: ['des', 'sue', 'res'],
+      armor: ['tela', 'cuero'], weapons: ['daga', 'espada', 'arco', 'ballesta'],
+      start: [['arma', 'daga'], ['pecho', 'cuero']],
+      desc: 'Rápido y letal: puñaladas, venenos y muchos críticos.',
+    },
+    paladin: {
+      name: 'Paladín', icon: '🛡️', main: 'fue', hp: 1.12, base: { fue: 3, car: 3, con: 2, vit: 2 }, favored: ['fue', 'car', 'con'],
+      armor: ['tela', 'cuero', 'malla', 'placas'], weapons: ['espada', 'maza', 'martillo', 'espadon', 'escudo'],
+      start: [['arma', 'maza'], ['mano', 'escudo'], ['pecho', 'malla']],
+      desc: 'Guerrero sagrado que golpea, protege al grupo y cura con las manos.',
+    },
+    brujo: {
+      name: 'Brujo', icon: '👁️', main: 'car', hp: 0.95, base: { car: 5, vit: 3, res: 2 }, favored: ['car', 'vit', 'res'],
+      armor: ['tela', 'cuero'], weapons: ['varita', 'baston', 'orbe', 'daga'],
+      start: [['arma', 'varita'], ['mano', 'orbe'], ['pecho', 'tela']],
+      desc: 'Pactó con algo oscuro: maldice, drena vida y desata el vacío.',
+    },
+    clerigo: {
+      name: 'Clérigo', icon: '✨', main: 'car', hp: 1.05, base: { car: 4, vit: 3, con: 3 }, favored: ['car', 'vit', 'con'],
+      armor: ['tela', 'cuero', 'malla'], weapons: ['maza', 'baston', 'escudo', 'orbe'],
+      start: [['arma', 'maza'], ['mano', 'escudo'], ['pecho', 'malla']],
+      desc: 'Sana al grupo y castiga a los no muertos con llamas sagradas.',
+    },
+  };
+  const CLASS_IDS = Object.keys(CLASSES);
+  // Clases de versiones anteriores del juego (reglas del SRD) → clase actual
+  const LEGACY_CLASS = {
+    fighter: 'guerrero', barbarian: 'guerrero', wizard: 'mago', sorcerer: 'mago', ranger: 'explorador', druid: 'clerigo',
+    rogue: 'picaro', monk: 'picaro', bard: 'picaro', paladin: 'paladin', warlock: 'brujo', cleric: 'clerigo',
+    maga: 'mago', elfo: 'explorador', bardo: 'picaro',
+  };
+  const classId = (c) => (CLASSES[c] ? c : LEGACY_CLASS[c] || null);
 
   // ======================================================================
-  //  Valores básicos
+  //  Habilidades (4 por clase; las de la segunda clase llegan más tarde)
   // ======================================================================
-  const mod = (score) => Math.floor((score - 10) / 2);
-  const fmt = (n) => (n >= 0 ? `+${n}` : `${n}`);
+  // kind: strike (golpe con el arma), bolt (hechizo a un objetivo), blast (área en un punto), nova (área alrededor),
+  // cone, line, heal, healAll, buff (grupo), dash, blink, aura, mark (debilita al objetivo)
+  const ABILITIES = {
+    guerrero: [
+      { id: 'golpe', lvl: 1, name: 'Golpe brutal', icon: '💥', cost: 10, cd: 4000, kind: 'strike', mult: 1.9, desc: 'Un golpe con el 190% del daño del arma.' },
+      { id: 'torbellino', lvl: 3, name: 'Torbellino', icon: '🌀', cost: 20, cd: 7000, kind: 'nova', radius: 1, mult: 1.3, weapon: true, desc: 'Gira y golpea a todos los enemigos de alrededor (130%).' },
+      { id: 'grito', lvl: 6, name: 'Grito de guerra', icon: '📣', cost: 25, cd: 25000, kind: 'buff', radius: 5, buff: { dmgPct: 30 }, dur: 10000, desc: 'El grupo hace un 30% más de daño durante 10 s.' },
+      { id: 'carga', lvl: 10, name: 'Carga', icon: '🐂', cost: 20, cd: 12000, kind: 'dash', range: 6, mult: 1.6, stun: 1500, desc: 'Embiste a un enemigo lejano (160%) y lo aturde 1,5 s.' },
+    ],
+    mago: [
+      { id: 'misiles', lvl: 1, name: 'Proyectiles mágicos', icon: '✨', cost: 8, cd: 2500, kind: 'bolt', range: 7, mult: 0.6, count: 3, desc: 'Tres proyectiles que nunca fallan (60% cada uno).' },
+      { id: 'bola', lvl: 3, name: 'Bola de fuego', icon: '🔥', cost: 20, cd: 6000, kind: 'blast', range: 7, radius: 1, mult: 1.7, fx: 'fire', desc: 'Explota en un área de 3×3 (170%).' },
+      { id: 'escarcha', lvl: 6, name: 'Nova de escarcha', icon: '❄️', cost: 25, cd: 12000, kind: 'nova', radius: 2, mult: 1.0, stun: 2000, fx: 'cold', desc: 'Congela a los enemigos cercanos 2 s (100%).' },
+      { id: 'meteoro', lvl: 10, name: 'Meteoro', icon: '☄️', cost: 45, cd: 18000, kind: 'blast', range: 8, radius: 2, mult: 3.0, fx: 'fire', desc: 'Cae un meteoro en un área de 5×5 (300%).' },
+    ],
+    explorador: [
+      { id: 'multiple', lvl: 1, name: 'Disparo múltiple', icon: '🎯', cost: 12, cd: 4000, kind: 'cone', range: 7, mult: 0.9, weapon: true, desc: 'Dispara en abanico a todos los enemigos de delante (90%).' },
+      { id: 'perforante', lvl: 3, name: 'Flecha perforante', icon: '➶', cost: 15, cd: 6000, kind: 'line', range: 8, mult: 1.6, weapon: true, desc: 'Atraviesa a todos los enemigos en línea (160%).' },
+      { id: 'lluvia', lvl: 6, name: 'Lluvia de flechas', icon: '🌧️', cost: 30, cd: 12000, kind: 'blast', range: 8, radius: 2, mult: 1.3, weapon: true, desc: 'Cubre de flechas un área de 5×5 (130%).' },
+      { id: 'marca', lvl: 10, name: 'Marca del cazador', icon: '🎯', cost: 15, cd: 15000, kind: 'mark', range: 8, vuln: 40, dur: 10000, desc: 'El objetivo recibe un 40% más de daño de todos durante 10 s.' },
+    ],
+    picaro: [
+      { id: 'punalada', lvl: 1, name: 'Puñalada', icon: '🗡️', cost: 12, cd: 4000, kind: 'strike', mult: 2.2, flank: 0.6, desc: 'Golpe del 220% (+60% si otro héroe está junto al objetivo).' },
+      { id: 'veneno', lvl: 3, name: 'Hoja envenenada', icon: '☠️', cost: 15, cd: 8000, kind: 'strike', mult: 1.0, dot: 1.8, dur: 6000, desc: 'Golpea y envenena: 180% más de daño en 6 s.' },
+      { id: 'sombra', lvl: 6, name: 'Paso sombrío', icon: '👤', cost: 20, cd: 10000, kind: 'blink', range: 6, desc: 'Aparece junto al objetivo; tu siguiente golpe es crítico.' },
+      { id: 'abanico', lvl: 10, name: 'Abanico de cuchillos', icon: '🔪', cost: 30, cd: 10000, kind: 'nova', radius: 2, mult: 1.5, weapon: true, desc: 'Lanza cuchillos a todos los enemigos cercanos (150%).' },
+    ],
+    paladin: [
+      { id: 'sagrado', lvl: 1, name: 'Golpe sagrado', icon: '🔆', cost: 12, cd: 5000, kind: 'strike', mult: 1.7, leech: 0.3, desc: 'Golpe del 170%; te cura el 30% del daño.' },
+      { id: 'manos', lvl: 3, name: 'Imposición de manos', icon: '🙌', cost: 25, cd: 20000, kind: 'heal', range: 3, pct: 0.35, desc: 'Cura a un aliado cercano (o a ti) el 35% de su vida.' },
+      { id: 'aura', lvl: 6, name: 'Aura de protección', icon: '🛡️', cost: 25, cd: 25000, kind: 'buff', radius: 5, buff: { dr: 25 }, dur: 10000, desc: 'El grupo recibe un 25% menos de daño durante 10 s.' },
+      { id: 'juicio', lvl: 10, name: 'Martillo del juicio', icon: '🔨', cost: 30, cd: 12000, kind: 'blast', range: 6, radius: 1, mult: 2.0, stun: 1500, fx: 'holy', weapon: true, desc: 'Un martillo de luz golpea un área de 3×3 y aturde (200%).' },
+    ],
+    brujo: [
+      { id: 'descarga', lvl: 1, name: 'Descarga sobrenatural', icon: '🟣', cost: 8, cd: 2500, kind: 'bolt', range: 8, mult: 0.85, count: 2, fx: 'void', desc: 'Dos rayos de energía oscura (85% cada uno).' },
+      { id: 'maldicion', lvl: 3, name: 'Maldición', icon: '🕯️', cost: 15, cd: 10000, kind: 'mark', range: 8, vuln: 25, dot: 2.0, dur: 8000, desc: 'El objetivo recibe un 25% más de daño y sufre 200% en 8 s.' },
+      { id: 'drenar', lvl: 6, name: 'Drenar vida', icon: '🩸', cost: 20, cd: 8000, kind: 'bolt', range: 7, mult: 1.8, leech: 0.5, fx: 'blood', desc: 'Roba vida: 180% de daño y te cura la mitad.' },
+      { id: 'hadar', lvl: 10, name: 'Hambre de Hadar', icon: '🌑', cost: 40, cd: 18000, kind: 'blast', range: 8, radius: 2, mult: 0.4, dot: 3.0, dur: 6000, slow: 6000, fx: 'void', desc: 'Oscuridad helada en 5×5: 300% en 6 s y los ralentiza.' },
+    ],
+    clerigo: [
+      { id: 'curar', lvl: 1, name: 'Curar heridas', icon: '💚', cost: 15, cd: 3000, kind: 'heal', range: 6, pct: 0.25, desc: 'Cura a un aliado (o a ti) el 25% de su vida, más tu poder.' },
+      { id: 'llama', lvl: 3, name: 'Llama sagrada', icon: '🔥', cost: 10, cd: 3000, kind: 'bolt', range: 7, mult: 1.6, fx: 'holy', undead: 0.5, desc: 'Fuego divino (160%; +50% contra no muertos).' },
+      { id: 'plegaria', lvl: 6, name: 'Plegaria de sanación', icon: '🙏', cost: 35, cd: 15000, kind: 'healAll', radius: 5, pct: 0.25, desc: 'Cura a todo el grupo cercano el 25% de su vida.' },
+      { id: 'espiritus', lvl: 10, name: 'Espíritus guardianes', icon: '👼', cost: 35, cd: 20000, kind: 'aura', radius: 2, mult: 0.6, dur: 8000, fx: 'holy', desc: 'Espíritus que dañan cada segundo a los enemigos cercanos (60%) durante 8 s.' },
+    ],
+  };
+  const SECOND_CLASS_LEVEL = { 1: 3, 3: 6, 6: 10, 10: 15 }; // nivel al que llega cada habilidad de la segunda clase
+  const ABILITY_BY_ID = {};
+  for (const [cls, list] of Object.entries(ABILITIES)) for (const a of list) ABILITY_BY_ID[a.id] = { ...a, cls };
+
+  // ======================================================================
+  //  Experiencia y puntos
+  // ======================================================================
+  const XP_TABLE = [0, 0]; // XP_TABLE[n] = experiencia total para llegar al nivel n
+  for (let L = 1; L < MAX_LEVEL; L++) XP_TABLE.push(XP_TABLE[L] + Math.round(60 * L + 40 * L * L));
   function levelFromXp(xp) {
-    let lv = 1;
-    while (lv < 20 && xp >= D.xpTable[lv]) lv++;
-    return lv;
+    let L = 1;
+    while (L < MAX_LEVEL && xp >= XP_TABLE[L + 1]) L++;
+    return L;
   }
-  const profForLevel = (lv) => 2 + Math.floor((lv - 1) / 4);
-  const cantripTier = (lv) => (lv >= 17 ? 4 : lv >= 11 ? 3 : lv >= 5 ? 2 : 1);
-  const tiles = (ft) => Math.max(1, Math.round(ft / 5));
+  const pointsTotal = (level) => POINTS_START + POINTS_PER_LEVEL * (level - 1);
+  const pointsSpent = (char) => STAT_IDS.reduce((t, k) => t + (char.alloc[k] || 0), 0);
+  const pointsFree = (char, level) => Math.max(0, pointsTotal(level) - pointsSpent(char));
+
+  // Características base: 5 en todo + las de la clase principal + la mitad de las de la segunda
+  function baseStats(char) {
+    const s = Object.fromEntries(STAT_IDS.map((k) => [k, 5]));
+    const c1 = CLASSES[char.cls], c2 = char.cls2 && CLASSES[char.cls2];
+    for (const [k, v] of Object.entries(c1.base)) s[k] += v;
+    if (c2) for (const [k, v] of Object.entries(c2.base)) s[k] += Math.floor(v / 2);
+    return s;
+  }
 
   // ======================================================================
-  //  Conjuros jugables en combate (revisados contra el texto del SRD 5.2)
+  //  Objetos
   // ======================================================================
-  // kind: attack (tirada de ataque), save (salvación), auto (impacta siempre), heal
-  // area: { shape: sphere|cone|line|emanation, size (pies) }  · range en pies (5 = toque)
-  const COMBAT_SPELLS = {
-    'fire-bolt':        { kind: 'attack', dice: '1d10', type: 'fire', range: 120 },
-    'ray-of-frost':     { kind: 'attack', dice: '1d8', type: 'cold', range: 60 },
-    'eldritch-blast':   { kind: 'attack', dice: '1d10', type: 'force', range: 120, beams: true },
-    'chill-touch':      { kind: 'attack', dice: '1d10', type: 'necrotic', range: 5 },
-    'shocking-grasp':   { kind: 'attack', dice: '1d8', type: 'lightning', range: 5 },
-    'poison-spray':     { kind: 'attack', dice: '1d12', type: 'poison', range: 30 },
-    'produce-flame':    { kind: 'attack', dice: '1d8', type: 'fire', range: 60 },
-    'starry-wisp':      { kind: 'attack', dice: '1d8', type: 'radiant', range: 60 },
-    'sorcerous-burst':  { kind: 'attack', dice: '1d8', type: 'fire', range: 120 },
-    'sacred-flame':     { kind: 'save', save: 'dex', dice: '1d8', type: 'radiant', range: 60 },
-    'vicious-mockery':  { kind: 'save', save: 'wis', dice: '1d6', type: 'psychic', range: 60 },
-    'acid-splash':      { kind: 'save', save: 'dex', dice: '1d6', type: 'acid', range: 60, area: { shape: 'sphere', size: 5 } },
-    'chromatic-orb':    { kind: 'attack', dice: '3d8', type: 'fire', range: 90 },
-    'magic-missile':    { kind: 'auto', dice: '1d4+1', type: 'force', range: 120, count: 3 },
-    'guiding-bolt':     { kind: 'attack', dice: '4d6', type: 'radiant', range: 120 },
-    'burning-hands':    { kind: 'save', save: 'dex', half: true, dice: '3d6', type: 'fire', range: 15, area: { shape: 'cone', size: 15 } },
-    'thunderwave':      { kind: 'save', save: 'con', half: true, dice: '2d8', type: 'thunder', range: 15, area: { shape: 'cone', size: 15 } },
-    'inflict-wounds':   { kind: 'save', save: 'con', half: true, dice: '2d10', type: 'necrotic', range: 5 },
-    'dissonant-whispers': { kind: 'save', save: 'wis', half: true, dice: '3d6', type: 'psychic', range: 60 },
-    'ray-of-sickness':  { kind: 'attack', dice: '2d8', type: 'poison', range: 60 },
-    'ice-knife':        { kind: 'attack', dice: '1d10', type: 'piercing', range: 60, then: { save: 'dex', dice: '2d6', type: 'cold', area: { shape: 'sphere', size: 5 } } },
-    'cure-wounds':      { kind: 'heal', dice: '2d8', addMod: true, range: 5 },
-    'healing-word':     { kind: 'heal', dice: '2d4', addMod: true, range: 60 },
-    'scorching-ray':    { kind: 'attack', dice: '2d6', type: 'fire', range: 120, count: 3 },
-    'shatter':          { kind: 'save', save: 'con', half: true, dice: '3d8', type: 'thunder', range: 60, area: { shape: 'sphere', size: 10 } },
-    'acid-arrow':       { kind: 'attack', dice: '4d4', type: 'acid', range: 90, missHalf: true },
-    'moonbeam':         { kind: 'save', save: 'con', half: true, dice: '2d10', type: 'radiant', range: 120, area: { shape: 'sphere', size: 5 } },
-    'spiritual-weapon': { kind: 'attack', dice: '1d8', addMod: true, type: 'force', range: 60 },
-    'mind-spike':       { kind: 'save', save: 'wis', half: true, dice: '3d8', type: 'psychic', range: 120 },
-    'prayer-of-healing': { kind: 'heal', dice: '2d8', range: 30, multi: 5 },
-    'fireball':         { kind: 'save', save: 'dex', half: true, dice: '8d6', type: 'fire', range: 150, area: { shape: 'sphere', size: 20 } },
-    'lightning-bolt':   { kind: 'save', save: 'dex', half: true, dice: '8d6', type: 'lightning', range: 100, area: { shape: 'line', size: 100 } },
-    'mass-healing-word': { kind: 'heal', dice: '2d4', addMod: true, range: 60, multi: 6 },
-    'vampiric-touch':   { kind: 'attack', dice: '3d6', type: 'necrotic', range: 5, drain: true },
-    'blight':           { kind: 'save', save: 'con', half: true, dice: '8d8', type: 'necrotic', range: 30 },
-    'ice-storm':        { kind: 'save', save: 'dex', half: true, dice: '2d10+4d6', type: 'cold', range: 300, area: { shape: 'sphere', size: 20 } },
-    'cone-of-cold':     { kind: 'save', save: 'con', half: true, dice: '8d8', type: 'cold', range: 60, area: { shape: 'cone', size: 60 } },
-    'flame-strike':     { kind: 'save', save: 'dex', half: true, dice: '5d6+5d6', type: 'fire', range: 60, area: { shape: 'sphere', size: 10 } },
-    'mass-cure-wounds': { kind: 'heal', dice: '5d8', addMod: true, range: 60, multi: 6 },
+  const SLOTS = {
+    arma: { name: 'Arma', icon: '⚔️' },
+    mano: { name: 'Mano izquierda', icon: '🛡️' },
+    casco: { name: 'Cabeza', icon: '⛑️' },
+    pecho: { name: 'Pecho', icon: '🥋' },
+    guantes: { name: 'Manos', icon: '🧤' },
+    botas: { name: 'Pies', icon: '🥾' },
+    amuleto: { name: 'Amuleto', icon: '📿' },
+    anillo: { name: 'Anillo', icon: '💍' },
+  };
+  const SLOT_IDS = Object.keys(SLOTS);
+
+  // g: género del nombre (m, f, mp, fp) para concordar los adjetivos
+  const WEAPONS = {
+    espada:   { name: 'Espada', g: 'f', stat: 'fue', dmg: [4, 8], ms: 900, hands: 1, range: 1, kind: 'melee' },
+    daga:     { name: 'Daga', g: 'f', stat: 'des', dmg: [3, 6], ms: 650, hands: 1, range: 1, kind: 'melee' },
+    hacha:    { name: 'Hacha', g: 'f', stat: 'fue', dmg: [5, 10], ms: 1050, hands: 1, range: 1, kind: 'melee' },
+    maza:     { name: 'Maza', g: 'f', stat: 'fue', dmg: [5, 9], ms: 1000, hands: 1, range: 1, kind: 'melee' },
+    espadon:  { name: 'Mandoble', g: 'm', stat: 'fue', dmg: [10, 17], ms: 1350, hands: 2, range: 1, kind: 'melee' },
+    martillo: { name: 'Martillo de guerra', g: 'm', stat: 'fue', dmg: [11, 16], ms: 1400, hands: 2, range: 1, kind: 'melee' },
+    lanza:    { name: 'Lanza', g: 'f', stat: 'fue', dmg: [7, 12], ms: 1150, hands: 2, range: 2, kind: 'melee' },
+    arco:     { name: 'Arco', g: 'm', stat: 'des', dmg: [4, 9], ms: 1000, hands: 2, range: 7, kind: 'ranged' },
+    ballesta: { name: 'Ballesta', g: 'f', stat: 'des', dmg: [7, 13], ms: 1450, hands: 2, range: 8, kind: 'ranged' },
+    baston:   { name: 'Bastón', g: 'm', stat: 'car', dmg: [5, 10], ms: 1100, hands: 2, range: 6, kind: 'magic' },
+    varita:   { name: 'Varita', g: 'f', stat: 'car', dmg: [3, 7], ms: 800, hands: 1, range: 6, kind: 'magic' },
+  };
+  const FISTS = { name: 'Puños', stat: 'fue', dmg: [1, 3], ms: 800, hands: 1, range: 1, kind: 'melee' };
+  const OFFHANDS = {
+    escudo: { name: 'Escudo', g: 'm', armor: 6 },
+    orbe:   { name: 'Orbe', g: 'm', car: true },
+  };
+  const ARMOR_BASE = { tela: 2, cuero: 4, malla: 6, placas: 8 };
+  const ARMOR_SLOT = { casco: 0.6, pecho: 1.4, guantes: 0.4, botas: 0.5 };
+  const ARMOR_NAMES = {
+    casco:   { tela: ['Capucha', 'f'], cuero: ['Gorro de cuero', 'm'], malla: ['Almófar', 'm'], placas: ['Yelmo', 'm'] },
+    pecho:   { tela: ['Túnica', 'f'], cuero: ['Jubón de cuero', 'm'], malla: ['Cota de malla', 'f'], placas: ['Coraza', 'f'] },
+    guantes: { tela: ['Guantes de tela', 'mp'], cuero: ['Guantes de cuero', 'mp'], malla: ['Guanteletes de malla', 'mp'], placas: ['Guanteletes', 'mp'] },
+    botas:   { tela: ['Sandalias', 'fp'], cuero: ['Botas de cuero', 'fp'], malla: ['Botas de malla', 'fp'], placas: ['Grebas', 'fp'] },
+  };
+  const JEWELS = { amuleto: { name: 'Amuleto', g: 'm' }, anillo: { name: 'Anillo', g: 'm' } };
+
+  // Las cuatro rarezas del botín: cuanto menos probable, mejor. Los objetos de conjunto sólo los sueltan los jefes.
+  const RARITIES = {
+    comun:      { name: 'Común', chance: 0.50, color: '#d8d4c8', affixes: [0, 1], mult: 1, value: 1 },
+    raro:       { name: 'Raro', chance: 0.20, color: '#4aa0ff', affixes: [2, 2], mult: 1.15, value: 3 },
+    epico:      { name: 'Épico', chance: 0.05, color: '#c060ff', affixes: [3, 3], mult: 1.32, value: 8 },
+    legendario: { name: 'Legendario', chance: 0.01, color: '#ff9a2a', affixes: [4, 4], mult: 1.55, value: 25 },
+    conjunto:   { name: 'Conjunto', chance: 0, color: '#3ee67a', affixes: [3, 3], mult: 1.5, value: 30 },
+  };
+  const RARITY_ORDER = ['comun', 'raro', 'epico', 'legendario', 'conjunto'];
+
+  // Afijos: valor máximo según el nivel del objeto y dónde pueden salir
+  const AFFIXES = {
+    fue: { v: (l) => 1 + l * 0.6, adj: ['brutal', 'brutal', 'brutales', 'brutales'], suf: 'del Toro' },
+    des: { v: (l) => 1 + l * 0.6, adj: ['ágil', 'ágil', 'ágiles', 'ágiles'], suf: 'del Zorro' },
+    con: { v: (l) => 1 + l * 0.6, adj: ['robusto', 'robusta', 'robustos', 'robustas'], suf: 'de la Montaña' },
+    vit: { v: (l) => 1 + l * 0.6, adj: ['vigoroso', 'vigorosa', 'vigorosos', 'vigorosas'], suf: 'del Oso' },
+    res: { v: (l) => 1 + l * 0.6, adj: ['incansable', 'incansable', 'incansables', 'incansables'], suf: 'del Lobo' },
+    car: { v: (l) => 1 + l * 0.6, adj: ['arcano', 'arcana', 'arcanos', 'arcanas'], suf: 'del Sabio' },
+    sue: { v: (l) => 1 + l * 0.6, adj: ['afortunado', 'afortunada', 'afortunados', 'afortunadas'], suf: 'del Trébol' },
+    hp: { v: (l) => 6 + l * 5, adj: ['vital', 'vital', 'vitales', 'vitales'], suf: 'de la Vida' },
+    armor: { v: (l) => 2 + l * 1.5, adj: ['reforzado', 'reforzada', 'reforzados', 'reforzadas'], suf: 'del Bastión' },
+    dmgPct: { v: (l) => Math.min(30, 4 + l * 0.6), adj: ['cruel', 'cruel', 'crueles', 'crueles'], suf: 'de la Matanza' },
+    crit: { v: (l) => Math.min(8, 1 + l * 0.15), adj: ['letal', 'letal', 'letales', 'letales'], suf: 'del Halcón', dec: true },
+    critDmg: { v: (l) => Math.min(50, 8 + l), adj: ['despiadado', 'despiadada', 'despiadados', 'despiadadas'], suf: 'de la Carnicería' },
+    speed: { v: (l) => Math.min(15, 3 + l * 0.25), adj: ['veloz', 'veloz', 'veloces', 'veloces'], suf: 'del Rayo' },
+    move: { v: (l) => Math.min(12, 3 + l * 0.2), adj: ['ligero', 'ligera', 'ligeros', 'ligeras'], suf: 'del Viento' },
+    lifesteal: { v: (l) => Math.min(6, 1 + l * 0.1), adj: ['vampírico', 'vampírica', 'vampíricos', 'vampíricas'], suf: 'del Vampiro', dec: true },
+    mf: { v: (l) => Math.min(40, 5 + l), adj: ['reluciente', 'reluciente', 'relucientes', 'relucientes'], suf: 'del Buscador' },
+    hpRegen: { v: (l) => 0.5 + l * 0.2, adj: ['regenerador', 'regeneradora', 'regeneradores', 'regeneradoras'], suf: 'del Trol', dec: true },
+    enRegen: { v: (l) => 0.5 + l * 0.15, adj: ['místico', 'mística', 'místicos', 'místicas'], suf: 'del Manantial', dec: true },
+    cdr: { v: (l) => Math.min(10, 2 + l * 0.2), adj: ['sereno', 'serena', 'serenos', 'serenas'], suf: 'del Monje' },
+  };
+  const STAT_AFFIXES = STAT_IDS;
+  const SLOT_AFFIXES = {
+    arma: [...STAT_AFFIXES, 'dmgPct', 'crit', 'critDmg', 'speed', 'lifesteal'],
+    mano: [...STAT_AFFIXES, 'hp', 'armor', 'crit', 'cdr', 'enRegen'],
+    casco: [...STAT_AFFIXES, 'hp', 'armor', 'cdr', 'mf'],
+    pecho: [...STAT_AFFIXES, 'hp', 'armor', 'hpRegen', 'enRegen'],
+    guantes: [...STAT_AFFIXES, 'armor', 'crit', 'speed', 'critDmg'],
+    botas: [...STAT_AFFIXES, 'hp', 'armor', 'move', 'mf'],
+    amuleto: [...STAT_AFFIXES, 'hp', 'dmgPct', 'crit', 'critDmg', 'lifesteal', 'mf', 'cdr', 'enRegen', 'hpRegen'],
+    anillo: [...STAT_AFFIXES, 'hp', 'dmgPct', 'crit', 'critDmg', 'speed', 'lifesteal', 'mf', 'enRegen'],
   };
 
-  // Trucos que dan algunos linajes (se lanzan con la característica más alta entre INT, SAB y CAR)
-  const INNATE = {
-    'fiendish-legacy-abyssal': 'poison-spray', 'fiendish-legacy-chthonic': 'chill-touch', 'fiendish-legacy-infernal': 'fire-bolt',
-    'elven-lineage-drow': 'dancing-lights', 'elven-lineage-high-elf': 'prestidigitation', 'elven-lineage-wood-elf': 'druidcraft',
-    'gnomish-lineage-forest-gnome': 'minor-illusion',
+  const LEGENDARY_NAMES = {
+    arma: ['Filo del Alba', 'Llanto de la Viuda', 'Segadora de Almas', 'Colmillo de Medianoche', 'Juramento Roto', 'Ira del Dragón', 'Susurro del Vacío', 'Lamento del Rey', 'Aguijón de Ceniza', 'Furia Carmesí'],
+    mano: ['Bastión Inquebrantable', 'Esfera del Eclipse', 'Muro de los Mártires', 'Corazón de Tormenta'],
+    casco: ['Corona del Rey Hueco', 'Mirada del Basilisco', 'Yelmo de los Mil Ecos'],
+    pecho: ['Égida del Último Rey', 'Piel del Leviatán', 'Manto de la Noche Eterna', 'Vestigio del Titán'],
+    guantes: ['Garras del Wendigo', 'Manos del Verdugo', 'Toque de la Plaga'],
+    botas: ['Pasos del Espectro', 'Andar del Peregrino', 'Huella de Ceniza'],
+    amuleto: ['Corazón de Brasas', 'Lágrima de la Luna', 'Sello del Abismo'],
+    anillo: ['Estrella del Peregrino', 'Anillo del Ahorcado', 'Ojo del Cuervo'],
   };
-  const DRAGON_DAMAGE = { black: 'acid', blue: 'lightning', brass: 'fire', bronze: 'lightning', copper: 'acid', gold: 'fire', green: 'poison', red: 'fire', silver: 'cold', white: 'cold' };
-  const MAGIC_INITIATE_ABILITY = { cleric: 'wis', druid: 'wis', wizard: 'int' };
 
-  // ======================================================================
-  //  Validación de una ficha (lo que elige el jugador)
-  // ======================================================================
-  function spellListFor(cls, level) {
-    return Object.values(SPELLS || {}).filter((s) => s.classes.includes(cls) && s.level === level);
-  }
+  // Conjuntos de clase: equipo muy fuerte que sólo sueltan los jefes de las mazmorras
+  const SETS = {
+    guerrero: { name: 'Furia del Coloso', pieces: [['arma', 'espadon', 'Mandoble del Coloso'], ['casco', 'placas', 'Yelmo del Coloso'], ['pecho', 'placas', 'Coraza del Coloso'], ['guantes', 'placas', 'Puños del Coloso']], b2: { fue: 10, hp: 60 }, b4: { dmgPct: 25, armorPct: 20 } },
+    mago: { name: 'Tejido del Archimago', pieces: [['arma', 'baston', 'Bastón del Archimago'], ['casco', 'tela', 'Capucha del Archimago'], ['pecho', 'tela', 'Túnica del Archimago'], ['botas', 'tela', 'Sandalias del Archimago']], b2: { car: 10, en: 40 }, b4: { dmgPct: 25, cdr: 20 } },
+    explorador: { name: 'Sendero del Cazador', pieces: [['arma', 'arco', 'Arco del Cazador'], ['casco', 'cuero', 'Gorro del Cazador'], ['pecho', 'cuero', 'Jubón del Cazador'], ['botas', 'cuero', 'Botas del Cazador']], b2: { des: 10, crit: 5 }, b4: { dmgPct: 20, speed: 15 } },
+    picaro: { name: 'Sombra de Medianoche', pieces: [['arma', 'daga', 'Daga de Medianoche'], ['casco', 'cuero', 'Capucha de Medianoche'], ['pecho', 'cuero', 'Jubón de Medianoche'], ['guantes', 'cuero', 'Guantes de Medianoche']], b2: { des: 10, crit: 6 }, b4: { critDmg: 60, dodge: 8 } },
+    paladin: { name: 'Juramento del Alba', pieces: [['arma', 'maza', 'Maza del Alba'], ['mano', 'escudo', 'Escudo del Alba'], ['pecho', 'placas', 'Coraza del Alba'], ['casco', 'placas', 'Yelmo del Alba']], b2: { fue: 6, car: 6 }, b4: { armorPct: 30, lifesteal: 5 } },
+    brujo: { name: 'Pacto del Abismo', pieces: [['arma', 'varita', 'Varita del Abismo'], ['mano', 'orbe', 'Orbe del Abismo'], ['pecho', 'tela', 'Túnica del Abismo'], ['casco', 'tela', 'Capucha del Abismo']], b2: { car: 10, lifesteal: 3 }, b4: { dmgPct: 30, hp: 80 } },
+    clerigo: { name: 'Luz de la Catedral', pieces: [['arma', 'maza', 'Maza de la Catedral'], ['mano', 'escudo', 'Escudo de la Catedral'], ['pecho', 'malla', 'Cota de la Catedral'], ['casco', 'malla', 'Almófar de la Catedral']], b2: { car: 8, vit: 6 }, b4: { healPct: 40, armorPct: 20 } },
+  };
 
-  function maxSpellLevel(c, lv) {
-    const slots = c.levels[lv - 1].slots;
-    let m = 0;
-    slots.forEach((n, i) => { if (n > 0) m = i + 1; });
-    return m;
-  }
+  // ---------- Generación ----------
+  const pick = (rng, arr) => arr[Math.floor(rng() * arr.length)];
+  const round1 = (v) => Math.round(v * 10) / 10;
+  const uid = (rng) => Array.from({ length: 10 }, () => Math.floor(rng() * 36).toString(36)).join('');
 
-  function validate(input, xp = 0) {
-    const errors = [];
-    const s = input || {};
-    const c = D.byId.classes[s.class];
-    const sp = D.byId.species[s.species];
-    const bg = D.byId.backgrounds[s.background];
-    if (!c) errors.push('Elige una clase.');
-    if (!sp) errors.push('Elige una especie.');
-    if (!bg) errors.push('Elige un trasfondo.');
-    if (errors.length) return { ok: false, errors };
-    const lv = levelFromXp(xp);
-    const out = {
-      v: 1,
-      name: String(s.name || '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 24) || 'Aventurero',
-      class: c.id, species: sp.id, background: bg.id,
-      subspecies: null, method: ['standard', 'pointbuy', 'roll'].includes(s.method) ? s.method : 'standard',
-      base: {}, bonus: {}, skills: [], expertise: [], speciesSkill: null, humanFeat: null, featChoice: {},
-      fightingStyle: null, armor: null, shield: false, weapons: [], cantrips: [], spells: [],
-      alignment: D.alignments.some((a) => a.id === s.alignment) ? s.alignment : 'neutral',
-      look: { skin: Number.isInteger(s.look && s.look.skin) ? s.look.skin : 0, hair: Number.isInteger(s.look && s.look.hair) ? s.look.hair : 0 },
-    };
-
-    // Linaje / ancestro
-    if (sp.subspecies.length) {
-      const sub = sp.subspecies.find((x) => x.id === s.subspecies);
-      if (!sub) errors.push(`Elige ${sp.subspecies[0].name.split(':')[0].toLowerCase()}.`);
-      else out.subspecies = sub.id;
+  function rollRarity(rng, mf = 0) {
+    const k = 1 + mf / 100;
+    const r = rng();
+    let acc = 0;
+    for (const id of ['legendario', 'epico', 'raro', 'comun']) {
+      acc += Math.min(id === 'comun' ? RARITIES[id].chance : 0.6, RARITIES[id].chance * (id === 'comun' ? 1 : k));
+      if (r < acc) return id;
     }
+    return null;
+  }
 
-    // Puntuaciones de característica
-    const base = {};
-    for (const a of ABIL) base[a] = Number(s.base && s.base[a]);
-    if (out.method === 'standard') {
-      const got = ABIL.map((a) => base[a]).sort((x, y) => y - x).join(',');
-      if (got !== D.standardArray.join(',')) errors.push('Con la serie estándar debes usar 15, 14, 13, 12, 10 y 8 una vez cada uno.');
-    } else if (out.method === 'pointbuy') {
-      let cost = 0;
-      for (const a of ABIL) {
-        if (!(base[a] in D.pointBuy.cost)) { errors.push('Con la compra de puntos cada característica va de 8 a 15.'); break; }
-        cost += D.pointBuy.cost[base[a]];
+  // Tipos de objeto que puede llevar alguien con estas clases (para el botín "inteligente")
+  function allowedBases(classes) {
+    const weapons = new Set(), armor = new Set();
+    for (const c of classes) { if (!CLASSES[c]) continue; for (const w of CLASSES[c].weapons) weapons.add(w); for (const a of CLASSES[c].armor) armor.add(a); }
+    return { weapons: [...weapons], armor: [...armor] };
+  }
+
+  // o: { ilvl, rarity, slot?, base?, classes? (para quién es), set? (clase del conjunto), piece? }
+  function makeItem(rng, o) {
+    const ilvl = Math.max(1, Math.min(MAX_LEVEL + 5, o.ilvl | 0 || 1));
+    const rarity = o.rarity || 'comun';
+    const R = RARITIES[rarity];
+    const classes = (o.classes || []).filter((c) => CLASSES[c]);
+    const fit = classes.length ? allowedBases(classes) : null;
+    const it = { id: uid(rng), rarity, ilvl, req: ilvl, stats: {} };
+    let slot = o.slot, base = o.base;
+    if (o.set) {
+      const piece = o.piece || pick(rng, SETS[o.set].pieces);
+      [slot, base] = piece;
+      it.name = piece[2];
+      it.set = o.set;
+    }
+    if (!slot) {
+      const r = rng();
+      slot = r < 0.34 ? 'arma' : r < 0.44 ? 'mano' : r < 0.58 ? 'pecho' : r < 0.68 ? 'casco' : r < 0.77 ? 'guantes' : r < 0.86 ? 'botas' : r < 0.93 ? 'amuleto' : 'anillo';
+    }
+    it.slot = slot;
+    let noun, g;
+    if (slot === 'arma') {
+      if (!base) base = pick(rng, fit && rng() < 0.75 ? fit.weapons.filter((w) => WEAPONS[w]) : Object.keys(WEAPONS));
+      const W = WEAPONS[base];
+      const k = (1 + 0.2 * (ilvl - 1)) * R.mult;
+      it.dmg = [Math.max(1, Math.round(W.dmg[0] * k)), Math.max(2, Math.round(W.dmg[1] * k))];
+      noun = W.name; g = W.g;
+    } else if (slot === 'mano') {
+      if (!base) {
+        const opts = fit && rng() < 0.75 ? fit.weapons.filter((w) => OFFHANDS[w]) : Object.keys(OFFHANDS);
+        base = pick(rng, opts.length ? opts : Object.keys(OFFHANDS));
       }
-      if (cost > D.pointBuy.budget) errors.push(`Has gastado ${cost} puntos y el máximo es ${D.pointBuy.budget}.`);
+      const O = OFFHANDS[base];
+      if (O.armor) { it.armor = Math.round(O.armor * (1 + 0.18 * (ilvl - 1)) * R.mult); it.block = Math.round(8 + Math.min(12, ilvl * 0.3)); }
+      if (O.car) it.stats.car = Math.round((2 + ilvl * 0.4) * R.mult);
+      noun = O.name; g = O.g;
+    } else if (ARMOR_SLOT[slot]) {
+      if (!base) base = pick(rng, fit && rng() < 0.75 ? fit.armor : Object.keys(ARMOR_BASE));
+      it.type = base;
+      it.armor = Math.max(1, Math.round(ARMOR_BASE[base] * ARMOR_SLOT[slot] * (1 + 0.18 * (ilvl - 1)) * R.mult));
+      [noun, g] = ARMOR_NAMES[slot][base];
     } else {
-      for (const a of ABIL) if (!Number.isInteger(base[a]) || base[a] < 3 || base[a] > 18) { errors.push('Las tiradas deben estar entre 3 y 18.'); break; }
+      base = slot;
+      noun = JEWELS[slot].name; g = JEWELS[slot].g;
     }
-    out.base = base;
+    it.base = base;
 
-    // Aumentos del trasfondo: +2/+1 o +1/+1/+1 entre sus tres características
-    const bonus = {};
-    let total = 0;
-    for (const [a, v] of Object.entries(s.bonus || {})) {
-      const n = Number(v);
-      if (!n) continue;
-      if (!bg.abilities.includes(a) || ![1, 2].includes(n)) { errors.push('Los aumentos del trasfondo sólo pueden ir a sus tres características.'); break; }
-      bonus[a] = n; total += n;
+    // Afijos: los del conjunto salen de las características de la clase; el resto, al azar (a veces de quien lo encuentra)
+    const n = R.affixes[0] + Math.floor(rng() * (R.affixes[1] - R.affixes[0] + 1));
+    const pool = o.set ? SLOT_AFFIXES[slot].filter((k) => CLASSES[o.set].favored.includes(k) || ['hp', 'dmgPct', 'crit', 'critDmg', 'armor', 'cdr'].includes(k)) : SLOT_AFFIXES[slot].slice();
+    const favored = o.set ? CLASSES[o.set].favored : classes.length && rng() < 0.6 ? CLASSES[pick(rng, classes)].favored : null;
+    const chosen = [];
+    if (o.set) chosen.push(CLASSES[o.set].main);
+    while (chosen.length < n + (o.set ? 1 : 0) && pool.length) {
+      let k;
+      if (favored && rng() < 0.55) { const f = favored.filter((x) => pool.includes(x) && !chosen.includes(x)); k = f.length ? pick(rng, f) : null; }
+      if (!k) { const rest = pool.filter((x) => !chosen.includes(x)); if (!rest.length) break; k = pick(rng, rest); }
+      chosen.push(k);
     }
-    const vals = Object.values(bonus).sort().join(',');
-    if (total !== 3 || !(vals === '1,2' || vals === '1,1,1')) errors.push('Reparte +2 y +1, o +1 a tres características, entre las del trasfondo.');
-    out.bonus = bonus;
-
-    // Habilidades
-    const fixed = new Set(bg.skills);
-    const chosen = [...new Set((s.skills || []).filter((k) => c.skillChoices.from.includes(k) && !fixed.has(k)))];
-    if (chosen.length !== c.skillChoices.count) errors.push(`Elige ${c.skillChoices.count} habilidades de clase (distintas de las del trasfondo).`);
-    out.skills = chosen.slice(0, c.skillChoices.count);
-    if (sp.id === 'elf') {
-      if (!['insight', 'perception', 'survival'].includes(s.speciesSkill)) errors.push('Sentidos agudos: elige Perspicacia, Percepción o Supervivencia.');
-      else out.speciesSkill = s.speciesSkill;
-    }
-    if (sp.id === 'human') {
-      if (!D.byId.skills[s.speciesSkill]) errors.push('Humano habilidoso: elige una habilidad.');
-      else out.speciesSkill = s.speciesSkill;
-      const f = D.byId.feats[s.humanFeat];
-      if (!f || f.type !== 'origin') errors.push('Humano versátil: elige una dote de origen.');
-      else out.humanFeat = f.id;
-    }
-    const allSkills = new Set([...bg.skills, ...out.skills, ...(out.speciesSkill ? [out.speciesSkill] : [])]);
-
-    // Dotes con elecciones
-    const feats = [bg.feat.id, out.humanFeat].filter(Boolean);
-    if (feats.includes('skilled')) {
-      const extra = [...new Set((s.featChoice && s.featChoice.skilled) || [])].filter((k) => D.byId.skills[k] && !allSkills.has(k));
-      if (extra.length !== 3) errors.push('Habilidoso: elige tres habilidades más.');
-      out.featChoice.skilled = extra.slice(0, 3);
-      extra.forEach((k) => allSkills.add(k));
-    }
-    if (feats.includes('magic-initiate')) {
-      const list = (bg.feat.id === 'magic-initiate' && bg.feat.note ? bg.feat.note : (s.featChoice && s.featChoice.miClass) || 'wizard').toLowerCase();
-      const cls = ['cleric', 'druid', 'wizard'].includes(list) ? list : 'wizard';
-      const mi = (s.featChoice && s.featChoice.magicInitiate) || {};
-      const can = [...new Set(mi.cantrips || [])].filter((id) => SPELLS[id] && SPELLS[id].level === 0 && SPELLS[id].classes.includes(cls));
-      const one = SPELLS[mi.spell] && SPELLS[mi.spell].level === 1 && SPELLS[mi.spell].classes.includes(cls) ? mi.spell : null;
-      if (can.length !== 2 || !one) errors.push(`Iniciado en la magia (${D.byId.classes[cls].name}): elige 2 trucos y 1 conjuro de nivel 1.`);
-      out.featChoice.magicInitiate = { cls, cantrips: can.slice(0, 2), spell: one };
+    for (const k of chosen) {
+      const A = AFFIXES[k];
+      const max = A.v(ilvl) * R.mult;
+      let v = max * (0.6 + rng() * 0.4);
+      v = A.dec ? round1(v) : Math.max(1, Math.round(v));
+      it.stats[k] = (it.stats[k] || 0) + v;
     }
 
-    // Pericia del pícaro (nivel 1): dos habilidades en las que sea competente
-    if (c.id === 'rogue') {
-      const ex = [...new Set(s.expertise || [])].filter((k) => allSkills.has(k));
-      if (ex.length !== 2) errors.push('Pericia: elige dos de tus habilidades.');
-      out.expertise = ex.slice(0, 2);
+    // Nombre
+    if (!it.name) {
+      const gi = { m: 0, f: 1, mp: 2, fp: 3 }[g] || 0;
+      if (rarity === 'legendario') it.name = pick(rng, LEGENDARY_NAMES[slot]);
+      else if (rarity === 'comun' || !chosen.length) it.name = noun;
+      else {
+        const [a1, a2] = chosen;
+        it.name = `${noun} ${AFFIXES[a1].adj[gi]}`;
+        if (rarity === 'epico' && a2) it.name += ' ' + AFFIXES[a2].suf;
+      }
     }
+    it.value = itemValue(it);
+    return it;
+  }
 
-    // Estilo de combate (guerrero desde nivel 1; paladín y explorador desde el 2)
-    const needsStyle = c.id === 'fighter' || ((c.id === 'paladin' || c.id === 'ranger') && lv >= 2);
-    if (needsStyle) {
-      const f = D.byId.feats[s.fightingStyle];
-      if (!f || f.type !== 'fighting-style') errors.push('Elige un estilo de combate.');
-      else out.fightingStyle = f.id;
+  function itemValue(it) {
+    const R = RARITIES[it.rarity] || RARITIES.comun;
+    return Math.max(1, Math.round((4 + it.ilvl * 3) * R.value));
+  }
+
+  // Botín de un enemigo. o: { ilvl, mf, classes, elite, boss, sets }
+  function rollLoot(rng, o) {
+    const out = [];
+    const rolls = o.boss ? 3 : o.elite ? 2 : o.chest ? 1 : 1;
+    const mf = (o.mf || 0) + (o.boss ? 150 : o.elite ? 80 : o.chest ? 60 : 0);
+    for (let i = 0; i < rolls; i++) {
+      let rarity = rollRarity(rng, mf);
+      if ((o.boss || o.chest) && (!rarity || rarity === 'comun')) rarity = 'raro';
+      if (!rarity) continue;
+      out.push(makeItem(rng, { ilvl: o.ilvl, rarity, classes: o.classes }));
     }
-
-    // Equipo
-    if (s.armor && D.byId.armor[s.armor] && D.byId.armor[s.armor].kind !== 'shield') out.armor = s.armor;
-    out.shield = !!s.shield;
-    out.weapons = [...new Set((s.weapons || []).filter((w) => D.byId.weapons[w]))].slice(0, 3);
-    if (!out.weapons.length && !['monk'].includes(c.id)) errors.push('Elige al menos un arma.');
-
-    // Conjuros
-    if (c.spellcasting) {
-      const row = c.levels[lv - 1];
-      const maxL = maxSpellLevel(c, lv);
-      const can = [...new Set(s.cantrips || [])].filter((id) => SPELLS[id] && SPELLS[id].level === 0 && SPELLS[id].classes.includes(c.id));
-      const spl = [...new Set(s.spells || [])].filter((id) => SPELLS[id] && SPELLS[id].level >= 1 && SPELLS[id].level <= maxL && SPELLS[id].classes.includes(c.id));
-      if (can.length > row.cantrips) errors.push(`Puedes conocer ${row.cantrips} trucos.`);
-      if (spl.length > row.prepared) errors.push(`Puedes preparar ${row.prepared} conjuros.`);
-      if (row.cantrips && can.length < row.cantrips) errors.push(`Elige ${row.cantrips} trucos.`);
-      if (row.prepared && spl.length < row.prepared) errors.push(`Elige ${row.prepared} conjuros preparados.`);
-      out.cantrips = can.slice(0, row.cantrips);
-      out.spells = spl.slice(0, row.prepared);
+    if (o.boss && o.sets && o.sets.length) {
+      // Pieza de conjunto: mejor si es de la clase de alguien del grupo
+      const chance = 0.25 + Math.min(0.35, (o.mf || 0) / 400) + Math.min(0.15, o.ilvl * 0.005);
+      if (rng() < chance) {
+        const mine = o.sets.filter((s) => (o.classes || []).includes(s));
+        const set = pick(rng, mine.length && rng() < 0.7 ? mine : o.sets);
+        out.push(makeItem(rng, { ilvl: o.ilvl, rarity: 'conjunto', set }));
+      }
     }
-    return { ok: errors.length === 0, errors, sheet: out };
+    return out;
+  }
+
+  function starterItems(cls, rng) {
+    return CLASSES[cls].start.map(([slot, base]) => makeItem(rng, { ilvl: 1, rarity: 'comun', slot, base }));
+  }
+
+  // ¿Puede llevarlo? (nivel, clase y tipo de armadura)
+  function canEquip(it, char, level) {
+    if (!it || !SLOTS[it.slot]) return { ok: false, reason: 'Eso no se puede equipar.' };
+    if (level < (it.req || 1)) return { ok: false, reason: `Necesitas nivel ${it.req}.` };
+    const classes = [char.cls, char.cls2].filter(Boolean);
+    const { weapons, armor } = allowedBases(classes);
+    if (it.slot === 'arma' || it.slot === 'mano') {
+      if (!weapons.includes(it.base)) return { ok: false, reason: `${classes.map((c) => CLASSES[c].name).join(' / ')} no sabe usar ${it.slot === 'arma' ? WEAPONS[it.base].name.toLowerCase() : OFFHANDS[it.base].name.toLowerCase()}.` };
+    } else if (it.type && !armor.includes(it.type)) {
+      return { ok: false, reason: `Tu clase no lleva armadura de ${ARMOR_TYPES[it.type].toLowerCase()}.` };
+    }
+    return { ok: true };
+  }
+
+  function typeLine(it) {
+    const R = RARITIES[it.rarity] || RARITIES.comun;
+    let kind;
+    if (it.slot === 'arma') kind = WEAPONS[it.base] ? WEAPONS[it.base].name : 'Arma';
+    else if (it.slot === 'mano') kind = OFFHANDS[it.base] ? OFFHANDS[it.base].name : 'Mano izquierda';
+    else if (it.type) kind = `${SLOTS[it.slot].name} · ${ARMOR_TYPES[it.type]}`;
+    else kind = SLOTS[it.slot] ? SLOTS[it.slot].name : '';
+    return `${kind} · ${R.name}${it.set ? ` (${SETS[it.set].name})` : ''}`;
+  }
+
+  // Líneas de descripción de un objeto (para los tooltips)
+  function describe(it) {
+    const lines = [];
+    if (it.dmg) {
+      const W = WEAPONS[it.base];
+      lines.push(`Daño ${it.dmg[0]}–${it.dmg[1]} · ${(1000 / W.ms).toFixed(1)} golpes/s`);
+      lines.push(W.kind === 'melee' ? `Cuerpo a cuerpo${W.range > 1 ? ' (alcance 2)' : ''} · ${W.hands === 2 ? 'a dos manos' : 'una mano'} · usa ${statName(W.stat)}` : `${W.kind === 'magic' ? 'Mágica' : 'A distancia'} (alcance ${W.range}) · usa ${statName(W.stat)}`);
+    }
+    if (it.armor) lines.push(`Armadura ${it.armor}${it.block ? ` · ${it.block}% de bloqueo` : ''}`);
+    for (const [k, v] of Object.entries(it.stats || {})) lines.push(fmtStat(k, v));
+    return lines;
   }
 
   // ======================================================================
-  //  Cálculo de la ficha
+  //  Consumibles, bufos y tiendas
   // ======================================================================
-  function derive(sheet, xp = 0) {
-    const c = D.byId.classes[sheet.class];
-    const sp = D.byId.species[sheet.species];
-    const bg = D.byId.backgrounds[sheet.background];
-    const lv = levelFromXp(xp);
-    const row = c.levels[lv - 1];
-    const prof = row.prof;
+  const CONSUMABLES = {
+    'pocion-vida-p': { name: 'Poción de vida pequeña', icon: '🧪', color: '#d83a3a', price: 12, heal: 0.3, shop: 'bruja', desc: 'Recupera el 30% de tu vida.' },
+    'pocion-vida-g': { name: 'Poción de vida grande', icon: '🧪', color: '#ff2a4a', price: 35, heal: 0.65, shop: 'bruja', desc: 'Recupera el 65% de tu vida.' },
+    'pocion-energia': { name: 'Poción de energía', icon: '🧪', color: '#3a7ad8', price: 15, energy: 0.5, shop: 'bruja', desc: 'Recupera la mitad de tu energía.' },
+    'brebaje-trol': { name: 'Brebaje de trol', icon: '🍵', color: '#5aa03a', price: 45, regen: 30000, shop: 'bruja', desc: 'Regeneras vida cinco veces más rápido durante 30 s.' },
+    'elixir': { name: 'Elixir de la bruja', icon: '⚗️', color: '#c060ff', price: 90, heal: 1, energy: 1, shop: 'bruja', desc: 'Recupera toda la vida y la energía.' },
+    'perg-fuego': { name: 'Pergamino de bola de fuego', icon: '📜', color: '#ff7a2a', price: 40, spell: { kind: 'blast', range: 7, radius: 2, mult: 2.5, fx: 'fire' }, shop: 'mago', desc: 'Una gran bola de fuego en un área de 5×5.' },
+    'perg-rayo': { name: 'Pergamino de relámpago', icon: '📜', color: '#fff27a', price: 40, spell: { kind: 'chain', range: 7, targets: 4, mult: 1.8, fx: 'lightning' }, shop: 'mago', desc: 'Un rayo salta entre los cuatro enemigos más cercanos.' },
+    'perg-sanacion': { name: 'Pergamino de sanación', icon: '📜', color: '#7dff8a', price: 45, spell: { kind: 'healAll', radius: 6, pct: 0.5 }, shop: 'mago', desc: 'Cura la mitad de la vida a todo el grupo cercano.' },
+    'perg-retorno': { name: 'Pergamino de retorno', icon: '🌀', color: '#7ad0ff', price: 25, spell: { kind: 'return' }, shop: 'mago', desc: 'Te devuelve a la taberna sano y salvo, sin perder oro.' },
+  };
+  const BUFFS = {
+    'bend-fuerza': { name: 'Bendición de fuerza', icon: '💪', price: 60, min: 20, stats: { dmgPct: 20 }, desc: '+20% de daño durante 20 minutos.' },
+    'piel-piedra': { name: 'Piel de piedra', icon: '🪨', price: 60, min: 20, stats: { armorPct: 30 }, desc: '+30% de armadura durante 20 minutos.' },
+    'ojo-fortuna': { name: 'Ojo de la fortuna', icon: '🍀', price: 80, min: 20, stats: { mf: 50 }, desc: '+50% de probabilidad de botín durante 20 minutos.' },
+    'prisa': { name: 'Prisa arcana', icon: '⚡', price: 70, min: 20, stats: { speed: 15, move: 10 }, desc: '+15% de velocidad de ataque y +10% al andar durante 20 minutos.' },
+    'vigor': { name: 'Vigor del roble', icon: '🌳', price: 60, min: 20, stats: { hpPct: 20 }, desc: '+20% de vida máxima durante 20 minutos.' },
+  };
+  const SHOPS = {
+    bruja: { name: 'Madre Zarza', title: 'la bruja de las pociones', greet: '¿Pociones, querida? Recién salidas del caldero.' },
+    armero: { name: 'Maestro Takeshi', title: 'mercader de armas de Oriente', greet: 'Acero forjado al otro lado del mar. Elija con calma.' },
+    mago: { name: 'El Hombre de la Túnica', title: 'hechizos y bendiciones', greet: '…Sabía que vendrías. Tengo justo lo que necesitas.' },
+  };
+  const priceScale = (level) => 1 + 0.25 * (level - 1);
+  const buyPrice = (base, discount) => Math.max(1, Math.round(base * (1 - (discount || 0) / 100)));
+  const itemBuyPrice = (it, discount) => buyPrice(it.value * 4, discount);
 
-    // Características (+ mejora automática de la característica principal en los niveles de dote)
-    const score = {};
-    for (const a of ABIL) score[a] = Math.min(20, (sheet.base[a] || 10) + (sheet.bonus[a] || 0));
-    const asiLevels = [4, 8, 12, 16, 19].filter((l) => l <= lv).length;
-    const main = c.primary.slice().sort((a, b) => score[b] - score[a])[0];
-    score[main] = Math.min(20, score[main] + 2 * asiLevels);
-    const m = Object.fromEntries(ABIL.map((a) => [a, mod(score[a])]));
-
-    const feats = [bg.feat.id, sheet.humanFeat, sheet.fightingStyle].filter(Boolean);
-    const skillProf = new Set([...bg.skills, ...sheet.skills, ...(sheet.speciesSkill ? [sheet.speciesSkill] : []), ...((sheet.featChoice && sheet.featChoice.skilled) || [])]);
-    const expertise = new Set(sheet.expertise || []);
-    const skills = D.skills.map((k) => {
-      const p = skillProf.has(k.id) ? (expertise.has(k.id) ? prof * 2 : prof) : 0;
-      return { id: k.id, name: k.name, ability: k.ability, prof: !!p, expert: expertise.has(k.id), bonus: m[k.ability] + p };
-    });
-    const saves = ABIL.map((a) => ({ id: a, prof: c.saves.includes(a), bonus: m[a] + (c.saves.includes(a) ? prof : 0) }));
-
-    // Puntos de golpe
-    const toughness = sp.id === 'dwarf' ? 1 : 0;
-    let hp = c.hitDie + m.con + toughness;
-    for (let l = 2; l <= lv; l++) hp += Math.max(1, c.hitDie / 2 + 1 + m.con + toughness);
-    hp = Math.max(1, hp);
-
-    // Clase de armadura
-    const armor = sheet.armor ? D.byId.armor[sheet.armor] : null;
-    const shieldProf = c.armor.includes('shields');
-    let ac;
-    if (armor) ac = armor.base + (armor.dex ? (armor.maxDex != null ? Math.min(m.dex, armor.maxDex) : m.dex) : 0);
-    else if (c.id === 'barbarian') ac = 10 + m.dex + m.con;
-    else if (c.id === 'monk' && !sheet.shield) ac = 10 + m.dex + m.wis;
-    else ac = 10 + m.dex;
-    if (sheet.shield) ac += 2;
-    if (feats.includes('defense') && armor) ac += 1;
-    const armorProf = !armor || c.armor.includes('all-armor') || c.armor.includes(`${armor.kind}-armor`);
-
-    // Velocidad
-    let speed = sp.speed;
-    if (sheet.subspecies === 'elven-lineage-wood-elf') speed = 35;
-    if (c.id === 'monk' && !armor && !sheet.shield && row.extra && row.extra.unarmored_movement_bonus) speed += row.extra.unarmored_movement_bonus;
-    if (c.id === 'barbarian' && lv >= 5) speed += 10;
-
-    // Ataques con armas
-    const weaponProf = (w) => c.weapons.includes(`${w.category}-weapons`) || c.weapons.includes(`${w.id}s`) || c.weapons.includes(w.id);
-    const monkDie = c.id === 'monk' ? (row.extra && row.extra.martial_arts_die) || 6 : 0;
-    const attacks = sheet.weapons.map((id) => {
-      const w = D.byId.weapons[id];
-      const finesse = w.properties.includes('finesse');
-      const monkWeapon = monkDie && (w.category === 'simple' || w.properties.includes('light')) && w.kind === 'melee';
-      let ab = w.kind === 'ranged' ? 'dex' : finesse || monkWeapon ? (m.dex > m.str ? 'dex' : 'str') : 'str';
-      if (finesse && m.dex > m.str) ab = 'dex';
-      const p = weaponProf(w) ? prof : 0;
-      const archery = feats.includes('archery') && w.kind === 'ranged' ? 2 : 0;
-      let dice = w.damage;
-      if (monkWeapon && /d(\d+)/.test(dice) && parseInt(dice.split('d')[1], 10) < monkDie) dice = `1d${monkDie}`;
-      const range = w.kind === 'ranged' ? w.range[0] : w.properties.includes('reach') ? 10 : 5;
-      return { id: w.id, name: w.name, kind: w.kind, ability: ab, hit: m[ab] + p + archery, dice, mod: m[ab], type: w.type, range, thrown: w.thrown ? w.thrown[0] : null, mastery: w.mastery, prof: !!p };
-    });
-    attacks.push({ id: 'unarmed', name: 'Ataque sin armas', kind: 'melee', ability: monkDie && m.dex > m.str ? 'dex' : 'str', hit: (monkDie && m.dex > m.str ? m.dex : m.str) + prof, dice: monkDie ? `1d${monkDie}` : '1', mod: monkDie && m.dex > m.str ? m.dex : m.str, type: 'bludgeoning', range: 5, prof: true });
-
-    // Lanzamiento de conjuros
-    let casting = null;
-    if (c.spellcasting) {
-      const a = c.spellcasting.ability;
-      casting = { ability: a, mod: m[a], dc: 8 + prof + m[a], attack: prof + m[a], slots: row.slots.slice(), cantripsKnown: row.cantrips, prepared: row.prepared, maxLevel: maxSpellLevel(c, lv) };
+  // Género de Takeshi: 8 objetos para tu nivel (casi siempre de tus clases); cambia cada 10 minutos
+  function armeroStock(seedRng, level, classes) {
+    const out = [];
+    const slots = ['arma', 'arma', 'arma', 'mano', 'pecho', 'casco', 'guantes', 'botas'];
+    for (const slot of slots) {
+      const r = seedRng();
+      const rarity = r < 0.08 ? 'epico' : r < 0.4 ? 'raro' : 'comun';
+      out.push(makeItem(seedRng, { ilvl: level, rarity, slot, classes: seedRng() < 0.8 ? classes : [] }));
     }
-    const innateAbility = ['int', 'wis', 'cha'].sort((a, b) => m[b] - m[a])[0];
-    const known = [];
-    for (const id of sheet.cantrips || []) known.push({ id, source: 'class', ability: casting && casting.ability });
-    for (const id of sheet.spells || []) known.push({ id, source: 'class', ability: casting && casting.ability });
-    if (INNATE[sheet.subspecies]) known.push({ id: INNATE[sheet.subspecies], source: 'species', ability: innateAbility });
-    if (sp.id === 'tiefling') known.push({ id: 'thaumaturgy', source: 'species', ability: innateAbility });
-    const mi = sheet.featChoice && sheet.featChoice.magicInitiate;
-    if (mi) {
-      const a = MAGIC_INITIATE_ABILITY[mi.cls] || 'int';
-      for (const id of mi.cantrips) known.push({ id, source: 'feat', ability: a });
-      if (mi.spell) known.push({ id: mi.spell, source: 'feat', ability: a, freeCast: true });
-    }
-    const spellList = known.filter((k, i) => SPELLS[k.id] && known.findIndex((x) => x.id === k.id) === i).map((k) => {
-      const s = SPELLS[k.id];
-      const a = k.ability || innateAbility;
-      return { id: s.id, name: s.name, level: s.level, ability: a, attack: prof + m[a], dc: 8 + prof + m[a], mod: m[a], source: k.source, freeCast: !!k.freeCast, combat: !!COMBAT_SPELLS[s.id] };
-    });
+    return out;
+  }
 
-    // Rasgos de combate de clase y especie
-    const actions = [];
-    const ex = row.extra || {};
-    if (c.id === 'fighter') actions.push({ id: 'second-wind', name: 'Tomar aliento', uses: ex.second_wind_uses || 2, dice: `1d10+${lv}`, desc: 'Recuperas 1d10 + tu nivel de guerrero en PG.' });
-    if (c.id === 'barbarian') actions.push({ id: 'rage', name: 'Furia', uses: ex.rage_count || 2, bonus: ex.rage_damage_bonus || 2, desc: `Durante 1 minuto: +${ex.rage_damage_bonus || 2} al daño con ataques de Fuerza y resistencia al daño contundente, cortante y perforante.` });
-    if (c.id === 'paladin') actions.push({ id: 'lay-on-hands', name: 'Imposición de manos', pool: 5 * lv, desc: `Reserva de ${5 * lv} PG para curar.` });
-    if (sp.id === 'dragonborn' && sheet.subspecies) {
-      const color = sheet.subspecies.replace('draconic-ancestor-', '');
-      const dice = `${lv >= 17 ? 4 : lv >= 11 ? 3 : lv >= 5 ? 2 : 1}d10`;
-      actions.push({ id: 'breath-weapon', name: 'Arma de aliento', uses: prof, dice, type: DRAGON_DAMAGE[color] || 'fire', save: 'dex', dc: 8 + m.con + prof, area: { shape: 'cone', size: 15 }, desc: `Cono de 15 pies: salvación de Destreza CD ${8 + m.con + prof}, ${dice} de daño (mitad si la supera).` });
-    }
-    const sneak = c.id === 'rogue' && ex.sneak_attack ? `${ex.sneak_attack.dice_count}d${ex.sneak_attack.dice_value}` : null;
+  // Generador con semilla (mulberry32), para tiendas y mazmorras repetibles
+  function seeded(str) {
+    let h = 1779033703 ^ String(str).length;
+    for (let i = 0; i < String(str).length; i++) { h = Math.imul(h ^ String(str).charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+    let a = h >>> 0;
+    return () => {
+      a |= 0; a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
 
-    // Rasgos para mostrar en la ficha
-    const features = [];
-    for (let l = 1; l <= lv; l++) for (const f of c.levels[l - 1].features) {
-      const info = D.features[f];
-      if (info) features.push({ source: `${c.name} ${l}`, name: info.name, desc: info.desc });
-    }
-    for (const t of sp.traits) if (!/^(High Elf|Wood Elf|Drow|Forest Gnome|Rock Gnome)[:]|^(Dancing Lights|Darkness|Detect Magic|Faerie Fire|Longstrider|Misty Step|Pass without Trace)$/.test(t.name)) features.push({ source: sp.name, name: t.name, desc: t.desc });
-    const sub = sp.subspecies.find((x) => x.id === sheet.subspecies);
-    if (sub) for (const t of sub.traits) features.push({ source: sub.name, name: t.name, desc: t.desc });
-    for (const f of feats) { const ft = D.byId.feats[f]; if (ft) features.push({ source: ft.typeName, name: ft.name, desc: ft.desc }); }
-    if (asiLevels) features.push({ source: 'Juego', name: 'Mejora de característica automática', desc: `+${2 * asiLevels} a ${D.abilities.find((a) => a.id === main).name} (en este juego las mejoras de nivel 4, 8, 12, 16 y 19 se aplican solas a la característica principal).` });
+  // ======================================================================
+  //  Personaje: ficha calculada
+  // ======================================================================
+  function newChar(cls, cls2, look) {
+    cls = classId(cls) || 'guerrero';
+    cls2 = classId(cls2);
+    if (cls2 === cls) cls2 = null;
+    return { cls, cls2: cls2 || null, alloc: Object.fromEntries(STAT_IDS.map((k) => [k, 0])), look: look || {} };
+  }
 
+  // Limpia una ficha guardada (o enviada por un cliente)
+  function cleanChar(c, level) {
+    const out = newChar(c && c.cls, c && c.cls2, c && c.look);
+    if (c && c.alloc) {
+      let budget = pointsTotal(level || 1);
+      for (const k of STAT_IDS) {
+        const v = Math.max(0, Math.min(budget, Math.floor(Number(c.alloc[k]) || 0)));
+        out.alloc[k] = v; budget -= v;
+      }
+    }
+    return out;
+  }
+
+  // Suma de atributos de los objetos equipados, los conjuntos y los bufos
+  function gearTotals(equip, buffs, now) {
+    const t = {};
+    const add = (k, v) => { t[k] = round1((t[k] || 0) + v); };
+    let armor = 0, block = 0;
+    const setCount = {};
+    for (const slot of SLOT_IDS) {
+      const it = equip && equip[slot];
+      if (!it) continue;
+      if (it.armor) armor += it.armor;
+      if (it.block) block += it.block;
+      for (const [k, v] of Object.entries(it.stats || {})) add(k, v);
+      if (it.set) setCount[it.set] = (setCount[it.set] || 0) + 1;
+    }
+    const sets = [];
+    for (const [s, n] of Object.entries(setCount)) {
+      const S = SETS[s];
+      if (n >= 2) for (const [k, v] of Object.entries(S.b2)) add(k, v);
+      if (n >= 4) for (const [k, v] of Object.entries(S.b4)) add(k, v);
+      sets.push({ id: s, name: S.name, n });
+    }
+    const active = [];
+    for (const [id, until] of Object.entries(buffs || {})) {
+      if (!BUFFS[id] || until <= (now || Date.now())) continue;
+      for (const [k, v] of Object.entries(BUFFS[id].stats)) add(k, v);
+      active.push({ id, until });
+    }
+    return { t, armor, block, sets, buffs: active };
+  }
+
+  // Ficha completa a partir del perfil { xp, char, equip, buffs }
+  function derive(profile, now) {
+    const char = profile.char;
+    const level = levelFromXp(profile.xp || 0);
+    const base = baseStats(char);
+    const g = gearTotals(profile.equip, profile.buffs, now);
+    const stats = {};
+    for (const k of STAT_IDS) stats[k] = Math.round(base[k] + (char.alloc[k] || 0) + (g.t[k] || 0));
+    const x = (k) => g.t[k] || 0;
+    const c1 = CLASSES[char.cls], c2 = char.cls2 ? CLASSES[char.cls2] : null;
+    const hpMult = c2 ? (c1.hp * 2 + c2.hp) / 3 : c1.hp;
+
+    const w = profile.equip && profile.equip.arma;
+    const W = w ? WEAPONS[w.base] : FISTS;
+    const wdmg = w ? w.dmg : FISTS.dmg;
+    const statMult = 1 + stats[W.stat] * 0.03;
+    const dmgMult = statMult * (1 + x('dmgPct') / 100);
+    const spellBase = W.kind === 'magic' ? wdmg : [3 + level * 1.5, 6 + level * 2.5];
+    const spellMult = (1 + stats.car * 0.03) * (1 + x('dmgPct') / 100);
+
+    const d = {
+      level, cls: char.cls, cls2: char.cls2, stats, base, alloc: char.alloc,
+      points: pointsFree(char, level),
+      hp: Math.round(((30 + stats.vit * 6 + stats.con + level * 8) * hpMult + x('hp')) * (1 + x('hpPct') / 100)),
+      en: Math.round(40 + stats.res * 4 + level * 2 + x('en')),
+      hpRegen: round1(0.4 + stats.vit * 0.06 + x('hpRegen')),
+      enRegen: round1(3 + stats.res * 0.2 + x('enRegen')),
+      armor: Math.round((g.armor + x('armor') + stats.con * 1.5) * (1 + x('armorPct') / 100)),
+      block: Math.min(40, g.block),
+      weapon: { base: w ? w.base : 'puños', name: w ? w.name : FISTS.name, kind: W.kind, range: W.range, stat: W.stat, hands: W.hands },
+      dmg: [Math.max(1, Math.round(wdmg[0] * dmgMult)), Math.max(1, Math.round(wdmg[1] * dmgMult))],
+      spell: [Math.max(1, Math.round(spellBase[0] * spellMult)), Math.max(2, Math.round(spellBase[1] * spellMult))],
+      atkMs: Math.round(W.ms / (1 + x('speed') / 100)),
+      crit: round1(Math.min(60, 5 + stats.sue * 0.35 + x('crit'))),
+      critMult: round1(1.5 + x('critDmg') / 100),
+      dodge: round1(Math.min(35, stats.sue * 0.2 + stats.des * 0.15 + x('dodge'))),
+      hit: round1(stats.des * 0.25),
+      moveMs: Math.max(120, Math.round(200 / (1 + x('move') / 100))),
+      mf: Math.round(stats.sue + x('mf')),
+      discount: round1(Math.min(20, stats.car * 0.4)),
+      healPow: round1(1 + stats.car * 0.03 + x('healPct') / 100),
+      cdr: Math.min(30, x('cdr')),
+      magicRes: Math.min(50, round1(stats.res * 0.5)),
+      lifesteal: Math.min(20, x('lifesteal')),
+      sets: g.sets, buffs: g.buffs,
+      abilities: abilitiesFor(char, level),
+    };
+    return d;
+  }
+
+  function abilitiesFor(char, level) {
+    const out = [];
+    for (const a of ABILITIES[char.cls]) out.push({ ...a, cls: char.cls, unlock: a.lvl, ready: level >= a.lvl });
+    if (char.cls2) for (const a of ABILITIES[char.cls2]) { const u = SECOND_CLASS_LEVEL[a.lvl]; out.push({ ...a, cls: char.cls2, unlock: u, ready: level >= u }); }
+    return out;
+  }
+
+  // Aspecto del héroe para los sprites: clase, especie, colores y el equipo que se ve
+  function gearLook(equip) {
+    const e = equip || {};
+    const g = {};
+    if (e.arma) { g.w = e.arma.base; g.wr = e.arma.rarity; }
+    if (e.mano) { g.o = e.mano.base; g.or = e.mano.rarity; }
+    for (const s of ['casco', 'pecho', 'guantes', 'botas']) if (e[s]) { g[s] = e[s].type; g[s + 'R'] = e[s].rarity; }
+    const sets = {};
+    for (const s of SLOT_IDS) if (e[s] && e[s].set) sets[e[s].set] = (sets[e[s].set] || 0) + 1;
+    const best = Object.entries(sets).sort((a, b) => b[1] - a[1])[0];
+    if (best && best[1] >= 2) g.set = best[0];
+    return g;
+  }
+
+  // ======================================================================
+  //  Monstruos
+  // ======================================================================
+  // hp/dmg/armor a nivel 1; ms = milisegundos por casilla; atk = ms entre ataques; range > 1 = a distancia (proyectil)
+  // ai: melee | ranged | healer | summoner | boss; magic = daño mágico (lo reduce la Resistencia)
+  const MONSTERS = {
+    'goblin-minion':   { name: 'Goblin enclenque', fam: 'goblin', sprite: 'goblin', scale: 0.85, hp: 14, dmg: [1, 3], armor: 1, ms: 330, atk: 1300, xp: 6, gold: [1, 3] },
+    'goblin-warrior':  { name: 'Goblin', fam: 'goblin', sprite: 'goblin', hp: 20, dmg: [2, 4], armor: 2, ms: 330, atk: 1300, xp: 8, gold: [1, 4] },
+    'goblin-archer':   { name: 'Goblin arquero', fam: 'goblin', sprite: 'goblin', weapon: 'bow', hp: 15, dmg: [2, 4], armor: 1, ms: 330, atk: 2100, range: 6, proj: 'arrow', ai: 'ranged', xp: 9, gold: [1, 4] },
+    'goblin-shaman':   { name: 'Chamán goblin', fam: 'goblin', sprite: 'shaman', hp: 18, dmg: [2, 5], armor: 1, ms: 360, atk: 2400, range: 5, proj: 'bolt', magic: true, ai: 'healer', xp: 12, gold: [2, 6] },
+    'hobgoblin-warrior': { name: 'Hobgoblin', fam: 'goblin', sprite: 'hobgoblin', hp: 34, dmg: [3, 6], armor: 5, ms: 340, atk: 1400, xp: 14, gold: [2, 6], minLevel: 2 },
+    'bugbear-warrior': { name: 'Osgo', fam: 'goblin', sprite: 'bugbear', hp: 46, dmg: [4, 8], armor: 3, ms: 320, atk: 1600, xp: 18, gold: [3, 8], minLevel: 3 },
+    'orc':             { name: 'Orco', fam: 'orco', sprite: 'orc', hp: 38, dmg: [3, 7], armor: 4, ms: 330, atk: 1450, xp: 15, gold: [2, 7] },
+    'orc-archer':      { name: 'Orco lanzador', fam: 'orco', sprite: 'orc', weapon: 'spear', tint: '#6a5a3a', hp: 28, dmg: [3, 6], armor: 2, ms: 340, atk: 2200, range: 6, proj: 'javelin', ai: 'ranged', xp: 15, gold: [2, 7] },
+    'orc-shaman':      { name: 'Chamán orco', fam: 'orco', sprite: 'warchief', scale: 0.9, tint: '#3a5a8a', hp: 30, dmg: [3, 6], armor: 2, ms: 360, atk: 2400, range: 5, proj: 'bolt', magic: true, ai: 'healer', xp: 18, gold: [3, 9], minLevel: 2 },
+    'orc-war-chief':   { name: 'Jefe de guerra orco', fam: 'orco', sprite: 'warchief', hp: 110, dmg: [6, 11], armor: 7, ms: 330, atk: 1500, xp: 60, gold: [15, 30] },
+    'ogre':            { name: 'Ogro', fam: 'orco', sprite: 'ogre', hp: 105, dmg: [7, 12], armor: 4, ms: 430, atk: 1900, xp: 40, gold: [6, 14], minLevel: 4 },
+    'troll':           { name: 'Trol', fam: 'orco', sprite: 'troll', hp: 95, dmg: [5, 10], armor: 3, ms: 360, atk: 1500, regen: 2, xp: 45, gold: [6, 14], minLevel: 6 },
+    'skeleton':        { name: 'Esqueleto', fam: 'muerto', sprite: 'skeleton', hp: 22, dmg: [2, 5], armor: 3, ms: 340, atk: 1400, xp: 8, gold: [1, 4], undead: true },
+    'skeleton-archer': { name: 'Esqueleto arquero', fam: 'muerto', sprite: 'skeleton', weapon: 'bow', tint: '#5a5040', hp: 16, dmg: [2, 4], armor: 2, ms: 340, atk: 2100, range: 6, proj: 'arrow', ai: 'ranged', xp: 9, gold: [1, 4], undead: true },
+    'zombie':          { name: 'Zombi', fam: 'muerto', sprite: 'zombie', hp: 38, dmg: [3, 5], armor: 1, ms: 500, atk: 1600, xp: 9, gold: [1, 4], undead: true },
+    'ghoul':           { name: 'Necrófago', fam: 'muerto', sprite: 'ghoul', hp: 30, dmg: [3, 6], armor: 2, ms: 270, atk: 1300, xp: 12, gold: [2, 5], undead: true, minLevel: 2 },
+    'specter':         { name: 'Espectro', fam: 'muerto', sprite: 'specter', hp: 26, dmg: [3, 6], armor: 0, ms: 290, atk: 1500, magic: true, xp: 14, gold: [2, 6], undead: true, minLevel: 2 },
+    'wight':           { name: 'Tumulario', fam: 'muerto', sprite: 'wight', hp: 44, dmg: [4, 7], armor: 4, ms: 340, atk: 1450, xp: 18, gold: [3, 8], undead: true, minLevel: 3 },
+    'mummy':           { name: 'Momia', fam: 'muerto', sprite: 'mummy', hp: 70, dmg: [5, 9], armor: 3, ms: 460, atk: 1700, xp: 24, gold: [4, 10], undead: true, minLevel: 4 },
+    'necromancer':     { name: 'Nigromante', fam: 'muerto', sprite: 'necromancer', hp: 48, dmg: [4, 8], armor: 2, ms: 380, atk: 2300, range: 6, proj: 'necro', magic: true, ai: 'summoner', summons: 'skeleton', xp: 40, gold: [8, 18], minLevel: 5 },
+    'wolf':            { name: 'Lobo', fam: 'bestia', sprite: 'wolf', hp: 18, dmg: [2, 4], armor: 1, ms: 230, atk: 1200, xp: 7, gold: [0, 2] },
+    'dire-wolf':       { name: 'Huargo', fam: 'bestia', sprite: 'wolf', scale: 1.25, tint: '#4a4a52', hp: 40, dmg: [4, 7], armor: 2, ms: 230, atk: 1300, xp: 16, gold: [1, 4], minLevel: 3 },
+    'giant-spider':    { name: 'Araña gigante', fam: 'bestia', sprite: 'spider', hp: 24, dmg: [2, 5], armor: 2, ms: 260, atk: 1300, poison: true, xp: 10, gold: [1, 3] },
+    'brown-bear':      { name: 'Oso pardo', fam: 'bestia', sprite: 'bear', hp: 60, dmg: [4, 8], armor: 3, ms: 320, atk: 1600, xp: 22, gold: [2, 6], minLevel: 2 },
+    'owlbear':         { name: 'Osolechuza', fam: 'bestia', sprite: 'owlbear', hp: 115, dmg: [6, 11], armor: 4, ms: 330, atk: 1600, xp: 50, gold: [8, 16], minLevel: 5 },
+    'bandit':          { name: 'Bandido', fam: 'humano', sprite: 'hero:picaro', hp: 24, dmg: [2, 5], armor: 2, ms: 310, atk: 1300, xp: 9, gold: [3, 8] },
+    'bandit-archer':   { name: 'Bandido arquero', fam: 'humano', sprite: 'hero:explorador', hp: 18, dmg: [2, 5], armor: 1, ms: 310, atk: 2000, range: 6, proj: 'arrow', ai: 'ranged', xp: 10, gold: [3, 8] },
+    'bandit-captain':  { name: 'Capitán bandido', fam: 'humano', sprite: 'hero:guerrero', hp: 70, dmg: [5, 9], armor: 5, ms: 310, atk: 1400, xp: 30, gold: [12, 25] },
+    'cultist':         { name: 'Sectario', fam: 'humano', sprite: 'hero:brujo', hp: 22, dmg: [3, 6], armor: 1, ms: 330, atk: 2200, range: 5, proj: 'fire', magic: true, ai: 'ranged', xp: 11, gold: [3, 8] },
+    'kobold':          { name: 'Kóbold', fam: 'dragon', sprite: 'goblin', tint: '#a0402a', scale: 0.8, hp: 14, dmg: [2, 4], armor: 2, ms: 280, atk: 1200, xp: 7, gold: [1, 4] },
+    // Jefes de mazmorra: botín de conjuntos de varias clases
+    'rey-goblin':      { name: 'Grubnak, el Rey Goblin', fam: 'goblin', sprite: 'shaman', scale: 1.55, tint: '#c8a030', boss: true, hp: 240, dmg: [4, 8], armor: 5, ms: 340, atk: 1400, xp: 90, gold: [40, 70], specials: ['slam', 'summon'], summons: 'goblin-warrior', sets: ['explorador', 'picaro', 'guerrero'] },
+    'gorthak':         { name: 'Gorthak, Señor de la Guerra', fam: 'orco', sprite: 'warchief', scale: 1.45, boss: true, hp: 320, dmg: [6, 11], armor: 7, ms: 330, atk: 1500, xp: 120, gold: [50, 90], specials: ['slam', 'charge', 'summon'], summons: 'orc', sets: ['guerrero', 'paladin', 'clerigo'] },
+    'lich':            { name: 'Malakar, el Liche', fam: 'muerto', sprite: 'lich', scale: 1.4, boss: true, hp: 260, dmg: [5, 9], armor: 4, ms: 380, atk: 1900, range: 6, proj: 'necro', magic: true, xp: 120, gold: [50, 90], undead: true, specials: ['nova', 'volley', 'summon'], summons: 'skeleton', sets: ['mago', 'brujo', 'clerigo'] },
+    'reina-arana':     { name: 'Arakhna, la Reina Araña', fam: 'bestia', sprite: 'spider', scale: 2, tint: '#5a2a6a', boss: true, hp: 280, dmg: [5, 10], armor: 5, ms: 280, atk: 1300, poison: true, xp: 110, gold: [45, 80], specials: ['volley', 'summon', 'slam'], summons: 'giant-spider', sets: ['picaro', 'explorador', 'brujo'] },
+    'young-red-dragon': { name: 'Ignaroth, el Dragón Rojo', fam: 'dragon', sprite: 'dragon', scale: 1.3, boss: true, hp: 400, dmg: [7, 12], armor: 8, ms: 360, atk: 1600, xp: 160, gold: [80, 140], specials: ['breath', 'slam', 'summon'], summons: 'kobold', sets: CLASS_IDS },
+  };
+  // Claves de versiones anteriores
+  const LEGACY_MONSTER = { 'goblin-boss': 'goblin-shaman', goblin: 'goblin-warrior', shaman: 'goblin-shaman', warchief: 'orc-war-chief', ghast: 'ghoul', 'ogre-zombie': 'zombie', wraith: 'specter', 'hobgoblin-captain': 'hobgoblin-warrior' };
+
+  // Estadísticas de un monstruo a un nivel (élite: más vida, daño y botín)
+  function monsterAt(k, level, elite) {
+    const M = MONSTERS[k] || MONSTERS[LEGACY_MONSTER[k]];
+    if (!M) return null;
+    const L = Math.max(1, level | 0);
+    const e = elite ? 1 : 0;
     return {
-      name: sheet.name, level: lv, xp, nextXp: lv < 20 ? D.xpTable[lv] : null, prof,
-      className: c.name, speciesName: sub ? `${sp.name} (${sub.name.split(': ')[1] || sub.name})` : sp.name, speciesShort: sp.name, backgroundName: bg.name,
-      score, mod: m, saves, skills, hp, ac, armorProf, speed, initiative: m.dex + (feats.includes('alert') ? prof : 0),
-      passive: 10 + skills.find((k) => k.id === 'perception').bonus,
-      attacks, casting, spells: spellList, actions, sneak, feats,
-      halfling: sp.id === 'halfling', relentless: sp.id === 'orc', darkvision: { dwarf: 120, elf: 60, gnome: 60, orc: 120, tiefling: 60, dragonborn: 60 }[sp.id] || 0,
-      hitDie: c.hitDie, features, shield: sheet.shield, armorName: armor ? armor.name : null,
-      sizeName: sp.size, style: sheet.fightingStyle,
+      k: MONSTERS[k] ? k : LEGACY_MONSTER[k], name: (elite ? 'Élite: ' : '') + M.name, level: L, elite: !!elite, boss: !!M.boss,
+      hp: Math.round(M.hp * (1 + 0.55 * (L - 1)) * (e ? 2.6 : 1)),
+      dmg: [M.dmg[0] * (1 + 0.32 * (L - 1)) * (e ? 1.4 : 1), M.dmg[1] * (1 + 0.32 * (L - 1)) * (e ? 1.4 : 1)],
+      armor: Math.round(M.armor * (1 + 0.4 * (L - 1))),
+      xp: Math.round(M.xp * (1 + 0.6 * (L - 1)) * (e ? 3 : 1)),
+      gold: [Math.round(M.gold[0] * (1 + 0.4 * (L - 1)) * (e ? 2 : 1)), Math.round(M.gold[1] * (1 + 0.4 * (L - 1)) * (e ? 2 : 1))],
+      ms: M.ms, atk: M.atk, range: M.range || 1, proj: M.proj || null, ai: M.ai || (M.boss ? 'boss' : 'melee'),
+      magic: !!M.magic, undead: !!M.undead, regen: M.regen ? M.regen * (1 + 0.5 * (L - 1)) : 0, poison: !!M.poison,
+      summons: M.summons || null, specials: M.specials || [], sets: M.sets || [],
     };
   }
 
-  // ======================================================================
-  //  Personajes pregenerados (para empezar rápido)
-  // ======================================================================
-  const PRIORITY = {
-    barbarian: ['str', 'con', 'dex', 'wis', 'cha', 'int'], bard: ['cha', 'dex', 'con', 'wis', 'int', 'str'],
-    cleric: ['wis', 'con', 'str', 'dex', 'cha', 'int'], druid: ['wis', 'con', 'dex', 'int', 'cha', 'str'],
-    fighter: ['str', 'con', 'dex', 'wis', 'int', 'cha'], monk: ['dex', 'wis', 'con', 'str', 'int', 'cha'],
-    paladin: ['str', 'cha', 'con', 'wis', 'dex', 'int'], ranger: ['dex', 'wis', 'con', 'str', 'int', 'cha'],
-    rogue: ['dex', 'con', 'int', 'wis', 'cha', 'str'], sorcerer: ['cha', 'con', 'dex', 'wis', 'int', 'str'],
-    warlock: ['cha', 'con', 'dex', 'wis', 'int', 'str'], wizard: ['int', 'con', 'dex', 'wis', 'cha', 'str'],
-  };
-  const PREGEN = {
-    barbarian: { bg: 'soldier', weapons: ['greataxe', 'handaxe'], armor: null },
-    bard: { bg: 'acolyte', weapons: ['rapier', 'dagger'], armor: 'leather-armor', cantrips: ['vicious-mockery', 'starry-wisp'], spells: ['healing-word', 'dissonant-whispers', 'cure-wounds', 'thunderwave'] },
-    cleric: { bg: 'acolyte', weapons: ['mace'], armor: 'chain-shirt', shield: true, cantrips: ['sacred-flame', 'light', 'thaumaturgy'], spells: ['guiding-bolt', 'cure-wounds', 'healing-word', 'inflict-wounds'] },
-    druid: { bg: 'sage', weapons: ['quarterstaff', 'sickle'], armor: 'leather-armor', shield: true, cantrips: ['produce-flame', 'starry-wisp'], spells: ['cure-wounds', 'healing-word', 'thunderwave', 'ice-knife'] },
-    fighter: { bg: 'soldier', weapons: ['longsword', 'longbow'], armor: 'chain-mail', shield: true, style: 'defense' },
-    monk: { bg: 'criminal', weapons: ['shortsword', 'dart'], armor: null },
-    paladin: { bg: 'soldier', weapons: ['longsword', 'javelin'], armor: 'chain-mail', shield: true, spells: ['cure-wounds', 'divine-favor'], style: 'defense' },
-    ranger: { bg: 'soldier', weapons: ['longbow', 'scimitar'], armor: 'studded-leather-armor', spells: ['cure-wounds', 'hunters-mark'], style: 'archery' },
-    rogue: { bg: 'criminal', weapons: ['rapier', 'shortbow'], armor: 'leather-armor' },
-    sorcerer: { bg: 'acolyte', weapons: ['dagger', 'quarterstaff'], armor: null, cantrips: ['fire-bolt', 'ray-of-frost', 'shocking-grasp', 'sorcerous-burst'], spells: ['magic-missile', 'burning-hands'] },
-    warlock: { bg: 'acolyte', weapons: ['dagger', 'quarterstaff'], armor: 'leather-armor', cantrips: ['eldritch-blast', 'chill-touch'], spells: ['hex', 'hellish-rebuke'] },
-    wizard: { bg: 'sage', weapons: ['quarterstaff', 'dagger'], armor: null, cantrips: ['fire-bolt', 'ray-of-frost', 'shocking-grasp'], spells: ['magic-missile', 'burning-hands', 'thunderwave', 'shield'] },
+  // Temas de las mazmorras aleatorias
+  const THEMES = {
+    cuevas:    { name: 'Cuevas goblin', icon: '🪓', mobs: ['goblin-warrior', 'goblin-warrior', 'goblin-minion', 'goblin-archer', 'goblin-archer', 'goblin-shaman', 'hobgoblin-warrior', 'bugbear-warrior', 'wolf'], boss: 'rey-goblin', names: ['Madriguera', 'Cuevas', 'Túneles', 'Guarida'], of: ['de los Dientes Rotos', 'del Rey Goblin', 'de la Oreja Cortada', 'del Hongo Negro'] },
+    cripta:    { name: 'Cripta de los no muertos', icon: '💀', mobs: ['skeleton', 'skeleton', 'skeleton-archer', 'zombie', 'zombie', 'ghoul', 'specter', 'wight', 'mummy', 'necromancer'], boss: 'lich', names: ['Cripta', 'Catacumbas', 'Osario', 'Mausoleo'], of: ['del Liche', 'de los Olvidados', 'de la Plaga', 'del Último Rezo'] },
+    fortaleza: { name: 'Fortaleza orca', icon: '🏰', mobs: ['orc', 'orc', 'orc-archer', 'orc-shaman', 'hobgoblin-warrior', 'ogre', 'troll'], boss: 'gorthak', names: ['Fortaleza', 'Bastión', 'Fuerte', 'Ciudadela'], of: ['de la Mano Roja', 'de Gorthak', 'del Cráneo Partido', 'de Hierro Negro'] },
+    nido:      { name: 'Nido de bestias', icon: '🕷️', mobs: ['giant-spider', 'giant-spider', 'wolf', 'wolf', 'dire-wolf', 'brown-bear', 'owlbear'], boss: 'reina-arana', names: ['Nido', 'Cubil', 'Madriguera', 'Bosque Hueco'], of: ['de la Reina Araña', 'de las Mil Patas', 'de la Seda Negra'] },
+    volcan:    { name: 'Guarida del dragón', icon: '🐉', mobs: ['kobold', 'kobold', 'cultist', 'cultist', 'bandit', 'bandit-archer', 'ogre'], boss: 'young-red-dragon', names: ['Guarida', 'Forja', 'Caldera', 'Templo'], of: ['de Ignaroth', 'de Ceniza', 'de la Llama Eterna'] },
   };
 
-  function pregen(cls, species, opts = {}) {
-    const c = D.byId.classes[cls] || D.byId.classes.fighter;
-    const sp = D.byId.species[species] || D.byId.species.human;
-    const p = PREGEN[c.id];
-    const bg = D.byId.backgrounds[p.bg];
-    const base = {};
-    PRIORITY[c.id].forEach((a, i) => { base[a] = D.standardArray[i]; });
-    const order = PRIORITY[c.id].filter((a) => bg.abilities.includes(a));
-    const bonus = { [order[0]]: 2, [order[1]]: 1 };
-    const skills = c.skillChoices.from.filter((k) => !bg.skills.includes(k)).slice(0, c.skillChoices.count);
-    const lv = levelFromXp(opts.xp || 0);
-    const row = c.levels[lv - 1];
-    const maxL = c.spellcasting ? maxSpellLevel(c, lv) : 0;
-    const pick = (wanted, level, n) => {
-      const list = (wanted || []).filter((id) => SPELLS[id] && SPELLS[id].classes.includes(c.id) && (level === 0 ? SPELLS[id].level === 0 : SPELLS[id].level >= 1 && SPELLS[id].level <= maxL));
-      const extra = Object.values(SPELLS).filter((s) => s.classes.includes(c.id) && (level === 0 ? s.level === 0 : s.level >= 1 && s.level <= maxL) && !list.includes(s.id))
-        .sort((a, b) => (COMBAT_SPELLS[b.id] ? 1 : 0) - (COMBAT_SPELLS[a.id] ? 1 : 0) || b.level - a.level);
-      return [...list, ...extra.map((s) => s.id)].slice(0, n);
-    };
-    const sheet = {
-      name: opts.name || 'Aventurero', class: c.id, species: sp.id, background: bg.id,
-      subspecies: sp.subspecies.length ? (opts.subspecies && sp.subspecies.some((x) => x.id === opts.subspecies) ? opts.subspecies : sp.subspecies[0].id) : null,
-      method: 'standard', base, bonus, skills,
-      speciesSkill: sp.id === 'elf' ? 'perception' : sp.id === 'human' ? (['perception', 'stealth', 'insight', 'athletics'].find((k) => !skills.includes(k) && !bg.skills.includes(k))) : null,
-      humanFeat: sp.id === 'human' ? 'alert' : null,
-      featChoice: {}, expertise: [], fightingStyle: p.style || (c.id === 'fighter' ? 'defense' : null),
-      armor: p.armor, shield: !!p.shield, weapons: p.weapons,
-      cantrips: c.spellcasting ? pick(p.cantrips, 0, row.cantrips) : [],
-      spells: c.spellcasting ? pick(p.spells, 1, row.prepared) : [],
-      alignment: 'neutral-good', look: opts.look || { skin: 0, hair: 0 },
-    };
-    if (bg.feat.id === 'magic-initiate') {
-      const cls2 = (bg.feat.note || 'wizard').toLowerCase();
-      const can = Object.values(SPELLS).filter((s) => s.level === 0 && s.classes.includes(cls2)).sort((a, b) => (COMBAT_SPELLS[b.id] ? 1 : 0) - (COMBAT_SPELLS[a.id] ? 1 : 0)).filter((s) => !sheet.cantrips.includes(s.id)).slice(0, 2).map((s) => s.id);
-      const one = Object.values(SPELLS).filter((s) => s.level === 1 && s.classes.includes(cls2)).sort((a, b) => (COMBAT_SPELLS[b.id] ? 1 : 0) - (COMBAT_SPELLS[a.id] ? 1 : 0))[0];
-      sheet.featChoice.magicInitiate = { cls: cls2, cantrips: can, spell: one ? one.id : null };
-    }
-    if (c.id === 'rogue') sheet.expertise = [...bg.skills, ...skills].filter((k) => ['stealth', 'perception', 'sleight-of-hand', 'acrobatics', 'deception'].includes(k)).slice(0, 2);
-    if (sheet.expertise.length < 2 && c.id === 'rogue') sheet.expertise = [...bg.skills, ...skills].slice(0, 2);
-    if ((c.id === 'paladin' || c.id === 'ranger') && lv < 2) sheet.fightingStyle = null;
-    const v = validate(sheet, opts.xp || 0);
-    return v.sheet;
-  }
-
-  // Al subir de nivel: conserva lo elegido y rellena lo nuevo (trucos, conjuros, estilo de combate)
-  function refresh(sheet, xp) {
-    const v = validate(sheet, xp);
-    if (v.ok) return v.sheet;
-    const c = D.byId.classes[sheet.class];
-    if (!c) return pregen('fighter', 'human', { xp });
-    const p = pregen(sheet.class, sheet.species, { name: sheet.name, look: sheet.look, xp, subspecies: sheet.subspecies });
-    const row = c.levels[levelFromXp(xp) - 1];
-    const merged = Object.assign({}, sheet, {
-      fightingStyle: sheet.fightingStyle || p.fightingStyle,
-      cantrips: [...new Set([...(sheet.cantrips || []), ...p.cantrips])].slice(0, row.cantrips),
-      spells: [...new Set([...(sheet.spells || []), ...p.spells])].slice(0, row.prepared),
-    });
-    const v2 = validate(merged, xp);
-    return v2.ok ? v2.sheet : p;
-  }
-
   // ======================================================================
-  //  Monstruos: cómo atacan en el juego
+  //  Utilidades de combate (las usa el servidor)
   // ======================================================================
-  const WORD_NUM = { one: 1, two: 2, three: 3, four: 4, five: 5 };
-  function monsterCombat(mon) {
-    const attacks = [];
-    for (const a of mon.actions || []) {
-      if (a.hit == null || !a.dmg || !a.dmg.length) continue;
-      const reach = /reach (\d+) ft/.exec(a.desc);
-      const range = /range (\d+)(?:\/(\d+))? ft/.exec(a.desc);
-      // daño principal (los extras condicionales, "if the attack roll had Advantage", no se cuentan)
-      const main = a.dmg[0];
-      attacks.push({ name: a.name, hit: a.hit, dice: main[0], type: main[1], melee: !!reach || (!range && /Melee/.test(a.desc)), reach: reach ? parseInt(reach[1], 10) : 5, range: range ? parseInt(range[1], 10) : 0 });
-    }
-    let multi = 1;
-    const ma = (mon.actions || []).find((a) => a.name === 'Multiattack');
-    if (ma) { const w = /makes (one|two|three|four|five)/i.exec(ma.desc); if (w) multi = WORD_NUM[w[1].toLowerCase()] || 1; }
-    if (!attacks.length) attacks.push({ name: 'Golpe', hit: mon.pb + Math.max(mod(mon.str), mod(mon.dex)), dice: `1d6+${Math.max(0, mod(mon.str))}`, type: 'bludgeoning', melee: true, reach: 5, range: 0 });
-    const saves = {};
-    for (const a of ABIL) saves[a] = mod(mon[a]);
-    for (const [name, v] of mon.profs || []) { const mm = /^ST (\w{3})/.exec(name); if (mm) saves[mm[1].toLowerCase()] = v; }
-    return { attacks, multi, saves };
-  }
+  const reduction = (armor, attackerLevel) => Math.min(0.75, armor / (armor + 30 + 10 * attackerLevel));
+  // Experiencia por debajo de tu nivel: se reduce si el monstruo es mucho más débil
+  const xpPenalty = (playerLevel, monsterLevel) => (monsterLevel >= playerLevel - 3 ? 1 : Math.max(0.2, 1 - 0.15 * (playerLevel - 3 - monsterLevel)));
 
   const RULES = {
-    setData, get data() { return D; }, get spells() { return SPELLS; },
-    ABIL, roll, scaleDice, mod, fmt, levelFromXp, profForLevel, cantripTier, tiles,
-    validate, derive, pregen, refresh, monsterCombat, COMBAT_SPELLS, INNATE,
+    MAX_LEVEL, BAG_SIZE, POINTS_START, POINTS_PER_LEVEL, STATS, STAT_IDS, EXTRA, CLASSES, CLASS_IDS, LEGACY_CLASS, ARMOR_TYPES,
+    ABILITIES, ABILITY_BY_ID, SECOND_CLASS_LEVEL, XP_TABLE, SLOTS, SLOT_IDS, WEAPONS, FISTS, OFFHANDS, ARMOR_NAMES, JEWELS,
+    RARITIES, RARITY_ORDER, AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES,
+    statName, fmtStat, classId, levelFromXp, pointsTotal, pointsSpent, pointsFree, baseStats, newChar, cleanChar,
+    rollRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, allowedBases,
+    priceScale, buyPrice, itemBuyPrice, armeroStock, seeded, gearTotals, derive, abilitiesFor, gearLook, monsterAt, reduction, xpPenalty,
   };
 
-  if (typeof module !== 'undefined' && module.exports) {
-    setData(require('./core.json'), require('./spells.json'));
-    module.exports = RULES;
-  } else {
-    root.RULES = RULES;
-  }
+  if (typeof module !== 'undefined' && module.exports) module.exports = RULES;
+  else root.RULES = RULES;
 })(this);
