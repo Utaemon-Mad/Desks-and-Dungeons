@@ -285,8 +285,23 @@ async function instanceTests() {
   b.send({ t: 'wenter' });
   const wd = await b.next((m) => m.t === 'dstart');
   assert.strictEqual(wd.dungeon.kind, 'world');
-  assert.ok(wd.enemies.length >= 10, 'hay enemigos por el mundo');
-  assert.ok(wd.dungeon.labels.some((l) => /Cripta \(nv 4\)/.test(l.text)), 'cuevas con nivel');
+  assert.ok(wd.enemies.length >= 3, 'hay enemigos cerca');
+  assert.ok(wd.enemies.every((e) => Math.max(Math.abs(e.x - wd.players[0].x), Math.abs(e.y - wd.players[0].y)) <= 26), 'sólo llega lo cercano');
+  assert.strictEqual(wd.dungeon.w, 160);
+  assert.strictEqual(wd.dungeon.zones.length, wd.dungeon.w * wd.dungeon.h, 'mapa de zonas');
+  assert.strictEqual(wd.dungeon.waystones.length, 6, 'una piedra de viaje por zona');
+  assert.ok(wd.dungeon.labels.some((l) => /\(nv 23\)/.test(l.text)), 'cuevas con nivel');
+  // hablar con el alcalde: ofrece una misión
+  const alcalde = wd.dungeon.npcs.find((n) => n.id === 'alcalde');
+  b.send({ t: 'dtalk', id: 'alcalde' });
+  const npc = await b.next((m) => m.t === 'npc', 6000);
+  assert.strictEqual(npc.name, alcalde.name);
+  assert.ok(npc.quests.some((q) => q.id === 'carta-lenador' && q.state === 'available'));
+  b.send({ t: 'quest:accept', id: 'carta-lenador' });
+  const mq = await b.next((m) => m.t === 'me' && m.quests['carta-lenador']);
+  assert.strictEqual(mq.quests['carta-lenador'].n, 0);
+  b.send({ t: 'dmount' });
+  assert.match((await b.next((m) => m.t === 'dwhisper' && /montura/.test(m.text))).text, /Establo/);
   b.send({ t: 'dleave' });
   assert.strictEqual((await b.next((m) => m.t === 'dexit')).reason, 'leave');
 

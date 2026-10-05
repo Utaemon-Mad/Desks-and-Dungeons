@@ -979,20 +979,29 @@
       rrect(m._screen.x - w / 2, y - 8, w, 15, 4, hot ? 'rgba(90,40,110,.95)' : 'rgba(30,14,40,.8)', hot ? '#d8a8ff' : '#6a4a8a', 1);
       ctx.fillStyle = '#f0e0ff'; ctx.fillText(label, m._screen.x, y);
     }
+    // nombre del tabernero
+    {
+      const c = iso(MAP.BARKEEP.x + 0.5, MAP.BARKEEP.y + 0.5);
+      ctx.font = '600 10px "Pixelify Sans", sans-serif';
+      const label = '🍺 Alfonso el Tabernero';
+      const w = ctx.measureText(label).width + 10;
+      rrect(c.x - w / 2, c.y - 84, w, 15, 4, 'rgba(60,30,10,.85)', '#c8963a', 1);
+      ctx.fillStyle = '#ffe6b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, c.x, c.y - 76);
+    }
     // bocadillo del tabernero
     if (barkeep.until > now) {
       const c = iso(12.5, 4.5);
       ctx.font = '15px "VT323", monospace';
       const tw = ctx.measureText(barkeep.text).width + 14;
-      rrect(c.x - tw / 2, c.y - 92, tw, 20, 5, '#f4e6c0', OUT, 1.5);
+      rrect(c.x - tw / 2, c.y - 112, tw, 20, 5, '#f4e6c0', OUT, 1.5);
       ctx.fillStyle = '#2a1a10'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(barkeep.text, c.x, c.y - 82);
+      ctx.fillText(barkeep.text, c.x, c.y - 102);
     }
   }
 
   const barkeep = { text: '', until: 0, next: performance.now() + 15000 };
   const BARKEEP_LINES = [
-    '¿Otra ronda, aventureros?', 'Hoy hay estofado de dragón.', 'Nada de magia dentro del local.',
+    'Soy Alfonso, y en mi taberna no se pelea.', '¿Otra ronda, aventureros?', 'Alfonso nunca olvida una deuda.', 'Hoy hay estofado de dragón.', 'Nada de magia dentro del local.',
     'He oído rumores en el tablón…', '¡Esa mesa se reserva para la partida!', 'Las luces se encienden solas… raro.',
     'Si rompéis algo, lo pagáis.', '¿Quién ha dejado este dado aquí?',
   ];
@@ -1279,7 +1288,7 @@
       case 'drink': {
         const u = users.get(m.id);
         if (u) { u.mugUntil = now + 12000; u.emote = { e: 'cheers', until: now + 2600 }; }
-        barkeep.text = '¡Marchando una jarra!'; barkeep.until = now + 2500;
+        barkeep.text = '¡Marchando una jarra, que invita Alfonso!'; barkeep.until = now + 2500;
         break;
       }
       case 'roll': {

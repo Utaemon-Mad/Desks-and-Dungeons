@@ -1,21 +1,12 @@
-// Generador del mundo abierto: un mapa por sala (siempre el mismo para la misma sala), con el pueblo de la
-// taberna, bosques, lagos, montañas, caminos, cuevas que llevan a las mazmorras y zonas con enemigos.
-const W = 80, H = 56;
+// Generador del mundo abierto (uno por sala, siempre igual para la misma sala): el pueblo de Brumaverde en el
+// centro y, alrededor, seis zonas cada vez más peligrosas: valle, bosque, ciénaga, yermo, picos helados y erial
+// de ceniza. Cada zona tiene su terreno, su campamento con piedra de viaje y gente con misiones, sus enemigos,
+// su jefe, lugares con nombre y una cueva hacia una mazmorra de su nivel.
+const RULES = require('../public/rules/engine.js');
 
-// Generador pseudoaleatorio con semilla (mulberry32)
-function seeded(str) {
-  let h = 1779033703 ^ str.length;
-  for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
-  let a = h >>> 0;
-  return () => {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
-    let t = Math.imul(a ^ (a >>> 15), 1 | a);
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
-}
+const W = 160, H = 120;
+const RINGS = [17, 30, 42, 54, 66]; // radio (con ruido) donde empieza cada zona
 
-// Ruido de valor suave (varias octavas)
 function noiseField(rand, w, h, scale) {
   const gw = Math.ceil(w / scale) + 2, gh = Math.ceil(h / scale) + 2;
   const grid = Array.from({ length: gw * gh }, () => rand());
@@ -31,184 +22,250 @@ function noiseField(rand, w, h, scale) {
   };
 }
 
-function generate(roomName) {
-  const rand = seeded('world:' + roomName);
-  const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
-  const n1 = noiseField(rand, W, H, 14), n2 = noiseField(rand, W, H, 6), m1 = noiseField(rand, W, H, 11), m2 = noiseField(rand, W, H, 4);
-  const t = new Array(W * H);
-  const set = (x, y, ch) => { if (x >= 0 && y >= 0 && x < W && y < H) t[y * W + x] = ch; };
-  const get = (x, y) => (x >= 0 && y >= 0 && x < W && y < H ? t[y * W + x] : 'M');
+// Casillas por las que se anda (para comprobar que todo se puede alcanzar)
+const BLOCK = new Set(['T', 'P', 'w', 'M', 'R', 'k', 't', 'F', 'x', 'q', 'y', 'o', 'c', 'p', 'e', 'l']);
+const walk = (ch) => !BLOCK.has(ch);
+const FLOOR = [',', ',', 'm', 'd', 'n', 'a']; // suelo limpio de cada zona
 
+// Gente del mundo
+const NPCS = {
+  alcalde: { name: 'Alcalde Brumo', look: { cls: 'paladin', skin: 1, hair: 4, beard: '#d8d8d8', gear: { pecho: 'tela' }, color: '#5a2a5a' }, lines: ['Bienvenido a Brumaverde. Desde que el cielo del sur se volvió rojo, nada va bien.', 'Las piedras de viaje te llevan de campamento en campamento. Tócalas para recordarlas.'] },
+  jacinta: { name: 'Jacinta la granjera', look: { cls: 'clerigo', skin: 2, hair: 2, gear: { pecho: 'tela' }, color: '#7a5a2a' }, lines: ['¡Un aventurero! Por fin alguien que no huye de los goblins.'] },
+  tilda: { name: 'Tilda la buhonera', shop: 'bruja', look: { cls: 'picaro', skin: 0, hair: 3, gear: { pecho: 'cuero' }, color: '#6a3a2a' }, lines: ['Pociones de Madre Zarza, a precio de pueblo. ¿Qué te pongo?'] },
+  ewan: { name: 'Ewan el leñador', look: { cls: 'guerrero', skin: 2, hair: 1, beard: '#6b4226', gear: { w: 'hacha', pecho: 'cuero' } }, lines: ['El bosque cruje de noche. No son los árboles.'] },
+  bran: { name: 'Bran el cazador', look: { cls: 'explorador', skin: 3, hair: 0, gear: { w: 'arco', pecho: 'cuero', casco: 'cuero' } }, lines: ['He seguido el rastro del Alfa tres lunas. Es más listo que un lobo.'] },
+  morwen: { name: 'Abuela Morwen', look: { cls: 'brujo', skin: 6, hair: 4, gear: { pecho: 'tela', casco: 'tela' }, color: '#2a3a2a' }, lines: ['Siéntate, criatura. La ciénaga habla, si sabes escuchar.'] },
+  rhys: { name: 'Capitán Rhys', look: { cls: 'paladin', skin: 3, hair: 0, gear: { w: 'espada', o: 'escudo', pecho: 'placas', casco: 'placas' } }, lines: ['Fuerte del Desierto. Aquí aguantamos lo que baja del sur.'] },
+  tor: { name: 'Tor el ermitaño', look: { cls: 'clerigo', skin: 1, hair: 4, beard: '#e8e8e8', gear: { w: 'baston', pecho: 'tela', casco: 'tela' }, color: '#5a6a7a' }, lines: ['El viento de los picos trae voces. Últimamente, gritos.'] },
+  selene: { name: 'Selene, la Última Vigía', look: { cls: 'paladin', skin: 0, hair: 3, gear: { w: 'espadon', pecho: 'placas', casco: 'placas' }, set: 'paladin' }, lines: ['Llevo años vigilando la guarida. Ignaroth despierta un poco más cada noche.'] },
+  buhonero: { name: 'Buhonero', shop: 'bruja', look: { cls: 'picaro', skin: 2, hair: 1, gear: { pecho: 'cuero', casco: 'tela' }, color: '#4a3a2a' }, lines: ['Pociones, vendas, de todo. Aquí lejos, de todo vale el doble... pero te hago precio.'] },
+};
+
+const OUTPOSTS = [
+  null,
+  { name: 'Campamento del Leñador', npcs: ['ewan', 'bran'] },
+  { name: 'Aldea de Juncos', npcs: ['morwen'] },
+  { name: 'Fuerte del Desierto', npcs: ['rhys'] },
+  { name: 'Refugio de Montaña', npcs: ['tor'] },
+  { name: 'La Última Vigía', npcs: ['selene'] },
+];
+const CAVES = [['cuevas', 2], ['nido', 5], ['cripta', 8], ['fortaleza', 12], ['fortaleza', 17], ['volcan', 23]];
+const BOSS_PLACES = ['Campamento de Rufo', 'Claro del Huargo', 'Choza de Ortiga', 'Dunas del Rey Escorpión', 'Cumbre del Gigante', 'Guarida de Ignaroth'];
+const EXTRA_PLACES = [['Granja de Jacinta'], ['Nido de arañas'], ['Templo hundido'], ['Oasis perdido'], ['Paso de la Ventisca'], ['Altar de la Llama']];
+
+function generate(roomName) {
+  const rand = RULES.seeded('world2:' + roomName);
+  const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
+  const n1 = noiseField(rand, W, H, 16), n2 = noiseField(rand, W, H, 6), n3 = noiseField(rand, W, H, 3.2), nz = noiseField(rand, W, H, 11);
+  const t = new Array(W * H);
+  const zone = new Uint8Array(W * H);
+  const set = (x, y, ch) => { if (x > 0 && y > 0 && x < W - 1 && y < H - 1) t[y * W + x] = ch; };
+  const get = (x, y) => (x >= 0 && y >= 0 && x < W && y < H ? t[y * W + x] : 'M');
+  const town = { x: W >> 1, y: H >> 1 };
+  const zoneAt = (x, y) => {
+    const d = Math.hypot(x - town.x, (y - town.y) * 1.33) + (nz(x, y) - 0.5) * 16;
+    let z = 0;
+    while (z < RINGS.length && d >= RINGS[z]) z++;
+    return z;
+  };
+
+  // ---------- Terreno ----------
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-    // borde de montañas para cerrar el mapa
-    const edge = Math.min(x, y, W - 1 - x, H - 1 - y);
-    const e = n1(x, y) * 0.7 + n2(x, y) * 0.3 + (edge < 3 ? (3 - edge) * 0.18 : 0);
-    const m = m1(x, y) * 0.7 + m2(x, y) * 0.3;
+    const z = zoneAt(x, y);
+    zone[y * W + x] = z;
+    const v = n1(x, y) * 0.65 + n2(x, y) * 0.35, d2 = n3(x, y);
     let ch;
-    if (edge === 0) ch = 'M';
-    else if (e < 0.3) ch = 'w';
-    else if (e < 0.34) ch = 's';
-    else if (e > 0.8) ch = 'M';
-    else if (e > 0.69) ch = m > 0.55 ? 'P' : 'h';
-    else if (m > 0.62) ch = rand() < 0.72 ? 'T' : ';';
-    else if (m > 0.52) ch = rand() < 0.22 ? 'T' : ';';
-    else ch = rand() < 0.04 ? 'T' : ',';
+    switch (z) {
+      case 0: ch = v < 0.27 ? 'w' : v < 0.3 ? 's' : d2 > 0.8 ? 'T' : d2 > 0.7 ? ';' : ','; break;
+      case 1: ch = v < 0.24 ? 'w' : d2 > 0.42 ? (rand() < 0.6 ? 'T' : 'P') : d2 > 0.32 ? ';' : ','; break;
+      case 2: ch = v < 0.4 ? 'q' : v < 0.45 ? 'r' : d2 > 0.8 ? 'y' : d2 < 0.12 ? ';' : 'm'; break;
+      case 3: ch = v > 0.8 ? 'M' : d2 > 0.88 ? 'o' : d2 < 0.06 ? 'c' : v < 0.36 ? 'z' : 'd'; break;
+      case 4: ch = v > 0.72 ? 'M' : d2 > 0.78 ? 'p' : v < 0.3 ? 'i' : 'n'; break;
+      default: ch = v < 0.3 ? 'l' : d2 > 0.84 ? 'e' : 'a';
+    }
+    if (Math.min(x, y, W - 1 - x, H - 1 - y) < 2) ch = 'M';
     t[y * W + x] = ch;
   }
+  const clearArea = (c, r, ch) => { for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (Math.hypot(dx, dy) <= r + 0.3) set(c.x + dx, c.y + dy, ch || FLOOR[zone[(c.y + dy) * W + c.x + dx]] || ','); };
 
-  // Pueblo cerca del centro
-  const town = { x: Math.floor(W / 2) + ri(-6, 6), y: Math.floor(H / 2) + ri(-4, 4) };
-  for (let dy = -4; dy <= 4; dy++) for (let dx = -5; dx <= 5; dx++) set(town.x + dx, town.y + dy, ',');
-  for (const [dx, dy] of [[-3, -2], [3, -2], [-3, 2], [3, 2], [-4, 0], [4, 0]]) set(town.x + dx, town.y + dy, 'k');
-  for (let dx = -5; dx <= 5; dx++) set(town.x + dx, town.y, '=');
-  for (let dy = -4; dy <= 4; dy++) set(town.x, town.y + dy, '=');
+  // ---------- Pueblo de Brumaverde ----------
+  clearArea(town, 7, ',');
+  for (let dx = -7; dx <= 7; dx++) set(town.x + dx, town.y, '=');
+  for (let dy = -6; dy <= 6; dy++) set(town.x, town.y + dy, '=');
+  for (const [dx, dy] of [[-4, -3], [4, -3], [-4, 3], [4, 3], [-6, -1], [6, 1], [-2, -5], [2, 5]]) set(town.x + dx, town.y + dy, 'k');
   set(town.x, town.y, 'H');
+  set(town.x + 2, town.y + 1, 'W');
+  set(town.x - 2, town.y + 1, 'F');
 
-  const far = (p, min) => Math.hypot(p.x - town.x, p.y - town.y) >= min;
-  // Busca una casilla que cumpla la condición y esté lejos del pueblo (si no hay, la más lejana que la cumpla)
-  const used = [];
-  const pick = (test, min) => {
-    let best = null, bestD = -1;
-    for (let i = 0; i < 4000; i++) {
-      const p = { x: ri(4, W - 5), y: ri(4, H - 5) };
-      if (!test(get(p.x, p.y), p) || used.some((u) => Math.hypot(u.x - p.x, u.y - p.y) < 7)) continue;
-      const d = Math.hypot(p.x - town.x, p.y - town.y);
-      if (d >= min) { used.push(p); return p; }
-      if (d > bestD) { bestD = d; best = p; }
+  const labels = [{ x: town.x, y: town.y - 8, text: 'Brumaverde' }];
+  const npcs = [];
+  const waystones = [{ id: 'brumaverde', name: 'Brumaverde', x: town.x + 2, y: town.y + 1, zone: 0 }];
+  const addNpc = (id, x, y) => { set(x, y, FLOOR[zone[y * W + x]] === 'm' ? 'u' : get(x, y) === '=' ? '=' : FLOOR[zone[y * W + x]]); npcs.push({ id, ...NPCS[id], x, y }); };
+  addNpc('alcalde', town.x + 1, town.y - 2);
+  addNpc('tilda', town.x - 1, town.y + 2);
+
+  // Busca una casilla en una zona (lejos de lo ya usado)
+  const used = [{ x: town.x, y: town.y, r: 10 }];
+  const pickIn = (z, test = () => true, minGap = 8, prefer) => {
+    for (let i = 0; i < 6000; i++) {
+      const p = prefer && i < 2000 ? { x: prefer.x + ri(-8, 8), y: prefer.y + ri(-8, 8) } : { x: ri(5, W - 6), y: ri(5, H - 6) };
+      if (p.x < 5 || p.y < 5 || p.x > W - 6 || p.y > H - 6) continue;
+      if (zone[p.y * W + p.x] !== z || !test(get(p.x, p.y), p)) continue;
+      if (used.some((u) => Math.hypot(u.x - p.x, u.y - p.y) < Math.max(minGap, u.r || 0))) continue;
+      return p;
     }
-    const p = best || { x: ri(6, W - 7), y: ri(6, H - 7) };
-    used.push(p);
-    return p;
+    return null;
   };
-  const clearArea = (c, r, ch = ',') => { for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (Math.hypot(dx, dy) <= r + 0.3) set(c.x + dx, c.y + dy, ch); };
 
+  // ---------- Campamentos con piedra de viaje ----------
+  const outposts = [];
+  const base = rand() * Math.PI * 2;
+  for (let z = 1; z <= 5; z++) {
+    const ang = base + z * 1.25;
+    const r = (RINGS[z - 1] + (RINGS[z] || 78)) / 2;
+    const guess = { x: Math.round(town.x + Math.cos(ang) * r), y: Math.round(town.y + Math.sin(ang) * r / 1.33) };
+    const p = pickIn(z, () => true, 14, guess) || pickIn(z, () => true, 6);
+    if (!p) continue;
+    used.push({ ...p, r: 12 });
+    clearArea(p, 4, z === 2 ? 'u' : undefined);
+    set(p.x, p.y, 'W');
+    set(p.x - 2, p.y + 1, 'F');
+    for (const [dx, dy] of [[-3, -2], [3, -2], [3, 2]]) set(p.x + dx, p.y + dy, 'k');
+    const O = OUTPOSTS[z];
+    waystones.push({ id: 'ws' + z, name: O.name, x: p.x, y: p.y, zone: z });
+    labels.push({ x: p.x, y: p.y - 5, text: O.name });
+    O.npcs.forEach((id, i) => addNpc(id, p.x + 1 + i, p.y - 1));
+    addNpc('buhonero', p.x - 1, p.y + 2);
+    outposts.push({ z, ...p });
+  }
+
+  // ---------- Lugares: guaridas de los jefes, cuevas y sitios con nombre ----------
   const groups = [];
-  const labels = [{ x: town.x, y: town.y - 5, text: 'Pueblo' }];
   const caves = [];
-
-  // Zonas de enemigos
-  const goblinCamp = pick((ch) => ch === 'T' || ch === ';', 14);
-  clearArea(goblinCamp, 3); set(goblinCamp.x, goblinCamp.y, 'F');
-  groups.push({ lvl: 1, spawn: [['goblin-warrior', -2, -1], ['goblin-archer', 2, 1], ['goblin-minion', -1, 2], ['goblin-minion', 1, -2], ['goblin-shaman', 0, 2]].map(([k, dx, dy]) => ({ k, x: goblinCamp.x + dx, y: goblinCamp.y + dy })) });
-  labels.push({ x: goblinCamp.x, y: goblinCamp.y - 4, text: 'Campamento goblin' });
-
-  const orcFort = pick((ch) => ch === 'h' || ch === 'P', 18);
-  clearArea(orcFort, 4, 'h');
-  for (let a = 0; a < 24; a++) { const ang = a / 24 * Math.PI * 2; if (a % 6 === 0) continue; set(Math.round(orcFort.x + Math.cos(ang) * 4), Math.round(orcFort.y + Math.sin(ang) * 4), 'R'); }
-  set(orcFort.x, orcFort.y, 'F');
-  groups.push({ lvl: 5, spawn: [['orc', -2, 0], ['orc', 2, 0], ['orc-archer', 0, -2], ['orc-war-chief', 0, 2], ['orc-shaman', -2, 2]].map(([k, dx, dy]) => ({ k, x: orcFort.x + dx, y: orcFort.y + dy })) });
-  labels.push({ x: orcFort.x, y: orcFort.y - 6, text: 'Fuerte orco' });
-
-  const grave = pick((ch) => ch === ',' || ch === ';' || ch === 'h', 16);
-  clearArea(grave, 4, 'g');
-  for (let i = 0; i < 14; i++) { const dx = ri(-3, 3), dy = ri(-3, 3); if ((dx + dy) % 2 === 0 && (dx || dy)) set(grave.x + dx, grave.y + dy, 't'); }
-  groups.push({ lvl: 4, spawn: [['skeleton', -2, -1], ['skeleton-archer', 2, -1], ['zombie', -1, 2], ['zombie', 1, 2], ['ghoul', 0, 0], ['wight', 0, -3]].map(([k, dx, dy]) => ({ k, x: grave.x + dx, y: grave.y + dy })) });
-  labels.push({ x: grave.x, y: grave.y - 5, text: 'Cementerio' });
-
-  const den = pick((ch) => ch === 'T', 12);
-  clearArea(den, 2, ';');
-  groups.push({ lvl: 2, spawn: [['wolf', -1, 0], ['wolf', 1, 0], ['wolf', 0, 1], ['dire-wolf', 0, -1]].map(([k, dx, dy]) => ({ k, x: den.x + dx, y: den.y + dy })) });
-  labels.push({ x: den.x, y: den.y - 3, text: 'Guarida de lobos' });
-
-  const nest = pick((ch) => ch === 'T', 15);
-  clearArea(nest, 2, ';');
-  groups.push({ lvl: 3, spawn: [['giant-spider', -1, 0], ['giant-spider', 1, 1], ['giant-spider', 0, -1]].map(([k, dx, dy]) => ({ k, x: nest.x + dx, y: nest.y + dy })) });
-  labels.push({ x: nest.x, y: nest.y - 3, text: 'Nido de arañas' });
-
-  const bandits = pick((ch) => ch === ',' || ch === ';', 10);
-  clearArea(bandits, 2); set(bandits.x, bandits.y, 'F');
-  groups.push({ lvl: 2, spawn: [['bandit', -1, -1], ['bandit-archer', 1, -1], ['bandit', -1, 1], ['bandit-captain', 1, 1]].map(([k, dx, dy]) => ({ k, x: bandits.x + dx, y: bandits.y + dy })) });
-  labels.push({ x: bandits.x, y: bandits.y - 3, text: 'Campamento bandido' });
-
-  const lair = pick((ch, p) => (ch === 'M' || ch === 'P' || ch === 'h') && Math.min(p.x, p.y, W - 1 - p.x, H - 1 - p.y) > 3, 28);
-  clearArea(lair, 3, 'h'); set(lair.x, lair.y, 'D');
-  groups.push({ lvl: 10, spawn: [{ k: 'young-red-dragon', x: lair.x, y: lair.y + 1 }] });
-  labels.push({ x: lair.x, y: lair.y - 4, text: 'Guarida del dragón' });
-
-  // Bestias sueltas
-  for (let i = 0; i < 4; i++) {
-    const p = pick((ch) => ch === ',' || ch === ';', 9);
-    groups.push({ lvl: 2 + i, spawn: [{ k: i % 2 ? 'wolf' : 'brown-bear', x: p.x, y: p.y }] });
-  }
-  const owl = pick((ch) => ch === 'T', 18);
-  clearArea(owl, 1, ';');
-  groups.push({ lvl: 6, spawn: [{ k: 'owlbear', x: owl.x, y: owl.y }] });
-
-  // Cuevas: una mazmorra aleatoria de cada tema, cada vez más difícil cuanto más lejos del pueblo
-  const CAVES = [['cuevas', 1, 10], ['nido', 3, 14], ['cripta', 4, 16], ['fortaleza', 6, 20], ['volcan', 9, 24]];
-  const THEME_NAMES = { cuevas: 'Cuevas goblin', nido: 'Nido de bestias', cripta: 'Cripta', fortaleza: 'Fortaleza orca', volcan: 'Guarida del dragón' };
-  for (const [theme, lvl, minD] of CAVES) {
-    const p = pick((ch, q) => (ch === 'h' || ch === 'P') && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => get(q.x + dx, q.y + dy) !== 'M'), minD);
-    clearArea(p, 1, 'h');
-    set(p.x, p.y, 'C');
-    caves.push({ x: p.x, y: p.y, theme, level: lvl });
-    labels.push({ x: p.x, y: p.y - 2, text: `${THEME_NAMES[theme]} (nv ${lvl})` });
+  const bossSpots = [];
+  for (let z = 0; z < 6; z++) {
+    const Z = RULES.ZONES[z];
+    const p = pickIn(z, (ch) => walk(ch), 10);
+    if (p) {
+      used.push({ ...p, r: 8 });
+      clearArea(p, 3);
+      if (z === 5) set(p.x, p.y - 2, 'D');
+      if (z === 0) { set(p.x, p.y - 1, 'F'); for (const [dx, dy] of [[-2, -2], [2, -2]]) set(p.x + dx, p.y + dy, 'k'); }
+      bossSpots.push({ z, ...p });
+      labels.push({ x: p.x, y: p.y - 4, text: BOSS_PLACES[z] });
+      groups.push({ lvl: Z.lv[1] + 1, boss: true, spawn: [{ k: Z.boss, x: p.x, y: p.y }] });
+    }
+    const [theme, lvl] = CAVES[z];
+    const c = pickIn(z, (ch, q) => walk(ch) && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => ['M', 'P', 'T', 'o', 'e', 'p'].includes(get(q.x + dx, q.y + dy))), 9)
+      || pickIn(z, (ch) => walk(ch), 9);
+    if (c) {
+      used.push({ ...c, r: 6 });
+      set(c.x, c.y, 'C');
+      set(c.x, c.y + 1, FLOOR[z]);
+      caves.push({ x: c.x, y: c.y, theme, level: lvl });
+      labels.push({ x: c.x, y: c.y - 2, text: `${RULES.THEMES[theme].name} (nv ${lvl})` });
+    }
+    const e = pickIn(z, (ch) => walk(ch), 10);
+    if (e) {
+      used.push({ ...e, r: 6 });
+      const name = EXTRA_PLACES[z][0];
+      if (z === 0) { // la granja de Jacinta: cultivos y una valla
+        for (let dy = -2; dy <= 2; dy++) for (let dx = -3; dx <= 3; dx++) set(e.x + dx, e.y + dy, Math.abs(dy) === 2 || Math.abs(dx) === 3 ? (dx === 0 ? ',' : 'x') : 'f');
+        addNpc('jacinta', e.x, e.y + 3);
+      } else if (z === 2) { clearArea(e, 2, 'u'); for (const [dx, dy] of [[-2, -2], [2, -2], [-2, 2], [2, 2]]) set(e.x + dx, e.y + dy, 'R'); }
+      else if (z === 3) { clearArea(e, 2, 'w'); set(e.x - 3, e.y, 'T'); set(e.x + 3, e.y, 'T'); set(e.x, e.y - 3, 'T'); }
+      else if (z === 5) { clearArea(e, 2); set(e.x, e.y, 'R'); }
+      else clearArea(e, 2);
+      labels.push({ x: e.x, y: e.y - 4, text: name });
+      if (z === 1) groups.push({ lvl: 5, spawn: [-1, 0, 1].map((dx) => ({ k: 'giant-spider', x: e.x + dx, y: e.y + 1 })) });
+    }
   }
 
-  // Caminos del pueblo a cada lugar (A* barato; cruza agua con puentes y abre paso entre árboles)
-  const cost = (ch) => ({ '=': 1, ',': 2, ';': 2.5, s: 2.5, h: 3, g: 2, T: 5, P: 6, w: 9, v: 6, M: 30, R: 50, k: 99, t: 50, F: 99, C: 1, D: 1, H: 1, b: 1 }[ch] || 3);
+  // ---------- Caminos (A* que prefiere el terreno fácil y tiende puentes) ----------
+  const cost = (ch) => ({ '=': 1, ',': 2, ';': 2.5, s: 2.5, f: 3, m: 3, r: 3, d: 2.5, z: 2.5, n: 3, i: 3, a: 2.5, u: 1, h: 3, T: 6, P: 7, y: 6, p: 7, w: 9, q: 8, l: 14, o: 9, c: 9, e: 9, M: 40, R: 60, k: 99, t: 60, F: 99, x: 99, C: 1, D: 1, H: 1, W: 1, b: 1 }[ch] || 3);
   function road(a, b) {
     const key = (x, y) => y * W + x;
     const dist = new Map([[key(a.x, a.y), 0]]), prev = new Map();
     const open = [[0, a.x, a.y]];
-    while (open.length) {
+    let steps = 0;
+    while (open.length && steps++ < 60000) {
       let bi = 0;
       for (let i = 1; i < open.length; i++) if (open[i][0] < open[bi][0]) bi = i;
       const [, x, y] = open.splice(bi, 1)[0];
       if (x === b.x && y === b.y) break;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
         const nx = x + dx, ny = y + dy;
-        if (nx < 1 || ny < 1 || nx >= W - 1 || ny >= H - 1) continue;
+        if (nx < 2 || ny < 2 || nx >= W - 2 || ny >= H - 2) continue;
         const nd = dist.get(key(x, y)) + cost(get(nx, ny));
         if (!dist.has(key(nx, ny)) || nd < dist.get(key(nx, ny))) {
           dist.set(key(nx, ny), nd); prev.set(key(nx, ny), [x, y]);
-          open.push([nd + Math.abs(nx - b.x) + Math.abs(ny - b.y), nx, ny]);
+          open.push([nd + (Math.abs(nx - b.x) + Math.abs(ny - b.y)) * 1.5, nx, ny]);
         }
       }
     }
     let cur = [b.x, b.y];
     while (prev.has(key(cur[0], cur[1]))) {
       const ch = get(cur[0], cur[1]);
-      if (!'CDHFkRt'.includes(ch)) set(cur[0], cur[1], ch === 'w' || ch === 'v' ? 'b' : '=');
+      if (!'CDHFkRtWx'.includes(ch)) set(cur[0], cur[1], ch === 'w' || ch === 'q' || ch === 'l' ? 'b' : '=');
       cur = prev.get(key(cur[0], cur[1]));
     }
   }
-  const near = (p) => ({ x: p.x, y: p.y + 3 });
-  for (const p of [goblinCamp, near(orcFort), grave, den, bandits, ...caves, lair]) road(town, p);
+  const sorted = outposts.slice().sort((a, b) => a.z - b.z);
+  let from = town;
+  for (const o of sorted) { road(from, o); from = o; } // camino principal: de zona en zona
+  for (const o of sorted) if (o.z <= 2) road(town, o);
 
-  // Todo lo que haya quedado aislado (bestias en mitad del bosque…) se conecta con un camino
+  // Todo lo importante tiene que poder alcanzarse a pie
   const reachable = () => {
     const seen = new Uint8Array(W * H);
-    const q = [[town.x, town.y + 1]];
-    seen[(town.y + 1) * W + town.x] = 1;
-    const walk = (ch) => !'TPwMRktF'.includes(ch);
-    while (q.length) {
-      const [x, y] = q.shift();
+    const q = [town.y * W + town.x + W];
+    seen[q[0]] = 1;
+    for (let h = 0; h < q.length; h++) {
+      const c = q[h], x = c % W, y = (c / W) | 0;
       for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
-        const nx = x + dx, ny = y + dy;
-        if (nx < 0 || ny < 0 || nx >= W || ny >= H || seen[ny * W + nx] || !walk(get(nx, ny))) continue;
-        seen[ny * W + nx] = 1; q.push([nx, ny]);
+        const n = (y + dy) * W + x + dx;
+        if (seen[n] || !walk(t[n])) continue;
+        seen[n] = 1; q.push(n);
       }
     }
     return seen;
   };
   let seen = reachable();
-  for (const g of groups) {
-    const s0 = g.spawn[0];
-    if (!seen[s0.y * W + s0.x]) { road(town, s0); seen = reachable(); }
+  for (const p of [...bossSpots, ...caves, ...npcs]) {
+    if (!seen[p.y * W + p.x] && !seen[(p.y + 1) * W + p.x]) {
+      const near = [town, ...outposts].sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
+      road(near, { x: p.x, y: p.y + 1 });
+      seen = reachable();
+    }
   }
 
-  // agua poco profunda junto a las orillas (vados)
+  // ---------- Grupos de enemigos por todo el mapa ----------
+  const counts = [16, 22, 22, 22, 20, 18];
+  for (let z = 0; z < 6; z++) {
+    const Z = RULES.ZONES[z];
+    for (let i = 0; i < counts[z]; i++) {
+      const p = pickIn(z, (ch, q) => walk(ch) && seen[q.y * W + q.x] && ch !== 'W' && ch !== 'C', 7);
+      if (!p) break;
+      used.push({ ...p, r: 6 });
+      const n = ri(2, 3) + (z >= 3 ? 1 : 0);
+      const lvl = ri(Z.lv[0], Z.lv[1]);
+      const elite = rand() < 0.1;
+      const spawn = [];
+      for (let k = 0; k < n; k++) spawn.push({ k: Z.mobs[Math.floor(rand() * Z.mobs.length)], x: p.x + ri(-1, 1), y: p.y + ri(-1, 1), elite: elite && k === 0 });
+      groups.push({ lvl, spawn });
+    }
+  }
+
+  // agua poco profunda junto a las orillas del valle y el bosque
   for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
-    if (get(x, y) === 'w' && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => get(x + dx, y + dy) === 's') && rand() < 0.35) set(x, y, 'v');
+    if (get(x, y) === 'w' && zone[y * W + x] <= 1 && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => get(x + dx, y + dy) === 's') && rand() < 0.35) set(x, y, 'v');
   }
 
   return {
-    id: 'world', name: 'Las Tierras Oscuras', kind: 'world', w: W, h: H,
-    tiles: t.join(''), start: { x: town.x, y: town.y + 1 }, town,
-    objects: [{ k: 'start', x: town.x, y: town.y + 1 }],
-    groups, caves, labels,
+    id: 'world', name: 'Las Tierras de Brumaverde', kind: 'world', w: W, h: H,
+    tiles: t.join(''), zones: Array.from(zone).join(''), start: { x: town.x, y: town.y + 2 }, town,
+    groups, caves, labels, npcs, waystones,
   };
 }
 
-module.exports = { generate, W, H };
+module.exports = { generate, W, H, NPCS };

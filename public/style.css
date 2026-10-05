@@ -413,3 +413,12 @@ body.in-dungeon #heroes, body.in-dungeon #log { display: none; }
   .class-pick { grid-template-columns: repeat(3, 1fr); }
   .derived { grid-template-columns: 1fr; }
 }
+
+/* tarjeta del objeto recogido */
+#lootcard { position: absolute; right: 14px; top: 190px; z-index: 7; width: 260px; padding: 8px 10px; cursor: pointer; border-width: 3px; font-size: 13px; animation: slidein .25s ease-out; }
+#lootcard .lc-top { display: flex; gap: 8px; align-items: center; margin-bottom: 4px; }
+#lootcard canvas { width: 40px; height: 40px; image-rendering: pixelated; background: radial-gradient(#2e1e14, #160c06); border-radius: 4px; }
+#lootcard b { display: block; font-size: 15px; }
+#lootcard small { opacity: .75; font-size: 11px; }
+@keyframes slidein { from { transform: translateX(40px); opacity: 0; } to { transform: none; opacity: 1; } }
+@media (max-width: 820px) { #lootcard { top: auto; bottom: 260px; right: 6px; width: 220px; } }

@@ -115,7 +115,7 @@
   }
 
   // Visión: lo que ven los héroes (línea de visión) se ilumina; lo explorado queda en penumbra
-  const OPAQUE = new Set(['#', 'T', 'P', 'M', 'R', 'k']);
+  const OPAQUE = new Set(['#', 'T', 'P', 'M', 'R', 'k', 'y', 'p']);
   function updateVision() {
     const { w, h, tiles } = game.map;
     const vis = game.vis;
@@ -579,7 +579,7 @@
         const gr = wg.createLinearGradient(0, l.y * T - 18, 0, l.y * T + 12);
         gr.addColorStop(0, 'rgba(0,0,0,0)'); gr.addColorStop(1, col + (l.r === 'comun' ? '44' : '99'));
         wg.fillStyle = gr; wg.fillRect(l.x * T + 5, l.y * T - 18, 6, 30);
-        wg.drawImage(DSPRITES.itemIcon({ slot: l.slot, base: guessBase(l), rarity: l.r }), l.x * T, l.y * T + bob - 2);
+        wg.drawImage(DSPRITES.itemIcon(l.it || { slot: l.slot, base: guessBase(l), rarity: l.r }), l.x * T, l.y * T + bob - 2);
       } else if (l.gold) wg.drawImage(DSPRITES.goldPile(), l.x * T, l.y * T + bob);
       else if (l.cons) wg.drawImage(DSPRITES.potion(RULES.CONSUMABLES[l.cons].color), l.x * T, l.y * T + bob);
     }
@@ -859,7 +859,10 @@
         if (b && b.until > now) drawBubble(x, top - 20, b.text);
       }
     }
-    // nombre del objeto del suelo bajo el ratón
+    // ficha del objeto del suelo bajo el ratón
+    const lh = hov && game.mouseOnMap && game.loot.find((q) => q.x === hov.x && q.y === hov.y && q.it);
+    if (lh && game.mouse) { if (game.tipFor !== lh.id) { game.tipFor = lh.id; DD.showItemTip(lh.it, { clientX: game.mouse.x, clientY: game.mouse.y }, 'Pásale por encima para recogerlo'); } }
+    else if (game.tipFor) { game.tipFor = null; DD.hideItemTip(); }
     if (hov) {
       const l = game.loot.find((q) => q.x === hov.x && q.y === hov.y && q.name);
       if (l) {

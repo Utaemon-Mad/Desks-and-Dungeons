@@ -142,6 +142,11 @@ function setupProfile(profile, look) {
   profile.char.look = { species: look.species, skin: look.skin, hair: look.hair };
   profile.equip = profile.equip || {}; profile.bag = Array.isArray(profile.bag) ? profile.bag : [];
   profile.cons = profile.cons || {}; profile.buffs = profile.buffs || {};
+  profile.quests = profile.quests || {}; profile.questsDone = profile.questsDone || [];
+  profile.waystones = profile.waystones || ['brumaverde'];
+  if (profile.pet && !RULES.PETS[profile.pet.type]) profile.pet = null;
+  if (profile.pet) profile.pet.bag = Array.isArray(profile.pet.bag) ? profile.pet.bag : [];
+  if (profile.mount && !RULES.MOUNTS[profile.mount]) profile.mount = null;
   changeClasses(profile, look.cls, look.cls2);
   for (const [id, until] of Object.entries(profile.buffs)) if (until <= Date.now()) delete profile.buffs[id];
 }
@@ -182,7 +187,7 @@ function saveUser(user) { store.setPlayer(user.pid, user.profile); }
 // El jugador recibe su perfil completo; los demás, lo que se ve
 function sendMe(user) {
   const p = user.profile;
-  send(user.ws, { t: 'me', char: p.char, equip: p.equip, bag: p.bag, cons: p.cons, buffs: p.buffs, xp: p.xp, gold: p.gold });
+  send(user.ws, { t: 'me', char: p.char, equip: p.equip, bag: p.bag, cons: p.cons, buffs: p.buffs, xp: p.xp, gold: p.gold, quests: p.quests, questsDone: p.questsDone, waystones: p.waystones, pet: p.pet || null, mount: p.mount || null });
 }
 
 function profileChanged(room, user, opts = {}) {
@@ -245,6 +250,11 @@ function getInstance(room, def) {
       giveCons: (u, cid, n) => giveCons(u, cid, n),
       exit: (u, reason, r) => leaveInstance(room, u, reason, r),
       portal: (u, cave, back) => enterCave(room, u, cave, back),
+      petFor: (u) => petFor(u),
+      mountFor: (u) => (u.profile.mount && levelOf(u) >= RULES.MOUNTS[u.profile.mount].minLevel ? { type: u.profile.mount, speed: RULES.MOUNTS[u.profile.mount].speed } : null),
+      waystone: (u, ws) => discoverWaystone(room, u, ws),
+      talk: (u, npc) => talkTo(u, npc),
+      kill: (u, k) => questKill(u, k),
     });
     room.instances.set(def.id, inst);
   }
@@ -337,6 +347,63 @@ setInterval(() => {
   }
 }, 50);
 
+// ---------- Mascotas, piedras de viaje y misiones ----------
+function petFor(user) {
+  const pet = user.profile.pet;
+  if (!pet || levelOf(user) < RULES.PET_LEVEL) return null;
+  return { type: pet.type, name: pet.name || RULES.PETS[pet.type].name, st: RULES.petStats(pet.type, levelOf(user)) };
+}
+
+function discoverWaystone(room, user, ws) {
+  const p = user.profile;
+  if (!p.waystones.includes(ws.id)) {
+    p.waystones.push(ws.id);
+    saveUser(user); sendMe(user);
+    send(user.ws, { t: 'dwhisper', text: `✨ Piedra de viaje descubierta: ${ws.name}.` });
+  }
+  send(user.ws, { t: 'waystones', open: true, here: ws.id });
+}
+
+// Estado de una misión para un jugador: 'done', 'active', 'ready' (lista para entregar), 'available', 'locked' o null
+function questState(profile, id) {
+  const Q = RULES.QUESTS[id];
+  if (!Q) return null;
+  if (profile.questsDone.includes(id)) return 'done';
+  const a = profile.quests[id];
+  if (a) return a.n >= (Q.goal.n || 1) ? 'ready' : 'active';
+  if (Q.after && !profile.questsDone.includes(Q.after)) return null;
+  return RULES.levelFromXp(profile.xp) >= (Q.minLevel || 1) ? 'available' : 'locked';
+}
+
+function talkTo(user, npc) {
+  const p = user.profile;
+  // las misiones de "habla con…" se completan al llegar
+  for (const [id, a] of Object.entries(p.quests)) {
+    const Q = RULES.QUESTS[id];
+    if (Q && Q.goal.kind === 'talk' && Q.goal.npc === npc.id && a.n < 1) { a.n = 1; }
+  }
+  const quests = Object.entries(RULES.QUESTS).filter(([id, Q]) => Q.npc === npc.id || (Q.goal.kind === 'talk' && Q.goal.npc === npc.id && p.quests[id]))
+    .map(([id]) => ({ id, state: questState(p, id) })).filter((q) => q.state && q.state !== 'done');
+  saveUser(user); sendMe(user);
+  send(user.ws, { t: 'npc', id: npc.id, name: npc.name, look: npc.look, lines: npc.lines, shop: npc.shop || null, quests });
+}
+
+function questKill(user, k) {
+  const p = user.profile;
+  let changed = false;
+  for (const [id, a] of Object.entries(p.quests)) {
+    const Q = RULES.QUESTS[id];
+    if (!Q) continue;
+    const g = Q.goal;
+    const hit = (g.kind === 'kill' && g.mobs.includes(k)) || (g.kind === 'boss' && g.mob === k);
+    if (!hit || a.n >= (g.n || 1)) continue;
+    a.n++;
+    changed = true;
+    send(user.ws, { t: 'dwhisper', text: a.n >= (g.n || 1) ? `📜 «${Q.name}» completada. Vuelve a hablar con quien te la encargó.` : `📜 ${Q.name}: ${a.n}/${g.n}` });
+  }
+  if (changed) { saveUser(user); sendMe(user); }
+}
+
 // ---------- Tiendas ----------
 function shopFor(user, npc) {
   const level = levelOf(user);
@@ -411,6 +478,11 @@ wss.on('connection', (ws) => {
   const isOwner = () => room.ownerId === user.pid;
   const inst = () => (user.where ? room.instances.get(user.where.id) : null);
   const err = (text) => send(ws, { t: 'error', text });
+  const nearShopNpc = () => {
+    const i = inst();
+    const p = i && i.players.get(user.id);
+    return !!(p && i.npcs.some((n) => n.shop && Math.max(Math.abs(n.x - p.x), Math.abs(n.y - p.y)) <= 3));
+  };
 
   ws.on('message', (raw) => {
     let msg;
@@ -484,7 +556,7 @@ wss.on('connection', (ws) => {
       case 'drink': {
         if (!allow() || user.where) return;
         broadcast(room, { t: 'drink', id: user.id });
-        system(room, `El tabernero sirve una jarra a ${user.name}. 🍺`);
+        system(room, `Alfonso el Tabernero sirve una jarra a ${user.name}. 🍺`);
         break;
       }
       case 'greet': {
@@ -583,13 +655,13 @@ wss.on('connection', (ws) => {
 
       // ----- Tiendas (en la taberna) -----
       case 'shop:open': {
-        if (user.where) return;
+        if (user.where && !nearShopNpc()) return;
         const s = shopFor(user, msg.npc);
         if (s) send(ws, { t: 'shop', ...s });
         break;
       }
       case 'shop:buy': {
-        if (user.where || !allow(0.5)) return;
+        if ((user.where && !(msg.npc === 'bruja' && nearShopNpc())) || !allow(0.5)) return;
         const s = shopFor(user, msg.npc);
         if (!s) return;
         const p = user.profile;
@@ -764,7 +836,9 @@ wss.on('connection', (ws) => {
       }
       case 'wenter': {
         if (user.where) return;
-        enterWorld(room, user);
+        const def = worldDef(room);
+        const ws = def.waystones.find((w) => w.id === msg.ws && user.profile.waystones.includes(w.id));
+        enterWorld(room, user, ws ? { x: ws.x, y: ws.y + 1 } : null);
         system(room, `🗺️ ${user.name} sale de la taberna a «${room.world.name}».`);
         break;
       }
@@ -773,6 +847,88 @@ wss.on('connection', (ws) => {
       case 'ddir': { const i = inst(); if (i && allowGame()) i.dir(user.id, msg.dx, msg.dy); break; }
       case 'dskill': { const i = inst(); if (i && allowGame()) i.skill(user.id, msg); break; }
       case 'duse': { const i = inst(); if (i && allowGame()) i.use(user.id, String(msg.cid), msg); break; }
+      case 'dtalk': { const i = inst(); if (i && allowGame()) i.talk(user.id, String(msg.id)); break; }
+      case 'dmount': { const i = inst(); if (i && allowGame()) i.toggleMount(user.id); break; }
+      case 'dtravel': {
+        const i = inst();
+        if (!i || i.kind !== 'world') return;
+        const ws = i.waystones.find((w) => w.id === msg.id && user.profile.waystones.includes(w.id));
+        if (ws) i.teleport(user.id, ws.x, ws.y);
+        break;
+      }
+      case 'quest:accept': {
+        const id = String(msg.id);
+        const st = questState(user.profile, id);
+        if (st === 'locked') return err(`Necesitas nivel ${RULES.QUESTS[id].minLevel} para esta misión.`);
+        if (st !== 'available') return;
+        user.profile.quests[id] = { n: 0 };
+        profileChanged(room, user);
+        send(ws, { t: 'dwhisper', text: `📜 Nueva misión: ${RULES.QUESTS[id].name}` });
+        break;
+      }
+      case 'quest:turnin': {
+        const id = String(msg.id);
+        const Q = RULES.QUESTS[id];
+        if (questState(user.profile, id) !== 'ready') return;
+        let item = null;
+        if (Q.item) {
+          const ilvl = Math.max(levelOf(user), RULES.ZONES[Q.zone].lv[1]);
+          item = RULES.makeItem(rnd, { ilvl, rarity: Q.item, classes: [user.profile.char.cls, user.profile.char.cls2].filter(Boolean) });
+          if (user.profile.bag.length >= RULES.BAG_SIZE) return err('Haz sitio en la mochila para recoger la recompensa.');
+          user.profile.bag.push(item);
+        }
+        delete user.profile.quests[id];
+        user.profile.questsDone.push(id);
+        reward(room, user, Q.xp, Q.gold);
+        profileChanged(room, user);
+        system(room, `📜 ${user.name} completa «${Q.name}»${item ? ` y recibe «${item.name}»` : ''}.`);
+        if (item) send(ws, { t: 'dgot', item });
+        break;
+      }
+      case 'quest:abandon': { if (user.profile.quests[msg.id]) { delete user.profile.quests[msg.id]; profileChanged(room, user); } break; }
+
+      // ----- Establo: mascotas (nivel 5) y monturas (nivel 12) -----
+      case 'stable:buy': {
+        if (user.where || !allow(1)) return;
+        const p = user.profile, lvl = levelOf(user);
+        if (msg.kind === 'pet') {
+          const P = RULES.PETS[msg.id];
+          if (!P) return;
+          if (lvl < RULES.PET_LEVEL) return err(`Las mascotas se adoptan a partir del nivel ${RULES.PET_LEVEL}.`);
+          if (p.pet && p.pet.bag.length) return err('Vacía la mochila de tu mascota antes de cambiarla.');
+          if (p.gold < P.price) return err('No tienes oro suficiente.');
+          p.gold -= P.price;
+          p.pet = { type: msg.id, name: cleanText(msg.name, 16) || P.name, bag: [] };
+          system(room, `🐾 ${user.name} adopta: ${p.pet.name}.`);
+        } else if (msg.kind === 'mount') {
+          const M = RULES.MOUNTS[msg.id];
+          if (!M) return;
+          if (lvl < M.minLevel) return err(`Esta montura pide nivel ${M.minLevel}.`);
+          if (p.gold < M.price) return err('No tienes oro suficiente.');
+          p.gold -= M.price;
+          p.mount = msg.id;
+          system(room, `🐎 ${user.name} compra: ${M.name}.`);
+        } else return;
+        profileChanged(room, user);
+        broadcast(room, { t: 'profile', id: user.id, xp: p.xp, gold: p.gold, level: lvl });
+        break;
+      }
+      case 'pet:put': case 'pet:take': {
+        const p = user.profile;
+        if (!p.pet || user.trade) return;
+        const from = msg.t === 'pet:put' ? p.bag : p.pet.bag, to = msg.t === 'pet:put' ? p.pet.bag : p.bag;
+        const i = from.findIndex((it) => it.id === msg.id);
+        if (i < 0) return;
+        const it = from[i];
+        if (msg.t === 'pet:put') {
+          const cap = RULES.petStats(p.pet.type, levelOf(user)).cap;
+          if (RULES.petBagWeight(p.pet) + RULES.itemWeight(it) > cap) return err(`${p.pet.name} no puede con tanto peso (${cap} kg).`);
+        } else if (p.bag.length >= RULES.BAG_SIZE) return err('Tu mochila está llena.');
+        from.splice(i, 1); to.push(it);
+        profileChanged(room, user);
+        break;
+      }
+
       case 'dleave': {
         if (!user.where) return;
         if (user.where.id === 'world') toTavern(room, user, 'leave');

@@ -229,7 +229,7 @@
 
   // Las cuatro rarezas del botín: cuanto menos probable, mejor. Los objetos de conjunto sólo los sueltan los jefes.
   const RARITIES = {
-    comun:      { name: 'Común', chance: 0.50, color: '#d8d4c8', affixes: [0, 1], mult: 1, value: 1 },
+    comun:      { name: 'Común', chance: 0.50, color: '#d8d4c8', affixes: [1, 1], mult: 1, value: 1 },
     raro:       { name: 'Raro', chance: 0.20, color: '#4aa0ff', affixes: [2, 2], mult: 1.15, value: 3 },
     epico:      { name: 'Épico', chance: 0.05, color: '#c060ff', affixes: [3, 3], mult: 1.32, value: 8 },
     legendario: { name: 'Legendario', chance: 0.01, color: '#ff9a2a', affixes: [4, 4], mult: 1.55, value: 25 },
@@ -335,17 +335,18 @@
       const r = rng();
       slot = r < 0.34 ? 'arma' : r < 0.44 ? 'mano' : r < 0.58 ? 'pecho' : r < 0.68 ? 'casco' : r < 0.77 ? 'guantes' : r < 0.86 ? 'botas' : r < 0.93 ? 'amuleto' : 'anillo';
     }
+    if (slot === 'mano' && fit && !fit.weapons.some((w) => OFFHANDS[w])) slot = 'arma';
     it.slot = slot;
     let noun, g;
     if (slot === 'arma') {
-      if (!base) base = pick(rng, fit && rng() < 0.75 ? fit.weapons.filter((w) => WEAPONS[w]) : Object.keys(WEAPONS));
+      if (!base) base = pick(rng, fit ? fit.weapons.filter((w) => WEAPONS[w]) : Object.keys(WEAPONS));
       const W = WEAPONS[base];
       const k = (1 + 0.2 * (ilvl - 1)) * R.mult;
       it.dmg = [Math.max(1, Math.round(W.dmg[0] * k)), Math.max(2, Math.round(W.dmg[1] * k))];
       noun = W.name; g = W.g;
     } else if (slot === 'mano') {
       if (!base) {
-        const opts = fit && rng() < 0.75 ? fit.weapons.filter((w) => OFFHANDS[w]) : Object.keys(OFFHANDS);
+        const opts = fit ? fit.weapons.filter((w) => OFFHANDS[w]) : Object.keys(OFFHANDS);
         base = pick(rng, opts.length ? opts : Object.keys(OFFHANDS));
       }
       const O = OFFHANDS[base];
@@ -353,7 +354,7 @@
       if (O.car) it.stats.car = Math.round((2 + ilvl * 0.4) * R.mult);
       noun = O.name; g = O.g;
     } else if (ARMOR_SLOT[slot]) {
-      if (!base) base = pick(rng, fit && rng() < 0.75 ? fit.armor : Object.keys(ARMOR_BASE));
+      if (!base) base = pick(rng, fit && rng() < 0.9 ? fit.armor : Object.keys(ARMOR_BASE));
       it.type = base;
       it.armor = Math.max(1, Math.round(ARMOR_BASE[base] * ARMOR_SLOT[slot] * (1 + 0.18 * (ilvl - 1)) * R.mult));
       [noun, g] = ARMOR_NAMES[slot][base];
@@ -395,7 +396,29 @@
       }
     }
     it.value = itemValue(it);
+    it.weight = itemWeight(it);
     return it;
+  }
+
+  // Peso de un objeto (kg): lo pesado se lleva mejor con Fuerza o con una mascota de carga
+  const WEAPON_WEIGHT = { espada: 3, daga: 1, hacha: 4, maza: 4, espadon: 7, martillo: 8, lanza: 5, arco: 2, ballesta: 5, baston: 3, varita: 1 };
+  const ARMOR_WEIGHT = { tela: 1, cuero: 2, malla: 4, placas: 6 };
+  function itemWeight(it) {
+    if (!it) return 0;
+    if (it.slot === 'arma') return WEAPON_WEIGHT[it.base] || 3;
+    if (it.slot === 'mano') return it.base === 'escudo' ? 5 : 1;
+    if (it.type) return round1(ARMOR_WEIGHT[it.type] * ({ casco: 0.6, pecho: 1.8, guantes: 0.4, botas: 0.7 }[it.slot] || 1));
+    return 0.2;
+  }
+
+  // Clases que pueden llevar un objeto
+  function classesFor(it) {
+    return CLASS_IDS.filter((c) => {
+      const C = CLASSES[c];
+      if (it.slot === 'arma' || it.slot === 'mano') return C.weapons.includes(it.base);
+      if (it.type) return C.armor.includes(it.type);
+      return true;
+    });
   }
 
   function itemValue(it) {
@@ -464,6 +487,9 @@
     }
     if (it.armor) lines.push(`Armadura ${it.armor}${it.block ? ` · ${it.block}% de bloqueo` : ''}`);
     for (const [k, v] of Object.entries(it.stats || {})) lines.push(fmtStat(k, v));
+    const cl = classesFor(it);
+    if (cl.length < CLASS_IDS.length) lines.push(`Para: ${cl.map((c) => CLASSES[c].name).join(', ')}`);
+    lines.push(`Peso ${it.weight !== undefined ? it.weight : itemWeight(it)} kg`);
     return lines;
   }
 
@@ -595,8 +621,15 @@
     const spellBase = W.kind === 'magic' ? wdmg : [3 + level * 1.5, 6 + level * 2.5];
     const spellMult = (1 + stats.car * 0.03) * (1 + x('dmgPct') / 100);
 
+    // carga: lo equipado y la mochila; pasarse ralentiza
+    let weight = 0;
+    for (const sl of SLOT_IDS) weight += itemWeight(profile.equip && profile.equip[sl]);
+    for (const it of profile.bag || []) weight += itemWeight(it);
+    weight = round1(weight);
+    const capacity = 40 + stats.fue * 2;
+    const overloaded = weight > capacity;
     const d = {
-      level, cls: char.cls, cls2: char.cls2, stats, base, alloc: char.alloc,
+      level, cls: char.cls, cls2: char.cls2, stats, base, alloc: char.alloc, weight, capacity, overloaded,
       points: pointsFree(char, level),
       hp: Math.round(((30 + stats.vit * 6 + stats.con + level * 8) * hpMult + x('hp')) * (1 + x('hpPct') / 100)),
       en: Math.round(40 + stats.res * 4 + level * 2 + x('en')),
@@ -612,7 +645,7 @@
       critMult: round1(1.5 + x('critDmg') / 100),
       dodge: round1(Math.min(35, stats.sue * 0.2 + stats.des * 0.15 + x('dodge'))),
       hit: round1(stats.des * 0.25),
-      moveMs: Math.max(120, Math.round(200 / (1 + x('move') / 100))),
+      moveMs: Math.max(120, Math.round(200 / (1 + x('move') / 100) * (overloaded ? 1.4 : 1))),
       mf: Math.round(stats.sue + x('mf')),
       discount: round1(Math.min(20, stats.car * 0.4)),
       healPow: round1(1 + stats.car * 0.03 + x('healPct') / 100),
@@ -682,6 +715,21 @@
     'bandit-captain':  { name: 'Capitán bandido', fam: 'humano', sprite: 'hero:guerrero', hp: 70, dmg: [5, 9], armor: 5, ms: 310, atk: 1400, xp: 30, gold: [12, 25] },
     'cultist':         { name: 'Sectario', fam: 'humano', sprite: 'hero:brujo', hp: 22, dmg: [3, 6], armor: 1, ms: 330, atk: 2200, range: 5, proj: 'fire', magic: true, ai: 'ranged', xp: 11, gold: [3, 8] },
     'kobold':          { name: 'Kóbold', fam: 'dragon', sprite: 'goblin', tint: '#a0402a', scale: 0.8, hp: 14, dmg: [2, 4], armor: 2, ms: 280, atk: 1200, xp: 7, gold: [1, 4] },
+    // Mundo abierto: ciénaga, yermo, picos y erial
+    'ahogado':         { name: 'Ahogado', fam: 'muerto', sprite: 'zombie', tint: '#3a6a6a', hp: 42, dmg: [3, 6], armor: 2, ms: 460, atk: 1500, xp: 11, gold: [1, 5], undead: true },
+    'hombre-lagarto':  { name: 'Hombre lagarto', fam: 'bestia', sprite: 'hobgoblin', tint: '#3a7a3a', hp: 36, dmg: [3, 6], armor: 4, ms: 320, atk: 1350, xp: 13, gold: [2, 6] },
+    'escorpion':       { name: 'Escorpión gigante', fam: 'bestia', sprite: 'spider', tint: '#a8642a', scale: 1.2, hp: 40, dmg: [3, 7], armor: 6, ms: 280, atk: 1300, poison: true, xp: 14, gold: [1, 4] },
+    'bandido-desierto': { name: 'Saqueador del desierto', fam: 'humano', sprite: 'hero:picaro', hp: 30, dmg: [3, 6], armor: 3, ms: 300, atk: 1300, xp: 13, gold: [4, 10] },
+    'lobo-escarcha':   { name: 'Lobo de escarcha', fam: 'bestia', sprite: 'wolf', tint: '#b8d0e8', scale: 1.1, hp: 34, dmg: [3, 6], armor: 3, ms: 220, atk: 1200, xp: 13, gold: [1, 4] },
+    'yeti':            { name: 'Yeti', fam: 'bestia', sprite: 'owlbear', tint: '#e8eef4', hp: 90, dmg: [6, 10], armor: 4, ms: 340, atk: 1600, xp: 32, gold: [4, 10] },
+    'troll-hielo':     { name: 'Trol de hielo', fam: 'orco', sprite: 'troll', tint: '#8ab0d8', hp: 100, dmg: [5, 10], armor: 5, ms: 360, atk: 1500, regen: 2, xp: 40, gold: [5, 12] },
+    'elemental-fuego': { name: 'Elemental de fuego', fam: 'dragon', sprite: 'specter', tint: '#ff6a1a', hp: 40, dmg: [4, 8], armor: 2, ms: 300, atk: 2000, range: 5, proj: 'fire', magic: true, ai: 'ranged', xp: 18, gold: [2, 6] },
+    'demonio':         { name: 'Demonio menor', fam: 'dragon', sprite: 'hobgoblin', tint: '#8a1a1a', hp: 55, dmg: [5, 9], armor: 5, ms: 290, atk: 1300, xp: 22, gold: [4, 10] },
+    'rufo':            { name: 'Rufo, el jefe bandido', fam: 'humano', sprite: 'hero:guerrero', scale: 1.3, boss: true, hp: 180, dmg: [4, 7], armor: 4, ms: 320, atk: 1400, xp: 70, gold: [30, 50], specials: ['charge', 'summon'], summons: 'bandit', sets: ['picaro', 'explorador'] },
+    'huargo-alfa':     { name: 'El Huargo Alfa', fam: 'bestia', sprite: 'wolf', tint: '#3a3a42', scale: 1.7, boss: true, hp: 260, dmg: [5, 9], armor: 4, ms: 230, atk: 1300, xp: 110, gold: [40, 70], specials: ['slam', 'summon'], summons: 'wolf', sets: ['explorador', 'guerrero'] },
+    'bruja-pantano':   { name: 'Ortiga, la Bruja del Pantano', fam: 'muerto', sprite: 'necromancer', tint: '#3a8a3a', scale: 1.35, boss: true, hp: 280, dmg: [5, 9], armor: 3, ms: 360, atk: 1900, range: 6, proj: 'bolt', magic: true, xp: 140, gold: [50, 90], specials: ['nova', 'summon', 'volley'], summons: 'ahogado', sets: ['brujo', 'mago', 'clerigo'] },
+    'rey-escorpion':   { name: 'El Rey Escorpión', fam: 'bestia', sprite: 'spider', tint: '#d8a030', scale: 2.3, boss: true, hp: 340, dmg: [6, 11], armor: 8, ms: 280, atk: 1300, poison: true, xp: 170, gold: [60, 110], specials: ['slam', 'summon', 'volley'], summons: 'escorpion', sets: ['picaro', 'guerrero', 'paladin'] },
+    'gigante-escarcha': { name: 'El Gigante de Escarcha', fam: 'orco', sprite: 'ogre', tint: '#9ac0e8', scale: 1.8, boss: true, hp: 420, dmg: [8, 13], armor: 8, ms: 420, atk: 1800, xp: 210, gold: [80, 130], specials: ['slam', 'nova', 'charge'], sets: ['guerrero', 'paladin', 'clerigo'] },
     // Jefes de mazmorra: botín de conjuntos de varias clases
     'rey-goblin':      { name: 'Grubnak, el Rey Goblin', fam: 'goblin', sprite: 'shaman', scale: 1.55, tint: '#c8a030', boss: true, hp: 240, dmg: [4, 8], armor: 5, ms: 340, atk: 1400, xp: 90, gold: [40, 70], specials: ['slam', 'summon'], summons: 'goblin-warrior', sets: ['explorador', 'picaro', 'guerrero'] },
     'gorthak':         { name: 'Gorthak, Señor de la Guerra', fam: 'orco', sprite: 'warchief', scale: 1.45, boss: true, hp: 320, dmg: [6, 11], armor: 7, ms: 330, atk: 1500, xp: 120, gold: [50, 90], specials: ['slam', 'charge', 'summon'], summons: 'orc', sets: ['guerrero', 'paladin', 'clerigo'] },
@@ -721,6 +769,66 @@
   };
 
   // ======================================================================
+  //  Mascotas (desde nivel 5) y monturas (desde nivel 12)
+  // ======================================================================
+  // La mascota te sigue, ataca a tus enemigos con daño según su Fuerza y lleva una mochila propia con su peso máximo
+  const PETS = {
+    perro:   { name: 'Perro de guerra', icon: '🐕', sprite: 'wolf', tint: '#8a5a2a', scale: 0.72, fue: 6, cap: 30, hp: 1, price: 250, desc: 'Leal y equilibrado. Carga bastante.' },
+    lobo:    { name: 'Lobo gris', icon: '🐺', sprite: 'wolf', tint: '#8a8e98', scale: 0.8, fue: 9, cap: 22, hp: 0.9, price: 350, desc: 'Muerde más fuerte, carga menos.' },
+    jabali:  { name: 'Jabalí acorazado', icon: '🐗', sprite: 'bear', tint: '#5a3a2a', scale: 0.5, fue: 7, cap: 45, hp: 1.3, price: 450, desc: 'Una mula con colmillos: el que más carga.' },
+    osezno:  { name: 'Osezno de las cavernas', icon: '🐻', sprite: 'bear', tint: '#7a5030', scale: 0.6, fue: 11, cap: 35, hp: 1.2, price: 600, desc: 'Fuerte y resistente. Crece contigo.' },
+  };
+  const PET_LEVEL = 5, MOUNT_LEVEL = 12;
+  function petStats(type, level) {
+    const P = PETS[type];
+    if (!P) return null;
+    const fue = Math.round(P.fue + level * 1.6);
+    return { fue, hp: Math.round((40 + level * 14) * P.hp), dmg: [Math.round(1 + fue * 0.45), Math.round(3 + fue * 0.7)], atk: 1200, cap: Math.round(P.cap + fue * 1.2), ms: 220 };
+  }
+  const MOUNTS = {
+    caballo: { name: 'Caballo de guerra', icon: '🐴', speed: 60, price: 1200, minLevel: 12, color: '#6a4426', desc: '+60% de velocidad en el mundo abierto.' },
+    lobo:    { name: 'Huargo de monta', icon: '🐺', speed: 70, price: 1800, minLevel: 14, color: '#5a5a62', desc: '+70% de velocidad en el mundo abierto.' },
+    lagarto: { name: 'Lagarto de ceniza', icon: '🦎', speed: 85, price: 2600, minLevel: 18, color: '#7a2a1a', desc: '+85% de velocidad en el mundo abierto.' },
+  };
+  const petBagWeight = (pet) => round1(((pet && pet.bag) || []).reduce((t, it) => t + itemWeight(it), 0));
+
+  // ======================================================================
+  //  Mundo abierto: zonas por distancia al pueblo (cuanto más lejos, más nivel)
+  // ======================================================================
+  const ZONES = [
+    { id: 'valle', name: 'Valle de Brumaverde', lv: [1, 3], mobs: ['goblin-warrior', 'goblin-minion', 'goblin-archer', 'wolf', 'bandit', 'bandit-archer', 'goblin-shaman'], boss: 'rufo', color: '#3a5a2e' },
+    { id: 'bosque', name: 'Bosque de los Susurros', lv: [3, 6], mobs: ['giant-spider', 'wolf', 'dire-wolf', 'brown-bear', 'goblin-archer', 'hobgoblin-warrior', 'bugbear-warrior'], boss: 'huargo-alfa', color: '#1e3a1e' },
+    { id: 'pantano', name: 'Ciénaga de Hollow', lv: [6, 10], mobs: ['ahogado', 'hombre-lagarto', 'zombie', 'ghoul', 'giant-spider', 'specter'], boss: 'bruja-pantano', color: '#3a4a2a' },
+    { id: 'yermo', name: 'Tierras Yermas', lv: [10, 14], mobs: ['escorpion', 'bandido-desierto', 'mummy', 'orc', 'orc-archer', 'ogre'], boss: 'rey-escorpion', color: '#8a5a32' },
+    { id: 'picos', name: 'Picos Helados', lv: [14, 19], mobs: ['lobo-escarcha', 'yeti', 'troll-hielo', 'wight', 'orc'], boss: 'gigante-escarcha', color: '#a8b8c8' },
+    { id: 'ceniza', name: 'Erial de Ceniza', lv: [19, 26], mobs: ['elemental-fuego', 'demonio', 'kobold', 'cultist', 'troll'], boss: 'young-red-dragon', color: '#3a2222' },
+  ];
+
+  // ======================================================================
+  //  Misiones: cada zona tiene su historia y su gente
+  // ======================================================================
+  // goal: { kind: 'kill', mobs: [...], n } | { kind: 'boss', mob } | { kind: 'talk', npc }
+  const QUESTS = {
+    'gallinas': { npc: 'jacinta', name: 'Ladrones de gallinas', zone: 0, goal: { kind: 'kill', mobs: ['goblin-warrior', 'goblin-minion', 'goblin-archer', 'goblin-shaman'], n: 6 }, xp: 120, gold: 40, item: 'raro', text: 'Los goblins bajan cada noche a robarme las gallinas. Si me traes paz, te pagaré bien.' },
+    'rufo': { npc: 'jacinta', after: 'gallinas', name: 'El jefe Rufo', zone: 0, goal: { kind: 'boss', mob: 'rufo' }, xp: 260, gold: 80, item: 'epico', text: 'Detrás de los goblins está Rufo, un bandido que les paga con cerveza robada. Su campamento está al norte del valle.' },
+    'carta-lenador': { npc: 'alcalde', name: 'Carta para el bosque', zone: 0, goal: { kind: 'talk', npc: 'ewan' }, xp: 150, gold: 30, text: 'Algo pudre el bosque desde hace semanas. Lleva esta carta a Ewan, el leñador del campamento del bosque.' },
+    'aranas': { npc: 'ewan', name: 'Telarañas por todas partes', zone: 1, minLevel: 3, goal: { kind: 'kill', mobs: ['giant-spider'], n: 8 }, xp: 380, gold: 90, item: 'raro', text: 'Las arañas han tejido nidos donde antes cortábamos leña. Algo las empuja hacia aquí desde el sur.' },
+    'alfa': { npc: 'bran', name: 'El Huargo Alfa', zone: 1, minLevel: 4, goal: { kind: 'boss', mob: 'huargo-alfa' }, xp: 600, gold: 150, item: 'epico', text: 'Un huargo enorme guía a las manadas. Tiene los ojos rojos, como si algo lo poseyera. Acaba con él.' },
+    'carta-cienaga': { npc: 'ewan', after: 'aranas', name: 'El rastro de la podredumbre', zone: 1, goal: { kind: 'talk', npc: 'morwen' }, xp: 420, gold: 60, text: 'La podredumbre viene de la Ciénaga de Hollow. La abuela Morwen, en la Aldea de Juncos, sabrá qué ocurre.' },
+    'ahogados': { npc: 'morwen', name: 'Los que no descansan', zone: 2, minLevel: 6, goal: { kind: 'kill', mobs: ['ahogado', 'zombie', 'ghoul'], n: 10 }, xp: 900, gold: 180, item: 'raro', text: 'Los ahogados salen del agua por las noches. La ciénaga los despierta... o alguien los despierta.' },
+    'bruja': { npc: 'morwen', after: 'ahogados', name: 'La Bruja del Pantano', zone: 2, minLevel: 8, goal: { kind: 'boss', mob: 'bruja-pantano' }, xp: 1500, gold: 300, item: 'epico', text: 'Mi hermana Zarza se fue a la taberna; la otra, Ortiga, se quedó y vendió su alma al fuego del sur. Detenla.' },
+    'carta-yermo': { npc: 'morwen', after: 'bruja', name: 'Hacia las Tierras Yermas', zone: 2, goal: { kind: 'talk', npc: 'rhys' }, xp: 1000, gold: 120, text: 'Ortiga hablaba de un dragón que despierta en el Erial de Ceniza. Avisa al capitán Rhys, en el Fuerte del Desierto.' },
+    'escorpiones': { npc: 'rhys', name: 'Aguijones en la arena', zone: 3, minLevel: 10, goal: { kind: 'kill', mobs: ['escorpion', 'bandido-desierto'], n: 10 }, xp: 2000, gold: 350, item: 'raro', text: 'Los escorpiones y los saqueadores cortan las rutas de suministro. Necesito el camino despejado.' },
+    'rey-escorpion': { npc: 'rhys', after: 'escorpiones', name: 'El Rey Escorpión', zone: 3, minLevel: 12, goal: { kind: 'boss', mob: 'rey-escorpion' }, xp: 3200, gold: 600, item: 'epico', text: 'Su rey duerme bajo las dunas. Cuando él caiga, los demás huirán.' },
+    'carta-picos': { npc: 'rhys', after: 'rey-escorpion', name: 'El paso de montaña', zone: 3, goal: { kind: 'talk', npc: 'tor' }, xp: 2200, gold: 200, text: 'Para llegar al Erial hay que cruzar los Picos Helados. El ermitaño Tor conoce el paso.' },
+    'yetis': { npc: 'tor', name: 'Bestias de la ventisca', zone: 4, minLevel: 14, goal: { kind: 'kill', mobs: ['yeti', 'lobo-escarcha', 'troll-hielo'], n: 10 }, xp: 4200, gold: 600, item: 'raro', text: 'La ventisca ha enloquecido a las bestias. Si quieres pasar, tendrás que abrirte camino.' },
+    'gigante': { npc: 'tor', after: 'yetis', name: 'El Gigante de Escarcha', zone: 4, minLevel: 16, goal: { kind: 'boss', mob: 'gigante-escarcha' }, xp: 6500, gold: 1000, item: 'epico', text: 'Un gigante guarda el paso. Dicen que el dragón le prometió el valle entero.' },
+    'carta-ceniza': { npc: 'tor', after: 'gigante', name: 'La Última Vigía', zone: 4, goal: { kind: 'talk', npc: 'selene' }, xp: 4500, gold: 400, text: 'Al otro lado está la Última Vigía. Selene lleva años esperando a alguien capaz de acabar con Ignaroth.' },
+    'demonios': { npc: 'selene', name: 'Hijos de la llama', zone: 5, minLevel: 19, goal: { kind: 'kill', mobs: ['demonio', 'elemental-fuego', 'cultist'], n: 12 }, xp: 9000, gold: 1200, item: 'epico', text: 'El dragón alimenta a demonios y sectarios. Diezma sus filas antes del asalto final.' },
+    'ignaroth': { npc: 'selene', after: 'demonios', name: 'Ignaroth', zone: 5, minLevel: 22, goal: { kind: 'boss', mob: 'young-red-dragon' }, xp: 16000, gold: 3000, item: 'legendario', text: 'Es la hora. Sube a su guarida y acaba con la plaga de ceniza para siempre.' },
+  };
+
+  // ======================================================================
   //  Utilidades de combate (las usa el servidor)
   // ======================================================================
   const reduction = (armor, attackerLevel) => Math.min(0.75, armor / (armor + 30 + 10 * attackerLevel));
@@ -733,6 +841,7 @@
     RARITIES, RARITY_ORDER, AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES,
     statName, fmtStat, classId, levelFromXp, pointsTotal, pointsSpent, pointsFree, baseStats, newChar, cleanChar,
     rollRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, allowedBases,
+    PETS, PET_LEVEL, MOUNT_LEVEL, MOUNTS, petStats, petBagWeight, ZONES, QUESTS, itemWeight, classesFor,
     priceScale, buyPrice, itemBuyPrice, armeroStock, seeded, gearTotals, derive, abilitiesFor, gearLook, monsterAt, reduction, xpPenalty,
   };
 

@@ -81,11 +81,21 @@
     if (y + r.height > innerHeight - 8) y = innerHeight - r.height - 8;
     tip.style.left = Math.max(4, x) + 'px'; tip.style.top = Math.max(4, y) + 'px';
   }
+  let lastTouch = 0;
   function tipOn(node, it, extra) {
+    node.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch') lastTouch = Date.now(); });
     node.addEventListener('pointerenter', (e) => { if (e.pointerType !== 'touch') showTip(it, e, extra); });
-    node.addEventListener('pointermove', (e) => { if (!tip.classList.contains('hidden')) moveTip(e); });
-    node.addEventListener('pointerleave', hideTip);
+    node.addEventListener('pointermove', (e) => { if (e.pointerType !== 'touch' && !tip.classList.contains('hidden')) moveTip(e); });
+    node.addEventListener('pointerleave', (e) => { if (e.pointerType !== 'touch') hideTip(); });
   }
+  // En móvil (sin ratón) la ficha del objeto se enseña arriba al tocarlo
+  function touchTip(it, extra) {
+    showTip(it, { clientX: 8, clientY: 8 }, extra);
+    tip.style.left = '8px'; tip.style.top = '8px';
+  }
+  document.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch' && !e.target.closest('.icell, .ctx-menu')) hideTip(); });
+  DD.showItemTip = showTip;
+  DD.hideItemTip = hideTip;
 
   // Casilla de objeto (icono con borde de rareza)
   function itemCell(it, opts = {}) {
@@ -102,7 +112,11 @@
       const s = el('span', 'slot-ico', RULES.SLOTS[opts.slot].icon); b.appendChild(s);
       b.title = RULES.SLOTS[opts.slot].name;
     }
-    if (opts.onClick) b.onclick = (e) => { hideTip(); opts.onClick(e); };
+    b.onclick = (e) => {
+      const touch = Date.now() - lastTouch < 800;
+      if (touch && it) touchTip(it, opts.tipExtra); else hideTip();
+      if (opts.onClick) opts.onClick(e);
+    };
     return b;
   }
 
@@ -179,6 +193,30 @@
   $('#mh-badge').onclick = (e) => { e.stopPropagation(); openLevelUp(); };
   $('#mh-portrait').onclick = () => openChar('ficha');
   setInterval(() => { if (me()) renderHud(); }, 30000);
+
+  // Tarjeta del objeto recién recogido (con sus características)
+  let cardTimer = 0;
+  DD.on('dgot', (m) => {
+    const it = m.item;
+    const card = $('#lootcard');
+    card.innerHTML = '';
+    const R = RULES.RARITIES[it.rarity] || RULES.RARITIES.comun;
+    const top = el('div', 'lc-top');
+    top.appendChild(itemIcon(it, 40));
+    const t = el('div', '');
+    const nm = el('b', '', it.name); nm.style.color = R.color;
+    t.append(nm, el('small', '', RULES.typeLine(it)));
+    top.appendChild(t);
+    card.appendChild(top);
+    for (const l of RULES.describe(it)) card.appendChild(el('div', 'tip-line', l));
+    const p = me();
+    if (p) { const can = RULES.canEquip(it, p.char, RULES.levelFromXp(p.xp)); if (!can.ok) card.appendChild(el('div', 'tip-req bad', can.reason)); else card.appendChild(el('div', 'tip-req', 'Pulsa I para equiparlo')); }
+    card.style.borderColor = R.color;
+    card.classList.remove('hidden');
+    clearTimeout(cardTimer);
+    cardTimer = setTimeout(() => card.classList.add('hidden'), it.rarity === 'comun' ? 3500 : 6000);
+  });
+  $('#lootcard').onclick = () => { $('#lootcard').classList.add('hidden'); openChar('equipo'); };
 
   // ======================================================================
   //  Subida de nivel: repartir puntos

@@ -28,6 +28,25 @@
     'H': { name: 'Pueblo', walk: true, portal: 'tavern' },
     'k': { name: 'Casa', walk: false },
     'D': { name: 'Guarida del dragón', walk: true },
+    // mundo grande: granjas, ciénaga, yermo, picos y erial
+    'f': { name: 'Cultivo', walk: true },
+    'x': { name: 'Valla', walk: false },
+    'u': { name: 'Plaza', walk: true },
+    'm': { name: 'Barro', walk: true },
+    'q': { name: 'Ciénaga', walk: false },
+    'y': { name: 'Árbol muerto', walk: false },
+    'r': { name: 'Juncos', walk: true },
+    'd': { name: 'Arena roja', walk: true },
+    'z': { name: 'Tierra agrietada', walk: true },
+    'o': { name: 'Roca', walk: false },
+    'c': { name: 'Cactus', walk: false },
+    'n': { name: 'Nieve', walk: true },
+    'i': { name: 'Hielo', walk: true },
+    'p': { name: 'Pino nevado', walk: false },
+    'a': { name: 'Ceniza', walk: true },
+    'e': { name: 'Basalto', walk: false },
+    'l': { name: 'Lava', walk: false },
+    'W': { name: 'Piedra de viaje', walk: true, portal: 'waystone' },
   };
   const DUNGEON_CHARS = '#.+^~%';
 
