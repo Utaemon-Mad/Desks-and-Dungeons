@@ -225,6 +225,8 @@ class Instance {
     this.pets.set(user.id, { id: 'pet:' + user.id, owner: user.id, type: want.type, name: want.name, st: want.st, x: pos.x, y: pos.y, sm: 200, dir: 'S', hp: want.st.hp, maxHp: want.st.hp, nextStep: 0, nextAttack: 0, downUntil: 0 });
     this.dirty = true;
   }
+  // pueblos y campamentos: los monstruos no entran a por nadie
+  inSafe(p) { return !!(this.def.safe && this.def.safe.some((z) => Math.max(Math.abs(p.x - z.x), Math.abs(p.y - z.y)) <= z.r)); }
   freeForPet(x, y) { return this.walkTile(x, y) && !this.enemyAt(x, y) && !this.chestAt(x, y); }
   petAt(x, y) { for (const pt of this.pets.values()) if (pt.downUntil <= Date.now() && pt.x === x && pt.y === y) return pt; return null; }
 
@@ -860,12 +862,12 @@ class Instance {
 
     // objetivo
     let target = e.aggro && this.players.get(e.aggro);
-    if (target && (cheb(e, target) > LEASH)) { target = null; e.aggro = null; }
+    if (target && (cheb(e, target) > LEASH || this.inSafe(target))) { target = null; e.aggro = null; }
     if (!target) {
       let best = Infinity;
       for (const p of this.players.values()) {
         const d = cheb(e, p);
-        if (d < best && d <= AGGRO && this.los(e, p)) { best = d; target = p; }
+        if (d < best && d <= AGGRO && this.los(e, p) && !this.inSafe(p)) { best = d; target = p; }
       }
       if (target) { e.aggro = target.user.id; this.wakePack(e, target.user.id); }
     }

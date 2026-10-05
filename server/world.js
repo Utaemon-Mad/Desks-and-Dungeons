@@ -244,7 +244,7 @@ function generate(roomName) {
   for (let z = 0; z < 6; z++) {
     const Z = RULES.ZONES[z];
     for (let i = 0; i < counts[z]; i++) {
-      const p = pickIn(z, (ch, q) => walk(ch) && seen[q.y * W + q.x] && ch !== 'W' && ch !== 'C', 7);
+      const p = pickIn(z, (ch, q) => walk(ch) && seen[q.y * W + q.x] && ch !== 'W' && ch !== 'C' && Math.hypot(q.x - town.x, q.y - town.y) > 13 && !outposts.some((o) => Math.hypot(q.x - o.x, q.y - o.y) < 11), 7);
       if (!p) break;
       used.push({ ...p, r: 6 });
       const n = ri(2, 3) + (z >= 3 ? 1 : 0);
@@ -265,6 +265,7 @@ function generate(roomName) {
     id: 'world', name: 'Las Tierras de Brumaverde', kind: 'world', w: W, h: H,
     tiles: t.join(''), zones: Array.from(zone).join(''), start: { x: town.x, y: town.y + 2 }, town,
     groups, caves, labels, npcs, waystones,
+    safe: [{ x: town.x, y: town.y, r: 9 }, ...outposts.map((o) => ({ x: o.x, y: o.y, r: 6 }))],
   };
 }
 

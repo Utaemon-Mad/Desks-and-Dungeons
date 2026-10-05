@@ -289,6 +289,7 @@
     body.innerHTML = '';
     if (charTab === 'ficha') body.appendChild(fichaView(p));
     else if (charTab === 'equipo') body.appendChild(equipView(p));
+    else if (charTab === 'misiones') body.appendChild(questsView(p));
     else body.appendChild(skillsView(p));
   }
 
@@ -397,6 +398,22 @@
       cons.appendChild(c);
     }
     if (cons.children.length) { bagBox.appendChild(el('div', 'panel-title small', 'POCIONES Y PERGAMINOS')); bagBox.appendChild(cons); }
+    const d = derived();
+    const load = el('div', 'load' + (d.overloaded ? ' over' : ''), `⚖️ Carga ${d.weight} / ${d.capacity} kg${d.overloaded ? ' · ¡vas sobrecargado y andas más lento!' : ''}`);
+    load.title = 'La Fuerza aumenta lo que puedes cargar. Una mascota lleva más.';
+    bagBox.insertBefore(load, grid);
+    if (p.pet) {
+      const P = RULES.PETS[p.pet.type];
+      const st = RULES.petStats(p.pet.type, RULES.levelFromXp(p.xp));
+      bagBox.appendChild(el('div', 'panel-title small', `${P.icon} ${p.pet.name.toUpperCase()} · lleva ${RULES.petBagWeight(p.pet)} / ${st.cap} kg`));
+      const pg = el('div', 'bag small');
+      for (let i = 0; i < 12; i++) {
+        const it = p.pet.bag[i];
+        pg.appendChild(itemCell(it, { onClick: () => { if (it) DD.net.send({ t: 'pet:take', id: it.id }); } }));
+      }
+      bagBox.appendChild(pg);
+      bagBox.appendChild(el('p', 'muted small', `Clic en un objeto de la mochila → «Dar a ${p.pet.name}». Clic en lo que lleva para recuperarlo. Fuerza ${st.fue} · muerde ${st.dmg[0]}–${st.dmg[1]}.`));
+    }
     bagBox.appendChild(el('p', 'muted small', 'Clic en un objeto para equiparlo o tirarlo. Véndelos a los comerciantes de la taberna. Lo que equipas cambia el aspecto de tu héroe.'));
     wrap.appendChild(bagBox);
     return wrap;
@@ -406,6 +423,7 @@
     const acts = [];
     if (RULES.SLOTS[it.slot]) acts.push(['Equipar', () => DD.net.send({ t: 'inv:equip', id: it.id })]);
     if (inTavern()) acts.push([`Vender (${it.value} 🪙)`, () => DD.net.send({ t: 'shop:sell', id: it.id })]);
+    if (me().pet) acts.push([`Dar a ${me().pet.name}`, () => DD.net.send({ t: 'pet:put', id: it.id })]);
     acts.push(['Tirar', () => { if (it.rarity === 'comun' || confirm(`¿Tirar «${it.name}»? Se perderá para siempre.`)) DD.net.send({ t: 'inv:drop', id: it.id }); }, true]);
     actionMenu(e, acts);
   }
@@ -429,7 +447,7 @@
   //  Tiendas
   // ======================================================================
   let shop = null;
-  DD.on('open-shop', (npc) => { if (!inTavern()) return; shop = { npc }; openOverlay('shopwin'); $('#shop-body').innerHTML = '<p class="muted">…</p>'; DD.net.send({ t: 'shop:open', npc }); });
+  DD.on('open-shop', (npc) => { if (!inTavern() && npc !== 'bruja') return; shop = { npc }; openOverlay('shopwin'); $('#shop-body').innerHTML = '<p class="muted">…</p>'; DD.net.send({ t: 'shop:open', npc }); });
   DD.on('shop', (m) => { shop = m; if ($('#shopwin').classList.contains('hidden')) return; renderShop(); });
   DD.on('sold', (m) => { DD.toast(`Vendido por ${m.gold} 🪙`); DD.blip(1046, 0.08); });
 
@@ -570,6 +588,148 @@
   function offer(items, gold) { DD.net.send({ t: 'trade:offer', items, gold }); }
   $('#trade-ok').onclick = () => DD.net.send({ t: 'trade:ok' });
   $('#trade-cancel').onclick = () => DD.net.send({ t: 'trade:cancel' });
+
+  // ======================================================================
+  //  Misiones
+  // ======================================================================
+  function questGoal(Q, a) {
+    const g = Q.goal, n = a ? a.n : 0;
+    if (g.kind === 'kill') return `Derrota ${n}/${g.n}: ${[...new Set(g.mobs.map((k) => RULES.MONSTERS[k].name))].join(', ')}`;
+    if (g.kind === 'boss') return `Derrota a ${RULES.MONSTERS[g.mob].name} ${n ? '✔' : ''}`;
+    const N = (DD.worldNpcs || {})[g.npc];
+    return `Habla con ${N ? N.name : g.npc} ${n ? '✔' : ''}`;
+  }
+  function questsView(p) {
+    const wrap = el('div', 'skills');
+    const act = Object.entries(p.quests || {});
+    if (!act.length) wrap.appendChild(el('p', 'muted', 'No tienes misiones. Habla con la gente del mundo abierto (🗺️ Mundo): el alcalde de Brumaverde te espera.'));
+    for (const [id, a] of act) {
+      const Q = RULES.QUESTS[id];
+      if (!Q) continue;
+      const r = el('div', 'skill-row');
+      const t = el('div', 'skill-t');
+      const done = a.n >= (Q.goal.n || 1);
+      t.append(el('b', '', `${done ? '✔ ' : '📜 '}${Q.name} · ${RULES.ZONES[Q.zone].name}`), el('small', '', `${questGoal(Q, a)}${done ? ' · ¡Vuelve a entregarla!' : ''} · Recompensa: ${Q.xp} PX, ${Q.gold} 🪙${Q.item ? ', objeto ' + RULES.RARITIES[Q.item].name.toLowerCase() : ''}`));
+      const ab = el('button', 'btn alt small', 'Abandonar'); ab.style.width = 'auto';
+      ab.onclick = () => { if (confirm(`¿Abandonar «${Q.name}»?`)) DD.net.send({ t: 'quest:abandon', id }); };
+      r.append(el('span', 'skill-ic', done ? '✅' : '📜'), t, ab);
+      wrap.appendChild(r);
+    }
+    wrap.appendChild(el('p', 'muted small', `Misiones completadas: ${(p.questsDone || []).length} de ${Object.keys(RULES.QUESTS).length}.`));
+    return wrap;
+  }
+  // seguimiento en pantalla (en las partidas)
+  function renderTracker() {
+    const box = $('#qtrack');
+    const p = me();
+    if (!box || !p) return;
+    const act = Object.entries(p.quests || {}).slice(0, 3);
+    box.innerHTML = '';
+    box.classList.toggle('hidden', !act.length || DD.scene !== 'dungeon');
+    for (const [id, a] of act) {
+      const Q = RULES.QUESTS[id];
+      if (!Q) continue;
+      const done = a.n >= (Q.goal.n || 1);
+      const line = el('div', 'qline' + (done ? ' done' : ''));
+      line.append(el('b', '', Q.name), el('small', '', done ? '¡Entrégala!' : questGoal(Q, a)));
+      box.appendChild(line);
+    }
+  }
+  DD.on('me', renderTracker);
+  DD.on('dstart', (m) => { if (m.dungeon.npcs) DD.worldNpcs = Object.fromEntries(m.dungeon.npcs.map((n) => [n.id, n])); setTimeout(renderTracker, 50); });
+  DD.on('dexit', () => setTimeout(renderTracker, 50));
+
+  // ---------- Conversación con un personaje ----------
+  DD.on('npc', (m) => {
+    openOverlay('npcwin');
+    const head = $('#npc-head');
+    head.innerHTML = '';
+    head.appendChild(DD.portrait(m.look || { cls: 'picaro' }, 40));
+    const t = el('div', 'shop-title');
+    t.append(el('b', '', m.name), el('q', '', m.lines[Math.floor(Math.random() * m.lines.length)]));
+    head.appendChild(t);
+    const body = $('#npc-body');
+    body.innerHTML = '';
+    for (const q of m.quests) {
+      const Q = RULES.QUESTS[q.id];
+      const a = (me().quests || {})[q.id];
+      const box = el('div', 'quest-box ' + q.state);
+      box.append(el('b', '', `📜 ${Q.name}`), el('p', '', Q.text), el('small', '', `${questGoal(Q, a)} · Recompensa: ${Q.xp} PX, ${Q.gold} 🪙${Q.item ? ', objeto ' + RULES.RARITIES[Q.item].name.toLowerCase() : ''}`));
+      if (q.state === 'available') { const b = el('button', 'btn', 'ACEPTAR'); b.onclick = () => { DD.net.send({ t: 'quest:accept', id: q.id }); closeOverlay('npcwin'); }; box.appendChild(b); }
+      if (q.state === 'locked') box.appendChild(el('div', 'tip-req bad', `Necesitas nivel ${Q.minLevel}.`));
+      if (q.state === 'ready' && (Q.npc === m.id || Q.goal.npc === m.id)) {
+        const b = el('button', 'btn red', 'ENTREGAR'); b.onclick = () => { DD.net.send({ t: 'quest:turnin', id: q.id }); closeOverlay('npcwin'); DD.blip(1320, 0.2); }; box.appendChild(b);
+      }
+      if (q.state === 'active') box.appendChild(el('div', 'tip-req', 'En curso…'));
+      body.appendChild(box);
+    }
+    if (!m.quests.length) body.appendChild(el('p', 'muted', 'No tiene nada más que pedirte, por ahora.'));
+    if (m.shop) { const b = el('button', 'btn alt', '🧪 Comprar pociones'); b.onclick = () => { closeOverlay('npcwin'); DD.emit('open-shop', m.shop); }; body.appendChild(b); }
+  });
+
+  // ---------- Piedras de viaje ----------
+  let wayFromTavern = false;
+  function openWaystones(here) {
+    const p = me();
+    const list = (DD.worldWaystones || []).filter((w) => p.waystones.includes(w.id));
+    openOverlay('waywin');
+    const body = $('#way-body');
+    body.innerHTML = '';
+    for (const w of list) {
+      const Z = RULES.ZONES[w.zone];
+      const r = el('div', 'buy-row');
+      r.append(el('span', 'buy-ic', '🗿'));
+      const tt = el('div', 'buy-t'); tt.append(el('b', '', w.name), el('small', '', `${Z.name} · nivel ${Z.lv[0]}-${Z.lv[1]}`)); r.appendChild(tt);
+      const b = el('button', 'btn', w.id === here ? 'AQUÍ' : 'VIAJAR');
+      b.disabled = w.id === here;
+      b.onclick = () => { closeOverlay('waywin'); if (wayFromTavern) DD.net.send({ t: 'wenter', ws: w.id }); else DD.net.send({ t: 'dtravel', id: w.id }); };
+      r.appendChild(b);
+      body.appendChild(r);
+    }
+    const left = 6 - list.length;
+    if (left > 0) body.appendChild(el('p', 'muted small', `Te quedan ${left} piedras por descubrir: cada campamento tiene la suya.`));
+  }
+  DD.on('waystones', (m) => { wayFromTavern = false; openWaystones(m.here); });
+  DD.on('dstart', (m) => { if (m.dungeon.waystones && m.dungeon.waystones.length) DD.worldWaystones = m.dungeon.waystones; });
+  DD.on('open-world', () => {
+    const p = me();
+    if (!p || !DD.worldWaystones || p.waystones.length <= 1) { DD.net.send({ t: 'wenter' }); return; }
+    wayFromTavern = true; openWaystones(null);
+  });
+
+  // ---------- Establo ----------
+  DD.on('open-stable', () => { openOverlay('stablewin'); renderStable(); });
+  DD.on('me', () => { if (!$('#stablewin').classList.contains('hidden')) renderStable(); });
+  function renderStable() {
+    const p = me();
+    const lvl = RULES.levelFromXp(p.xp);
+    const body = $('#stable-body');
+    body.innerHTML = '';
+    body.appendChild(el('div', 'panel-title small', `MASCOTAS (desde el nivel ${RULES.PET_LEVEL}) · 🪙 ${p.gold}`));
+    for (const [id, P] of Object.entries(RULES.PETS)) {
+      const st = RULES.petStats(id, Math.max(lvl, RULES.PET_LEVEL));
+      const r = el('div', 'buy-row');
+      r.append(el('span', 'buy-ic', P.icon));
+      const tt = el('div', 'buy-t'); tt.append(el('b', '', `${P.name}${p.pet && p.pet.type === id ? ' (la tuya)' : ''}`), el('small', '', `${P.desc} Fuerza ${st.fue}, muerde ${st.dmg[0]}–${st.dmg[1]}, carga ${st.cap} kg, vida ${st.hp}.`)); r.appendChild(tt);
+      const b = el('button', 'btn', `${P.price} 🪙`);
+      b.disabled = lvl < RULES.PET_LEVEL || p.gold < P.price || (p.pet && p.pet.type === id);
+      b.onclick = () => { const name = prompt('¿Cómo se llamará?', P.name); if (name !== null) DD.net.send({ t: 'stable:buy', kind: 'pet', id, name }); };
+      r.appendChild(b);
+      body.appendChild(r);
+    }
+    body.appendChild(el('div', 'panel-title small', 'MONTURAS (sólo en el mundo abierto; F para montar)'));
+    for (const [id, M] of Object.entries(RULES.MOUNTS)) {
+      const r = el('div', 'buy-row');
+      r.append(el('span', 'buy-ic', M.icon));
+      const tt = el('div', 'buy-t'); tt.append(el('b', '', `${M.name}${p.mount === id ? ' (la tuya)' : ''}`), el('small', '', `${M.desc} Nivel ${M.minLevel}.`)); r.appendChild(tt);
+      const b = el('button', 'btn', `${M.price} 🪙`);
+      b.disabled = lvl < M.minLevel || p.gold < M.price || p.mount === id;
+      b.onclick = () => DD.net.send({ t: 'stable:buy', kind: 'mount', id });
+      r.appendChild(b);
+      body.appendChild(r);
+    }
+    if (lvl < RULES.PET_LEVEL) body.appendChild(el('p', 'muted small', `Vuelve cuando seas nivel ${RULES.PET_LEVEL}: las bestias no siguen a novatos.`));
+  }
 
   // ======================================================================
   //  Guía del juego
