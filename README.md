@@ -11,11 +11,11 @@ Una taberna en 3D low-poly (Three.js, luz de velas y sombras suaves), en plan re
 - **Combate en tiempo real** con el movimiento llevado por el servidor (suave y sin tirones): clic para andar, clic en un enemigo para atacarlo sin parar, WASD, habilidades con energía y tiempo de espera, pociones y pergaminos. Los proyectiles enemigos van a la casilla donde estabas: si te mueves, los esquivas. Los jefes marcan en el suelo sus golpes antes de darlos.
 - **Comerciantes en la taberna**: Madre Zarza, la bruja (pociones y brebajes), el Maestro Takeshi, mercader de Oriente (armas y armaduras para tu nivel, renovadas cada 10 minutos) y el Hombre de la Túnica (pergaminos y bendiciones de 20 minutos). Todos compran lo que encuentres.
 - **Comercio entre jugadores**: cada uno pone objetos y oro y, cuando los dos aceptan, se intercambian.
-- **Gráficos 3D** (Three.js r160): personajes animados de verdad (packs KayKit, CC0) con 35 animaciones (andar, correr, atacar según el arma, lanzar hechizos, esquivar, morir, sentarse, brindar); piel, pelo y ropa recoloreados según tu héroe, con casco, capa y armas del equipo. Mazmorras con losas, muros de sillería, antorchas, estandartes, ataúdes y cofres; taberna con mesas, sillas y barriles; mundo con casas, pinos, montañas y rocas. Posprocesado: resplandor de luces y magia, oclusión ambiental, gradación de color por zona, viñeta y efecto maqueta. Pensado para ordenador e iPad (calidad automática alta o media).
+- **Gráficos 3D** (Three.js r160): personajes animados de verdad (packs KayKit, CC0) con 35 animaciones (andar, correr, atacar según el arma, lanzar hechizos, esquivar, morir, sentarse, brindar); piel, pelo y ropa recoloreados según tu héroe, con casco, capa y armas del equipo. Mazmorras con losas, muros de sillería, antorchas, estandartes, ataúdes y cofres; taberna con mesas, sillas y barriles; mundo con casas, pinos, montañas y rocas. Lobos, zorros, perros, caballos y venados animados (Quaternius, CC0) para mascotas, monturas y bestias. Posprocesado: resplandor de luces y magia, oclusión ambiental, gradación de color por zona, viñeta y efecto maqueta. Pensado para ordenador e iPad (calidad automática alta o media).
 - **Botín con características**: al recoger un objeto aparece su carta con todas sus propiedades, para qué clases es y su peso. Las armas siempre son de clases del grupo.
 - **Mundo abierto grande** (🗺️, 160×120) en seis regiones cada vez más peligrosas: Valle de Brumaverde (nv 1-3), Bosque Viejo (3-6), Ciénaga (6-10), Yermo Rojo (10-14), Picos Helados (14-19) y Erial de Ceniza (19-26). Si vas sin nivel suficiente, la corrupción te va quitando vida. Campamentos con personajes, **misiones** encadenadas con historia y jefes de región, **piedras de viaje** para moverte rápido y seis cuevas-mazmorra.
-- **Mascotas** (desde nivel 5): perro, lobo, jabalí u osezno en el 🐴 Establo. Te siguen, atacan con daño basado en su Fuerza y cargan equipo (su propia mochila con peso).
-- **Monturas** (desde nivel 12): caballo, lobo de guerra o lagarto de las dunas, más rápidos en el mundo abierto (tecla F).
+- **Mascotas** (desde nivel 5): perro, lobo, zorro, jabalí u osezno en el 🐴 Establo. Te siguen, atacan con daño basado en su Fuerza y cargan equipo (su propia mochila con peso).
+- **Monturas** (desde nivel 12): caballo, lobo de guerra, venado o lagarto de las dunas, más rápidos en el mundo abierto (tecla F).
 - **Peso**: cada objeto pesa; tu capacidad es 40 kg + 2 por punto de Fuerza. Si vas sobrecargado, andas más lento.
 - **El tabernero**: Alfonso el Tabernero sirve las jarras.
 - **Forja de Brunilda** (🏛️ Pueblo): mejora objetos hasta +10 con fragmentos de hierro, esencia arcana y polvo de estrella que sueltan los enemigos; encanta una propiedad; combina tres objetos en uno de la rareza siguiente; desguaza lo que sobra.
@@ -23,7 +23,7 @@ Una taberna en 3D low-poly (Three.js, luz de velas y sombras suaves), en plan re
 - **Tablón de misiones**: tres tareas diarias y dos semanales, iguales para todos.
 - **Logros y títulos**: 26 logros con oro y títulos que se ven junto a tu nombre. **Clasificación semanal**: piso más hondo del Descenso, monstruos, jefes, jefes de mundo, duelos y el pez más grande.
 - **Jefes de mundo**: cada 20 minutos aparece uno en el mundo abierto durante 10 minutos; todos los que le hacen daño se llevan botín épico o legendario.
-- **Mascotas que crecen**: suben hasta el nivel 25 luchando contigo, aprenden una habilidad (aullido, desgarro, embestida, zarpazo) y evolucionan en los niveles 10 y 20.
+- **Mascotas que crecen**: suben hasta el nivel 25 luchando contigo, aprenden una habilidad (aullido, desgarro, finta, embestida, zarpazo) y evolucionan en los niveles 10 y 20.
 - **Duelos con apuesta** en la arena del sótano de Alfonso: el ganador se lleva el bote.
 - **Mi habitación**: los jefes que derrotas se exponen como trofeos en una sala en 3D con tu héroe, tu mascota y tu arma; puedes visitar la de tus amigos.
 - **Descenso infinito**: pisos cada vez más difíciles con un desafío que cambia cada semana (frenesí, marea de élites, cadáveres explosivos, sed de sangre, abstemios, gigantismo).
@@ -92,6 +92,7 @@ El juego es un único servidor Node (HTTP + WebSocket):
 - `public/dungeon.js`: menú de mazmorras y partida (render 3D, efectos, barra de habilidades, joystick, controles).
 - `public/vendor/three.bundle.min.js`: Three.js r160 con posprocesado y cargador glTF (licencia MIT en `THREE-LICENSE.txt`; entrada en `scripts/three-entry.js`).
 - `public/assets/kaykit/`: modelos KayKit de Kay Lousberg (CC0): personajes, animaciones, armas y escenario. Cómo se preparan: `scripts/assets/README.md`.
+- `public/assets/quaternius/`: animales animados de Quaternius (CC0): lobo, zorro, perro, caballo y venado, para mascotas, monturas y lobos enemigos.
 - `public/models.js`: modelos 3D low-poly de héroes (con su equipo), personajes, enemigos, mascotas, monturas, muebles y decorado.
 - `public/view3d.js`: escenas 3D, luces y sombras, construcción de mazmorras y mundo en 3D, niebla y retratos.
 - `public/sprites.js`: pixel art de héroes, comerciantes y enemigos (vistas previas del editor).

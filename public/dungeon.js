@@ -827,7 +827,11 @@
       MODELS.animate(o.userData.mount ? o.children[1] : o, { moving: e.moving, run: (e.dur || 200) < 330, phase: e.phase || 0, t: now, attack: atk, sit: !!o.userData.mount, cast: castK < 1 ? castK : 0, fish: !!e.fishing, attackAt: e.lunge, castAt: e.castAt, hitAt: e.hitUntil, rollAt: e.rollAt });
       if (e.wb && Math.random() < 0.5) fxp.emit({ x: e.rx + 0.5 + (Math.random() - 0.5), y: 0.1, z: e.ry + 0.5 + (Math.random() - 0.5), vy: 1 + Math.random(), color: '#a05aff', size: 0.12, life: 0.9 });
       if (e.kind === 'pet' && e.evo === 2 && Math.random() < 0.15) fxp.emit({ x: e.rx + 0.5, y: 0.4, z: e.ry + 0.5, vy: 0.6, vx: (Math.random() - 0.5) * 0.4, color: '#7affff', size: 0.06, life: 0.6 });
-      if (o.userData.mount) MODELS.animate(o.userData.mount, { moving: e.moving, phase: (e.phase || 0) * 0.8, t: now });
+      if (o.userData.mount) {
+        const mt = o.userData.mount;
+        MODELS.animate(mt, { moving: e.moving, phase: (e.phase || 0) * 0.8, t: now });
+        if (mt.userData.ride) o.children[1].position.y = mt.userData.ride() - 0.33; // el jinete sube y baja con el lomo
+      }
       e._top = { x: e.rx + 0.5, z: e.ry + 0.5, h: (e.kind === 'hero' && o.userData.mount ? 1.6 : 1.15) * (e.boss ? 1.5 : 1) * (e.kind === 'enemy' ? Math.max(0.8, base) : 1) };
     }
     for (const [id, m] of models) {

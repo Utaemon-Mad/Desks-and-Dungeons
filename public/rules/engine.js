@@ -781,6 +781,7 @@
     perro:   { name: 'Perro de guerra', icon: '🐕', sprite: 'wolf', tint: '#8a5a2a', scale: 0.72, fue: 6, cap: 30, hp: 1, price: 250, desc: 'Leal y equilibrado. Carga bastante.', evo: ['Mastín de batalla', 'Cerbero de la taberna'], evoTint: ['#6a3a1a', '#3a1a10'] },
     lobo:    { name: 'Lobo gris', icon: '🐺', sprite: 'wolf', tint: '#8a8e98', scale: 0.8, fue: 9, cap: 22, hp: 0.9, price: 350, desc: 'Muerde más fuerte, carga menos.', evo: ['Lobo del crepúsculo', 'Fenrir menor'], evoTint: ['#4a4e6a', '#1e2240'] },
     jabali:  { name: 'Jabalí acorazado', icon: '🐗', sprite: 'bear', tint: '#5a3a2a', scale: 0.5, fue: 7, cap: 45, hp: 1.3, price: 450, desc: 'Una mula con colmillos: el que más carga.', evo: ['Jabalí de hierro', 'Gran verraco de guerra'], evoTint: ['#4a4040', '#2a2020'] },
+    zorro:   { name: 'Zorro de las brumas', icon: '🦊', sprite: 'wolf', tint: '#c8642a', scale: 0.6, fue: 8, cap: 18, hp: 0.85, price: 500, desc: 'Rápido y astuto: confunde a sus presas.', evo: ['Zorro de fuego fatuo', 'Kitsune de nueve colas'], evoTint: ['#d84a1a', '#e8e0f0'] },
     osezno:  { name: 'Osezno de las cavernas', icon: '🐻', sprite: 'bear', tint: '#7a5030', scale: 0.6, fue: 11, cap: 35, hp: 1.2, price: 600, desc: 'Fuerte y resistente. Crece contigo.', evo: ['Oso pardo', 'Oso rúnico'], evoTint: ['#5a3a20', '#2a3a5a'] },
   };
   const PET_LEVEL = 5, MOUNT_LEVEL = 12;
@@ -795,6 +796,7 @@
     perro:  { name: 'Aullido de manada', kind: 'buff', cd: 18000, dmgPct: 15, dur: 8000, desc: 'Aúlla y tu daño sube un 15% durante 8 s.' },
     lobo:   { name: 'Desgarro', kind: 'bleed', cd: 9000, mult: 2, dur: 6000, desc: 'Desgarra a su presa: sangra el doble de su mordisco en 6 s.' },
     jabali: { name: 'Embestida', kind: 'stun', cd: 11000, mult: 1.5, stun: 1500, desc: 'Embiste y aturde 1,5 s.' },
+    zorro:  { name: 'Finta', kind: 'stun', cd: 8000, mult: 1.2, stun: 1000, desc: 'Amaga, muerde y deja a su presa aturdida 1 s.' },
     osezno: { name: 'Zarpazo', kind: 'aoe', cd: 9000, mult: 1.2, radius: 1, desc: 'Un zarpazo que alcanza a todos los que tiene alrededor.' },
   };
   const PET_SKILL_LEVEL = 3;
@@ -808,6 +810,7 @@
   const MOUNTS = {
     caballo: { name: 'Caballo de guerra', icon: '🐴', speed: 60, price: 1200, minLevel: 12, color: '#6a4426', desc: '+60% de velocidad en el mundo abierto.' },
     lobo:    { name: 'Huargo de monta', icon: '🐺', speed: 70, price: 1800, minLevel: 14, color: '#5a5a62', desc: '+70% de velocidad en el mundo abierto.' },
+    ciervo:  { name: 'Venado del bosque', icon: '🦌', speed: 75, price: 2200, minLevel: 16, color: '#7a4a26', desc: '+75% de velocidad en el mundo abierto.' },
     lagarto: { name: 'Lagarto de ceniza', icon: '🦎', speed: 85, price: 2600, minLevel: 18, color: '#7a2a1a', desc: '+85% de velocidad en el mundo abierto.' },
   };
   const petBagWeight = (pet) => round1(((pet && pet.bag) || []).reduce((t, it) => t + itemWeight(it), 0));

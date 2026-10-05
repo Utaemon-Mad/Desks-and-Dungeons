@@ -453,6 +453,7 @@
 
   // evo: 0 normal, 1 y 2 evolucionada (más grande, otro pelaje y, al final, runas que brillan)
   function buildPet(type, evo = 0) {
+    if (GL.ready) { const g = buildPetGL(type, evo); if (g) return g; }
     const P = RULES.PETS[type] || RULES.PETS.perro;
     const tint = evo ? P.evoTint[evo - 1] : P.tint;
     const m = P.sprite === 'bear' ? quadruped({ color: tint, len: 0.7, h: 0.28, w: 0.36, th: 0.34, hw: 0.24, hh: 0.22, ears: true, belly: true, eyes: evo === 2 ? '#7affff' : undefined }) : quadruped({ color: tint, ears: true, tail: true, belly: true, eyes: evo === 2 ? '#ff5a3a' : undefined });
@@ -469,6 +470,7 @@
   }
 
   function buildMount(type) {
+    if (GL.ready) { const g = buildMountGL(type); if (g) return g; }
     const M = RULES.MOUNTS[type] || RULES.MOUNTS.caballo;
     let m;
     if (type === 'lagarto') m = quadruped({ color: M.color, len: 0.9, h: 0.24, w: 0.34, th: 0.24, hw: 0.2, hh: 0.14, tail: true, eyes: '#ffd23f' });
@@ -690,7 +692,7 @@
   //  Personajes con modelos de verdad (KayKit, CC0): esqueleto animado, piel, pelo y ropa recoloreados,
   //  armas en las manos y animaciones (andar, correr, atacar, lanzar, esquivar, morir, sentarse…)
   // ======================================================================
-  const GL = { ready: false, version: 0, chars: {}, clips: {}, props: {}, pieces: {}, geo: {}, height: 1 };
+  const GL = { ready: false, version: 0, chars: {}, clips: {}, props: {}, pieces: {}, geo: {}, animals: {}, height: 1 };
   // Piezas de escenario: mazmorra (sin prefijo), cementerio (h:) y pueblo medieval (m:)
   const PIECE_PACKS = [['props/dungeon.glb', ''], ['props/halloween.glb', 'h:'], ['props/medieval.glb', 'm:']];
   const SKIN_KEY = '#f6c19d';
@@ -717,7 +719,19 @@
     const L = new THREE.GLTFLoader();
     const get = (u) => new Promise((res, rej) => L.load(base + u, res, undefined, rej));
     const names = Object.keys(CHAR_DEF);
-    GL.loading = Promise.all([get('chars/anims.glb'), get('chars/anims_skel.glb'), get('props/weapons.glb'), ...PIECE_PACKS.map(([f]) => get(f)), ...names.map((n) => get('chars/' + n + '.glb'))]).then(([anims, animsSkel, weapons, ...rest]) => {
+    // animales (Quaternius): si alguno falla, se queda el modelo de siempre
+    const animalBase = base.replace(/kaykit\/$/, 'quaternius/');
+    const getAnimal = (n) => new Promise((res) => L.load(animalBase + n + '.glb', res, undefined, () => res(null)));
+    const animalNames = Object.keys(ANIMALS);
+    GL.loading = Promise.all([get('chars/anims.glb'), get('chars/anims_skel.glb'), get('props/weapons.glb'), Promise.all(animalNames.map(getAnimal)), ...PIECE_PACKS.map(([f]) => get(f)), ...names.map((n) => get('chars/' + n + '.glb'))]).then(([anims, animsSkel, weapons, animals, ...rest]) => {
+      animals.forEach((g, i) => {
+        if (!g) return;
+        const clips = {};
+        for (const c of g.animations) clips[c.name] = c;
+        g.scene.updateMatrixWorld(true);
+        const box = new THREE.Box3().setFromObject(g.scene);
+        GL.animals[animalNames[i]] = { scene: g.scene, clips, height: Math.max(0.01, box.max.y - box.min.y) };
+      });
       const packs = rest.splice(0, PIECE_PACKS.length);
       const chars = rest;
       packs.forEach((pk, i) => { for (const o of pk.scene.children) GL.pieces[PIECE_PACKS[i][1] + o.name] = o; });
@@ -827,7 +841,7 @@
   function glAction(G, name, once) {
     let a = G.actions[name];
     if (!a) {
-      const clip = GL.clips[name];
+      const clip = (G.clipSrc || GL.clips)[name];
       if (!clip) return null;
       a = G.mixer.clipAction(clip);
       if (once) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
@@ -859,6 +873,17 @@
     const dt = G.last ? Math.min(0.1, Math.max(0, t - G.last)) : 0;
     G.last = t; G.time = (G.time || 0) + dt;
     const fire = (k, at) => { if (at && at !== G.marks[k]) { G.marks[k] = at; return true; } return false; };
+    if (G.animal) {
+      // animales: quieto, al paso o al galope; muerden, se encogen al recibir y caen al morir
+      if (st.deadAt) { if (fire('dead', st.deadAt)) glPlay(G, 'Death', true, 0.08); G.mixer.update(dt); return; }
+      if (fire('atk', st.attackAt)) glPlay(G, 'Attack', true, 0.06);
+      else if (fire('hit', st.hitAt) && !G.shot) glPlay(G, 'Hit', true, 0.05);
+      if (G.shot && G.time >= G.shotEnd - 0.12) { G.shot.fadeOut(0.18); G.shot = null; if (G.base) G.base.setEffectiveWeight(1); }
+      glPlay(G, st.moving ? (st.run === false ? 'Walk' : 'Gallop') : 'Idle', false);
+      if (G.shot && G.base) G.base.setEffectiveWeight(0.0);
+      G.mixer.update(dt);
+      return;
+    }
     if (st.deadAt) { if (fire('dead', st.deadAt)) glPlay(G, 'Death_A', true, 0.08); G.mixer.update(dt); return; }
     if (fire('roll', st.rollAt)) glPlay(G, 'Dodge_Forward', true, 0.05);
     else if (fire('cast', st.castAt)) glPlay(G, G.kind === 'magic' ? 'Spellcast_Shoot' : 'Spellcast_Raise', true);
@@ -1045,11 +1070,83 @@
       const cls = s.slice(5);
       spec = [CLASS_CHAR[cls] || 'Rogue', { cloth: M.tint || (cls === 'brujo' ? '#5a1010' : '#4a3a2a'), helmet: M.boss, cape: M.boss, w: cls === 'explorador' ? 'ballesta' : cls === 'brujo' ? 'varita' : cls === 'guerrero' ? 'hacha' : 'daga', weaponKind: cls === 'explorador' ? 'ranged2' : cls === 'brujo' ? 'magic' : cls === 'guerrero' ? 'melee1' : 'dagger' }];
     } else if (ENEMY_GL[s]) spec = ENEMY_GL[s](M);
+    else if (ENEMY_ANIMAL[s] && GL.animals[ENEMY_ANIMAL[s]]) {
+      const m = buildAnimalGL(ENEMY_ANIMAL[s], { tint: M.tint, glowEyes: M.boss ? '#ff3a2a' : null });
+      m.userData.kind = 'enemy';
+      m.scale.multiplyScalar(M.scale || 1);
+      return m;
+    }
     if (!spec) return null;
     const [name, o] = spec;
     if (M.boss) { o.cape = true; o.helmet = true; }
     const m = buildGL(name, { ...o, kind: 'enemy' });
     m.scale.multiplyScalar(M.scale || 1);
+    return m;
+  }
+
+  // ======================================================================
+  //  Animales con modelos de verdad (Quaternius, CC0): lobo, zorro, perro, caballo y venado
+  // ======================================================================
+  const ANIMALS = { Wolf: 0.62, Fox: 0.46, ShibaInu: 0.5, Horse: 1.3, Stag: 1.5 }; // altura en casillas
+  const PET_GL = { perro: 'ShibaInu', lobo: 'Wolf', zorro: 'Fox' };
+  const MOUNT_GL = { caballo: ['Horse', 1.3], lobo: ['Wolf', 0.98], ciervo: ['Stag', 1.5] };
+  const ENEMY_ANIMAL = { wolf: 'Wolf' };
+  function buildAnimalGL(name, o = {}) {
+    const A = GL.animals[name];
+    if (!A) return null;
+    const m = THREE.SkeletonUtils.clone(A.scene);
+    const tint = o.tint ? lin(o.tint) : null;
+    const nodes = {};
+    m.traverse((c) => {
+      if (c.name) nodes[c.name] = c;
+      if (!c.isMesh) return;
+      c.castShadow = true; c.receiveShadow = true; c.frustumCulled = false;
+      const recolor = (src) => {
+        const mm = src.clone();
+        mm.roughness = 0.9; mm.metalness = 0;
+        const n = src.name || '';
+        // el pelaje principal toma el color pedido; lo oscuro y lo claro, versiones de ese color
+        if (tint && /^(Main|Material)$/.test(n)) mm.color.copy(tint);
+        else if (tint && /^(Main_Dark|Material\.010)$/.test(n)) mm.color.copy(tint).multiplyScalar(0.55);
+        else if (tint && /^(Main_Light|Material\.003)$/.test(n)) mm.color.lerp(tint, 0.35);
+        if (o.glowEyes && /Eye/.test(n) && !/White/.test(n)) { mm.emissive = new THREE.Color(o.glowEyes); mm.emissiveIntensity = 0.35; }
+        return mm;
+      };
+      c.material = Array.isArray(c.material) ? c.material.map(recolor) : recolor(c.material);
+    });
+    const root = new THREE.Group();
+    m.scale.multiplyScalar((o.height || ANIMALS[name]) / A.height);
+    root.add(m);
+    root.userData.parts = { gl: true, root, model: m, nodes };
+    root.userData.gl = { mixer: new THREE.AnimationMixer(m), actions: {}, base: null, shot: null, last: 0, marks: {}, animal: true, clipSrc: A.clips };
+    return root;
+  }
+  function buildPetGL(type, evo) {
+    const name = PET_GL[type];
+    if (!name || !GL.animals[name]) return null;
+    const P = RULES.PETS[type] || {};
+    const m = buildAnimalGL(name, { tint: evo ? P.evoTint && P.evoTint[evo - 1] : null, glowEyes: evo === 2 ? '#7affff' : null, height: ANIMALS[name] * (1 + evo * 0.18) });
+    m.userData.kind = 'pet';
+    return m;
+  }
+  function buildMountGL(type) {
+    const def = MOUNT_GL[type];
+    if (!def || !GL.animals[def[0]]) return null;
+    const m = buildAnimalGL(def[0], { height: def[1] });
+    const P = m.userData.parts;
+    // silla y manta: siguen el lomo mientras galopa, y el jinete va encima
+    const saddle = new THREE.Group();
+    mesh(box(0.34, 0.05, 0.42), mat('#6a2418'), 0, 0, 0, saddle);
+    mesh(box(0.26, 0.07, 0.26), mat('#5a3a22'), 0, 0.05, 0, saddle);
+    mesh(box(0.27, 0.03, 0.03), mat('#c8a040', { metal: 0.6 }), 0, 0.09, 0.12, saddle);
+    m.add(saddle);
+    const bone = P.nodes.Torso2 || P.nodes.Torso;
+    const v = new THREE.Vector3();
+    const backY = () => { if (!bone) return def[1] * 0.68; m.updateMatrixWorld(true); bone.getWorldPosition(v); m.worldToLocal(v); return v.y; };
+    const off = def[1] * 0.68 - backY(); // en reposo, la silla queda a esa altura
+    m.userData.ride = () => { const y = backY() + off; saddle.position.y = y; return y; };
+    m.userData.saddleY = m.userData.ride() + 0.02; // el modelo animado se sienta más hundido que el de bloques
+    m.userData.kind = 'mount';
     return m;
   }
 

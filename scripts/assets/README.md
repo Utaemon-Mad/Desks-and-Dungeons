@@ -16,6 +16,11 @@ node scripts/assets/kaykit-weapons.mjs
 node scripts/assets/kaykit-scenery.mjs
 ```
 
+Los animales de `public/assets/quaternius/` (Quaternius, *Ultimate Animated Animals*, CC0) salen de sus
+versiones `.glb` ligeras (seis animaciones cada uno); `quaternius-animals.mjs` les pone a todos los mismos
+nombres de animación (`Idle`, `Walk`, `Gallop`, `Attack`, `Hit`, `Death`) y los limpia:
+`node scripts/assets/quaternius-animals.mjs` (con los `.glb` en `/tmp/kk/animals`).
+
 `scripts/three-entry.js` es la entrada del paquete de Three.js r160 con sus complementos
 (posprocesado, cargador glTF, utilidades de esqueletos):
 `npx esbuild scripts/three-entry.js --bundle --minify --format=iife --outfile=public/vendor/three.bundle.min.js`.
