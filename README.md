@@ -11,7 +11,7 @@ Una taberna en 3D low-poly (Three.js, luz de velas y sombras suaves), en plan re
 - **Combate en tiempo real** con el movimiento llevado por el servidor (suave y sin tirones): clic para andar, clic en un enemigo para atacarlo sin parar, WASD, habilidades con energía y tiempo de espera, pociones y pergaminos. Los proyectiles enemigos van a la casilla donde estabas: si te mueves, los esquivas. Los jefes marcan en el suelo sus golpes antes de darlos.
 - **Comerciantes en la taberna**: Madre Zarza, la bruja (pociones y brebajes), el Maestro Takeshi, mercader de Oriente (armas y armaduras para tu nivel, renovadas cada 10 minutos) y el Hombre de la Túnica (pergaminos y bendiciones de 20 minutos). Todos compran lo que encuentres.
 - **Comercio entre jugadores**: cada uno pone objetos y oro y, cuando los dos aceptan, se intercambian.
-- **Gráficos 3D**: taberna, mazmorras y mundo en 3D low-poly con cámara cenital inclinada, luces de velas y antorchas, sombras, muros que se recortan junto al héroe y niebla de guerra. Los personajes son modelos 3D cuyo equipo se ve (armaduras, yelmos, armas, escudos, capas de conjunto y legendarias). Retratos y fichas con el modelo 3D.
+- **Gráficos 3D** (Three.js r160): personajes animados de verdad (packs KayKit, CC0) con 35 animaciones (andar, correr, atacar según el arma, lanzar hechizos, esquivar, morir, sentarse, brindar); piel, pelo y ropa recoloreados según tu héroe, con casco, capa y armas del equipo. Mazmorras con losas, muros de sillería, antorchas, estandartes, ataúdes y cofres; taberna con mesas, sillas y barriles; mundo con casas, pinos, montañas y rocas. Posprocesado: resplandor de luces y magia, oclusión ambiental, gradación de color por zona, viñeta y efecto maqueta. Pensado para ordenador e iPad (calidad automática alta o media).
 - **Botín con características**: al recoger un objeto aparece su carta con todas sus propiedades, para qué clases es y su peso. Las armas siempre son de clases del grupo.
 - **Mundo abierto grande** (🗺️, 160×120) en seis regiones cada vez más peligrosas: Valle de Brumaverde (nv 1-3), Bosque Viejo (3-6), Ciénaga (6-10), Yermo Rojo (10-14), Picos Helados (14-19) y Erial de Ceniza (19-26). Si vas sin nivel suficiente, la corrupción te va quitando vida. Campamentos con personajes, **misiones** encadenadas con historia y jefes de región, **piedras de viaje** para moverte rápido y seis cuevas-mazmorra.
 - **Mascotas** (desde nivel 5): perro, lobo, jabalí u osezno en el 🐴 Establo. Te siguen, atacan con daño basado en su Fuerza y cargan equipo (su propia mochila con peso).
@@ -90,7 +90,8 @@ El juego es un único servidor Node (HTTP + WebSocket):
 - `public/ui2.js`: ventanas del pueblo: forja, cocina, tablón, fama, habitación, duelos, Descenso y ajustes de gráficos.
 - `public/ui.js`: ventanas: retrato con el icono de subida de nivel, reparto de puntos, ficha, equipo, tiendas, comercio, guía y tooltips.
 - `public/dungeon.js`: menú de mazmorras y partida (render 3D, efectos, barra de habilidades, joystick, controles).
-- `public/vendor/three.min.js`: Three.js r149 (licencia MIT en `THREE-LICENSE.txt`).
+- `public/vendor/three.bundle.min.js`: Three.js r160 con posprocesado y cargador glTF (licencia MIT en `THREE-LICENSE.txt`; entrada en `scripts/three-entry.js`).
+- `public/assets/kaykit/`: modelos KayKit de Kay Lousberg (CC0): personajes, animaciones, armas y escenario. Cómo se preparan: `scripts/assets/README.md`.
 - `public/models.js`: modelos 3D low-poly de héroes (con su equipo), personajes, enemigos, mascotas, monturas, muebles y decorado.
 - `public/view3d.js`: escenas 3D, luces y sombras, construcción de mazmorras y mundo en 3D, niebla y retratos.
 - `public/sprites.js`: pixel art de héroes, comerciantes y enemigos (vistas previas del editor).

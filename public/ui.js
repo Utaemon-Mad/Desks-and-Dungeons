@@ -605,7 +605,8 @@
     if (g.kind === 'kill') return `Derrota ${n}/${g.n}: ${[...new Set(g.mobs.map((k) => RULES.MONSTERS[k].name))].join(', ')}`;
     if (g.kind === 'boss') return `Derrota a ${RULES.MONSTERS[g.mob].name} ${n ? '✔' : ''}`;
     const N = (DD.worldNpcs || {})[g.npc];
-    return `Habla con ${N ? N.name : g.npc} ${n ? '✔' : ''}`;
+    const NAMES = { alcalde: 'Alcalde Brumo', jacinta: 'Jacinta la granjera', ewan: 'Ewan el leñador', bran: 'Bran el cazador', morwen: 'Abuela Morwen', rhys: 'Capitán Rhys', tor: 'Tor el ermitaño', selene: 'Selene, la Última Vigía' };
+    return `Habla con ${N ? N.name : NAMES[g.npc] || g.npc} ${n ? '✔' : ''}`;
   }
   function questsView(p) {
     const wrap = el('div', 'skills');

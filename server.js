@@ -37,6 +37,8 @@ const MIME = {
   '.md': 'text/markdown; charset=utf-8',
   '.png': 'image/png',
   '.ico': 'image/x-icon',
+  '.glb': 'model/gltf-binary',
+  '.txt': 'text/plain; charset=utf-8',
 };
 
 const server = http.createServer((req, res) => {

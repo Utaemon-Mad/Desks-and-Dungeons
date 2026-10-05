@@ -557,12 +557,14 @@
     built = VIEW3D.buildMap(game.map);
     stage.scene.add(built.group);
     fog = VIEW3D.fogLayer(game.map);
+    if (built.gl) fog.mesh.position.y = 0.18; // por encima de las losas con piedras
     stage.scene.add(fog.mesh);
     const T = VIEW3D.THEME[game.map.theme] || VIEW3D.THEME.cripta;
     const bg = world ? '#0a1020' : T.fog;
     stage.scene.background = new THREE.Color(bg);
     stage.scene.fog = new THREE.Fog(bg, world ? 16 : 13, world ? 34 : 26);
     stage.hemi.intensity = world ? 0.62 : 0.3;
+    stage.grade = world ? null : GRADES[game.map.kind === 'arena' ? 'arena' : game.map.theme] || null;
     stage.hemi.color.set(world ? '#7a8ac0' : T.sky);
     stage.hemi.groundColor.set(world ? '#2a2a1a' : '#140c0a');
     // los personajes del mundo
@@ -571,6 +573,15 @@
     VIEW3D.show(true);
   }
 
+  // Gradación de color por tema: frío en la cripta, cálido en la guarida del dragón…
+  const GRADES = {
+    cripta: { gain: [0.92, 0.98, 1.1], lift: [0, 0.005, 0.02], saturation: 0.95, vignette: 0.5, bloom: 0.6 },
+    cuevas: { gain: [1.06, 1.0, 0.9], lift: [0.01, 0.006, 0], saturation: 1.08, vignette: 0.45 },
+    fortaleza: { gain: [1.05, 0.97, 0.9], lift: [0.012, 0.004, 0], saturation: 1.0, vignette: 0.45 },
+    nido: { gain: [0.95, 1.06, 0.9], lift: [0, 0.01, 0], saturation: 1.05, vignette: 0.5 },
+    volcan: { gain: [1.12, 0.96, 0.82], lift: [0.02, 0.004, 0], saturation: 1.15, vignette: 0.5, bloom: 0.75 },
+    arena: { gain: [1.08, 0.98, 0.88], lift: [0.012, 0.005, 0], saturation: 1.1, vignette: 0.55, bloom: 0.65 },
+  };
   const DIR_ANG = { S: 0, N: Math.PI, E: Math.PI / 2, W: -Math.PI / 2 };
   function modelFor(e) {
     let key;
@@ -578,6 +589,7 @@
     else if (e.kind === 'npc') key = 'n' + e.npc;
     else if (e.kind === 'pet') key = 'p' + e.k + (e.evo || 0);
     else key = 'e' + e.k;
+    key += MODELS.GL.version;
     let m = models.get(e.id);
     if (m && m.key === key) return m;
     if (m) stage.scene.remove(m.obj);
@@ -604,7 +616,7 @@
     }
     obj.userData.face = DIR_ANG[e.dir] || 0;
     obj.rotation.order = 'YXZ'; // la voltereta gira sobre el eje del propio personaje
-    if (e.kind === 'hero' && obj.userData.parts && obj.userData.parts.armR) {
+    if (e.kind === 'hero' && obj.userData.parts && obj.userData.parts.armR && !obj.userData.parts.gl) {
       const r = MODELS.rod(); r.position.set(0, -0.32, 0.04); r.rotation.x = Math.PI / 2 + 0.3; r.visible = false;
       obj.userData.parts.armR.add(r); obj.userData.rod = r;
     }
@@ -626,8 +638,12 @@
       else MODELS.mesh(MODELS.box(0.22, 0.16, 0.22), MODELS.mat(it.slot === 'mano' ? '#7a2222' : it.type === 'placas' ? '#a8aeb8' : it.type === 'malla' ? '#7e8692' : it.type === 'cuero' ? '#6a4226' : it.slot === 'amuleto' || it.slot === 'anillo' ? '#c8a040' : '#6a4aa0', { metal: it.type === 'placas' ? 0.6 : 0 }), 0, 0.1, 0, g);
       const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.12, l.r === 'comun' ? 0.6 : 1.8, 6, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: l.r === 'comun' ? 0.25 : 0.45, depthWrite: false, side: THREE.DoubleSide }));
       beam.position.y = l.r === 'comun' ? 0.3 : 0.9;
+      beam.layers.set(1);
       g.add(beam);
       g.userData.light = l.r === 'comun' ? null : col;
+    } else if (l.gold && MODELS.GL.ready && MODELS.pieceGeo('coin_stack_small')) {
+      g.add(MODELS.piece('coin_stack_small', 0.28));
+      g.userData.light = '#ffd23f';
     } else if (l.gold) {
       for (let i = 0; i < 5; i++) MODELS.mesh(MODELS.cyl(0.06, 0.06, 0.02, 8), MODELS.mat('#ffd23f', { metal: 0.8, rough: 0.3, emissive: '#6a4a00', ei: 0.4 }), (i % 3 - 1) * 0.07, 0.02 + Math.floor(i / 3) * 0.02, (i % 2) * 0.06, g);
     } else if (l.mat) {
@@ -644,6 +660,15 @@
   }
 
   function chestModel() {
+    if (MODELS.GL.ready && MODELS.pieceGeo('chest')) {
+      // cofre KayKit: cerrado, y al abrirlo el mismo cofre lleno de oro
+      const g = new THREE.Group();
+      const closed = MODELS.piece('chest', 0.3), open = MODELS.piece('chest_gold', 0.3);
+      open.visible = false;
+      g.add(closed, open);
+      g.userData.kk = { closed, open };
+      return g;
+    }
     const g = new THREE.Group();
     MODELS.mesh(MODELS.box(0.62, 0.36, 0.44), MODELS.mat('#6a3e1e'), 0, 0.18, 0, g);
     MODELS.mesh(MODELS.box(0.64, 0.05, 0.46), MODELS.mat('#c8a040', { metal: 0.7 }), 0, 0.22, 0, g);
@@ -720,12 +745,13 @@
     else if (f.kind === 'dash' || f.kind === 'blink') obj = new THREE.Mesh(MODELS.box(0.08, 0.08, 1), glow(f.kind === 'blink' ? '#a05aff' : '#ffffff', 0.7));
     else return;
     obj.renderOrder = 6;
+    VIEW3D.fxLayer(obj);
     stage.scene.add(obj);
     fx3d.push({ f, obj, start: f.start || now, dur: f.dur || 400 });
   }
 
   function renderGame(now, dt) {
-    if (!stage || !built || built.map !== game.map) { buildScene(); built.map = game.map; }
+    if (!stage || !built || built.map !== game.map || built.glv !== MODELS.GL.version) { buildScene(); built.map = game.map; built.glv = MODELS.GL.version; }
     const map = game.map;
     // golpe crítico: el mundo se congela un instante (hit-stop)
     const frozen = now < game.hitstop;
@@ -793,12 +819,12 @@
       o.scale.setScalar(base * (hit ? 1.08 : 1));
       // voltereta: una vuelta completa hacia delante, agachado
       const rk = e.rollAt ? (now - e.rollAt) / 360 : 1;
-      o.rotation.x = rk < 1 ? rk * Math.PI * 2 : 0;
-      if (rk < 1) o.position.y = 0.25 * Math.sin(rk * Math.PI);
+      const gl = !!(o.userData.gl || (o.userData.mount && o.children[1] && o.children[1].userData.gl));
+      if (!gl) { o.rotation.x = rk < 1 ? rk * Math.PI * 2 : 0; if (rk < 1) o.position.y = 0.25 * Math.sin(rk * Math.PI); }
       if (e.stun) o.rotation.z = Math.sin(now / 90) * 0.06; else o.rotation.z = 0;
       const castK = e.castAt ? (now - e.castAt) / 450 : 1;
       if (o.userData.rod) o.userData.rod.visible = !!e.fishing;
-      MODELS.animate(o.userData.mount ? o.children[1] : o, { moving: e.moving, phase: e.phase || 0, t: now, attack: atk, sit: !!o.userData.mount, cast: castK < 1 ? castK : 0, fish: !!e.fishing });
+      MODELS.animate(o.userData.mount ? o.children[1] : o, { moving: e.moving, run: (e.dur || 200) < 330, phase: e.phase || 0, t: now, attack: atk, sit: !!o.userData.mount, cast: castK < 1 ? castK : 0, fish: !!e.fishing, attackAt: e.lunge, castAt: e.castAt, hitAt: e.hitUntil, rollAt: e.rollAt });
       if (e.wb && Math.random() < 0.5) fxp.emit({ x: e.rx + 0.5 + (Math.random() - 0.5), y: 0.1, z: e.ry + 0.5 + (Math.random() - 0.5), vy: 1 + Math.random(), color: '#a05aff', size: 0.12, life: 0.9 });
       if (e.kind === 'pet' && e.evo === 2 && Math.random() < 0.15) fxp.emit({ x: e.rx + 0.5, y: 0.4, z: e.ry + 0.5, vy: 0.6, vx: (Math.random() - 0.5) * 0.4, color: '#7affff', size: 0.06, life: 0.6 });
       if (o.userData.mount) MODELS.animate(o.userData.mount, { moving: e.moving, phase: (e.phase || 0) * 0.8, t: now });
@@ -814,6 +840,14 @@
     }
     for (let i = corpses.length - 1; i >= 0; i--) {
       const c = corpses[i];
+      if (c.obj.userData.gl) {
+        // modelo animado: su animación de muerte, y luego se hunde en el suelo
+        const k = (now - c.start) / 2600;
+        if (k >= 1) { stage.scene.remove(c.obj); corpses.splice(i, 1); continue; }
+        MODELS.animate(c.obj, { t: now, deadAt: c.start });
+        c.obj.position.y = k > 0.7 ? -(k - 0.7) * 1.2 : 0;
+        continue;
+      }
       const k = (now - c.start) / 1100;
       if (k >= 1) { stage.scene.remove(c.obj); corpses.splice(i, 1); continue; }
       const fall = Math.min(1, k * 2.6);
@@ -849,6 +883,7 @@
       let o = chestObjs.get(c.id);
       if (!o) { o = chestModel(); o.position.set(c.x + 0.5, 0, c.y + 0.5); stage.scene.add(o); chestObjs.set(c.id, o); }
       o.visible = !!game.seen[c.y * map.w + c.x];
+      if (o.userData.kk) { o.userData.kk.closed.visible = !c.open; o.userData.kk.open.visible = !!c.open; continue; }
       const lid = o.userData.lid;
       lid.rotation.x += ((c.open ? -1.9 : 0) - lid.rotation.x) * Math.min(1, dt * 6);
     }
@@ -875,6 +910,7 @@
         const q = new THREE.PlaneGeometry(0.92, 0.92); q.rotateX(-Math.PI / 2);
         for (const [x, y] of t.cells) { const pl = new THREE.Mesh(q, matT); pl.position.set(x + 0.5, 0.05, y + 0.5); o.add(pl); }
         o.userData.mat = matT;
+        VIEW3D.fxLayer(o);
         stage.scene.add(o); teleObjs.set(t.id, o);
       }
       const k = Math.min(1, (now - t.start) / t.dur);
@@ -896,6 +932,7 @@
           : new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), new THREE.MeshBasicMaterial({ color: col }));
         const mark = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.32, 16), new THREE.MeshBasicMaterial({ color: '#ff3a3a', transparent: true, opacity: 0.6, depthWrite: false }));
         mark.rotation.x = -Math.PI / 2;
+        mark.layers.set(1);
         o.userData.mark = mark;
         stage.scene.add(o); stage.scene.add(mark); projObjs.set(pr.id, o);
       }
@@ -959,6 +996,13 @@
       // de noche el farol del héroe y las hogueras se notan más
       const nightBoost = 1 + (1 - dc.light) * 0.2;
       for (const l of L) if (l.dist) l.intensity *= nightBoost;
+      const zg = [[1.02, 1.02, 0.95], [0.96, 1.04, 0.92], [0.94, 1.02, 0.9], [1.12, 1.0, 0.84], [0.94, 0.99, 1.08], [1.12, 0.94, 0.86]][zoneId] || [1, 1, 1];
+      const nightK = 1 - dc.light;
+      stage.grade = {
+        gain: [zg[0] * (1 - nightK * 0.12) + dc.dusk * 0.08, zg[1] * (1 - nightK * 0.06), zg[2] * (1 + nightK * 0.12) - dc.dusk * 0.05],
+        lift: [0.004 + dc.dusk * 0.01, 0.004, 0.006 + nightK * 0.012],
+        saturation: 1.1 - nightK * 0.2, vignette: 0.32 + nightK * 0.2, bloom: 0.5 + nightK * 0.3, tilt: 0.35, focus: 0.5,
+      };
       if (wantWx === 'storm' && Math.random() < 0.004) game.flash = now;
       if (game.flash && now - game.flash < 140) stage.hemi.intensity += 2.5;
     } else stage.sun.intensity = 0;

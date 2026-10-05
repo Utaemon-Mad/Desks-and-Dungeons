@@ -116,6 +116,7 @@
   // ======================================================================
   // look: { cls, species, skin, hair, gear, npc, beard, bald, apron, color }
   function buildHero(look) {
+    if (GL.ready && !look.lowpoly) return buildHeroGL(look);
     const npc = look.npc || null;
     const cid = MAP.CLASSES[look.cls] ? look.cls : 'guerrero';
     const K = MAP.CLASSES[cid];
@@ -415,6 +416,7 @@
   const tintHex = (base, t) => (t ? mix(base, t, 0.55) : base);
   // sprite (clave de RULES.MONSTERS) → modelo
   function buildEnemy(k) {
+    if (GL.ready) { const g = buildEnemyGL(k); if (g) return g; }
     const M = RULES.MONSTERS[k] || { sprite: 'goblin' };
     const s = M.sprite || 'goblin';
     const t = M.tint;
@@ -487,6 +489,7 @@
   // ======================================================================
   // st: { moving, phase, t, attack (0..1), sit, emote, hit }
   function animate(model, st) {
+    if (model.userData.gl) return animateGL(model, st);
     const P = model.userData.parts;
     if (!P) return;
     const t = st.t || 0;
@@ -562,6 +565,7 @@
 
   // Devuelve { obj, light?: { color, intensity, dist, y } }
   function furniture(type, dir) {
+    if (GL.ready) { const f = furnitureGL(type, dir); if (f) return f; }
     const g = new THREE.Group();
     const wood = mat('#6a4226'), woodD = mat('#4a2c18'), woodL = mat('#8a5a32');
     let light = null;
@@ -642,6 +646,7 @@
   }
 
   function prop(k, theme) {
+    if (GL.ready) { const p = propGL(k, theme); if (p) return p; }
     const g = new THREE.Group();
     const stoneC = { cripta: '#6a6c76', cuevas: '#6e5c48', fortaleza: '#6a605a', nido: '#4a5a40', volcan: '#4a3a3a' }[theme] || '#6a6c76';
     const stone = mat(stoneC), stoneD = mat(shade(stoneC, -0.3));
@@ -681,5 +686,372 @@
     return { obj: g, light, wall, block };
   }
 
-  root.MODELS = { mat, mesh, box, cyl, sph, cone, shade, mix, buildHero, buildEnemy, buildPet, buildMount, animate, furniture, prop, weapon, flame, candle, mug, herb, rod, RARITY };
+  // ======================================================================
+  //  Personajes con modelos de verdad (KayKit, CC0): esqueleto animado, piel, pelo y ropa recoloreados,
+  //  armas en las manos y animaciones (andar, correr, atacar, lanzar, esquivar, morir, sentarse…)
+  // ======================================================================
+  const GL = { ready: false, version: 0, chars: {}, clips: {}, props: {}, pieces: {}, geo: {}, height: 1 };
+  // Piezas de escenario: mazmorra (sin prefijo), cementerio (h:) y pueblo medieval (m:)
+  const PIECE_PACKS = [['props/dungeon.glb', ''], ['props/halloween.glb', 'h:'], ['props/medieval.glb', 'm:']];
+  const SKIN_KEY = '#f6c19d';
+  // Colores originales de cada modelo que se pueden cambiar (ropa, pelo) y sus piezas opcionales
+  const CHAR_DEF = {
+    Knight: { cloth: ['#8a4a37', 0.12], helmet: 'Knight_Helmet', cape: 'Knight_Cape' },
+    Barbarian: { cloth: ['#4b6a7f', 0.1], helmet: 'Barbarian_Hat', cape: 'Barbarian_Cape' },
+    Mage: { cloth: ['#4d4976', 0.09], hair: ['#2a2629', 0.05], helmet: 'Mage_Hat', cape: 'Mage_Cape' },
+    Rogue: { cloth: ['#07755e', 0.12], hair: ['#834331', 0.09], cape: 'Rogue_Cape' },
+    Rogue_Hooded: { cloth: ['#07755e', 0.12], cape: 'Rogue_Cape' },
+    Skeleton_Warrior: { helmet: 'Skeleton_Warrior_Helmet', cape: 'Skeleton_Warrior_Cloak', skel: true },
+    Skeleton_Rogue: { helmet: 'Skeleton_Rogue_Hood', cape: 'Skeleton_Rogue_Cape', skel: true },
+    Skeleton_Mage: { helmet: 'Skeleton_Mage_Hat', skel: true },
+    Skeleton_Minion: { cape: 'Skeleton_Minion_Cloak', skel: true },
+  };
+  const CLASS_CHAR = { guerrero: 'Barbarian', paladin: 'Knight', clerigo: 'Knight', mago: 'Mage', brujo: 'Mage', explorador: 'Rogue', picaro: 'Rogue_Hooded' };
+  const NPC_CHAR = { bruja: ['Mage', '#2a1a34'], mercader: ['Rogue', '#28305a'], encapuchado: ['Rogue_Hooded', '#2a2226'], tabernero: ['Barbarian', '#6a4a2a'] };
+  // Arma de la mochila → pieza del pack (las que no están se hacen con el modelo low poly propio)
+  const WEAPON_PROP = { espada: 'sword_1handed', espadon: 'sword_2handed', hacha: 'axe_1handed', daga: 'dagger', baston: 'staff', varita: 'wand', ballesta: 'crossbow_2handed' };
+
+  function loadAssets(base = 'assets/kaykit/') {
+    if (GL.loading) return GL.loading;
+    if (!THREE.GLTFLoader) return Promise.resolve(false);
+    const L = new THREE.GLTFLoader();
+    const get = (u) => new Promise((res, rej) => L.load(base + u, res, undefined, rej));
+    const names = Object.keys(CHAR_DEF);
+    GL.loading = Promise.all([get('chars/anims.glb'), get('chars/anims_skel.glb'), get('props/weapons.glb'), ...PIECE_PACKS.map(([f]) => get(f)), ...names.map((n) => get('chars/' + n + '.glb'))]).then(([anims, animsSkel, weapons, ...rest]) => {
+      const packs = rest.splice(0, PIECE_PACKS.length);
+      const chars = rest;
+      packs.forEach((pk, i) => { for (const o of pk.scene.children) GL.pieces[PIECE_PACKS[i][1] + o.name] = o; });
+      for (const c of [...anims.animations, ...animsSkel.animations]) GL.clips[c.name] = c;
+      names.forEach((n, i) => {
+        const s = chars[i].scene;
+        s.traverse((o) => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; o.frustumCulled = false; } });
+        GL.chars[n] = s;
+      });
+      // altura del caballero (sin casco ni armas) para dejar a todos a la escala del juego
+      const bb = new THREE.Box3();
+      GL.chars.Knight.traverse((o) => { if (o.isSkinnedMesh && !/Helmet|Cape/.test(o.name)) { o.geometry.computeBoundingBox(); bb.union(o.geometry.boundingBox); } });
+      GL.height = Math.max(0.5, bb.max.y - bb.min.y);
+      for (const o of weapons.scene.children) { o.traverse((c) => { if (c.isMesh) { c.castShadow = true; c.receiveShadow = true; } }); GL.props[o.name] = o; }
+      GL.ready = true; GL.version++;
+      return true;
+    }).catch((e) => { console.warn('No se pudieron cargar los modelos KayKit:', e); return false; });
+    return GL.loading;
+  }
+
+  const lin = (hex) => new THREE.Color(hex).convertSRGBToLinear();
+  // Material con cambio de colores: los texeles parecidos a un color "clave" pasan al color elegido (conservando el sombreado)
+  function swapMaterial(src, swaps, tint, opacity) {
+    const m = src.clone();
+    m.roughness = 0.88; m.metalness = 0; // acabado mate, como el arte original (sin brillos de plástico)
+    const kFrom = [0, 1, 2].map((i) => (swaps[i] ? lin(swaps[i][0]) : new THREE.Color(0, 0, 0)));
+    const kTo = [0, 1, 2].map((i) => (swaps[i] ? lin(swaps[i][1]) : new THREE.Color(0, 0, 0)));
+    const kTol = [0, 1, 2].map((i) => (swaps[i] ? swaps[i][2] : 0));
+    if (tint) m.color = lin(tint);
+    if (m.emissive && m.emissive.getHex() !== 0) m.emissiveIntensity = Math.min(m.emissiveIntensity || 1, 0.35); // ojos que brillan, sin deslumbrar
+    if (opacity !== undefined) { m.transparent = true; m.opacity = opacity; m.depthWrite = false; }
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.kFrom = { value: kFrom }; sh.uniforms.kTo = { value: kTo }; sh.uniforms.kTol = { value: kTol };
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <common>', '#include <common>\nuniform vec3 kFrom[3]; uniform vec3 kTo[3]; uniform float kTol[3];')
+        .replace('#include <map_fragment>', [
+          '#include <map_fragment>',
+          'for (int i = 0; i < 3; i++) { if (kTol[i] > 0.0) {',
+          '  float dk = length(diffuseColor.rgb - kFrom[i] * vDiffuseTint);',
+          '  float w = 1.0 - smoothstep(kTol[i] * 0.55, kTol[i], dk);',
+          '  diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb / max(kFrom[i] * vDiffuseTint, vec3(0.02)) * kTo[i] * vDiffuseTint, w);',
+          '} }'].join('\n'))
+        .replace('void main() {', 'void main() {\n  vec3 vDiffuseTint = diffuse;');
+    };
+    m.customProgramCacheKey = () => 'kswap';
+    return m;
+  }
+
+  // Monta un personaje: name (modelo), o: { cloth, skin, hair, tint, opacity, helmet, cape, w, wr, o, or, scale, weaponKind, mug }
+  function buildGL(name, o = {}) {
+    const def = CHAR_DEF[name];
+    const tpl = GL.chars[name];
+    const m = THREE.SkeletonUtils.clone(tpl);
+    const nodes = {};
+    m.traverse((c) => { if (c.name) nodes[c.name] = c; });
+    m.traverse((c) => {
+      if (!c.isMesh) return;
+      const isHelmet = def.helmet && c.name === def.helmet, isCape = def.cape && c.name === def.cape;
+      if (isHelmet) c.visible = !!o.helmet;
+      else if (isCape) c.visible = !!o.cape;
+      else if (!c.isSkinnedMesh) { c.visible = false; return; } // las armas de serie se esconden: se ponen las del equipo
+      const swaps = [];
+      if (!def.skel) {
+        if (o.skin) swaps.push([SKIN_KEY, o.skin, 0.16]);
+        if (/Head/.test(c.name)) { if (o.hair && def.hair) swaps.push([def.hair[0], o.hair, def.hair[1]]); }
+        else if (o.cloth && def.cloth) swaps.push([def.cloth[0], o.cloth, def.cloth[1]]);
+        if (o.cape && /Cape/.test(c.name) && o.capeColor && def.cloth) swaps.push([def.cloth[0], o.capeColor, def.cloth[1] * 1.4]);
+      }
+      c.material = swapMaterial(c.material, swaps, o.tint, o.opacity);
+      if (o.opacity !== undefined) c.castShadow = false;
+    });
+    const root = new THREE.Group();
+    const s = 1.02 / GL.height * (o.scale || 1);
+    m.scale.setScalar(s);
+    root.add(m);
+    const hR = nodes.handslotr || nodes['handslot.r'], hL = nodes.handslotl || nodes['handslot.l']; // el cargador quita los puntos de los nombres
+    const P = { gl: true, root, model: m, armR: hR, handR: hR, handL: hL, head: nodes.head };
+    // armas del equipo en las manos
+    const attach = (hand, propName, base, rarity) => {
+      let w = null;
+      if (propName && GL.props[propName]) {
+        w = GL.props[propName].clone(true);
+        w.position.set(0, 0.033, 0); w.rotation.set(0, Math.PI, 0);
+        if (rarity && RARITY[rarity]) w.traverse((c) => { if (c.isMesh) { c.material = c.material.clone(); c.material.emissive = new THREE.Color(RARITY[rarity]); c.material.emissiveIntensity = rarity === 'legendario' || rarity === 'conjunto' ? 0.55 : 0.25; } });
+      } else if (base) {
+        w = weapon(base, rarity) || offhand(base, rarity, o.set);
+        if (w) { w.scale.setScalar(1 / s); w.rotation.set(0, 0, base === 'arco' ? Math.PI / 2 : 0); }
+      }
+      if (w && hand) hand.add(w);
+      return w;
+    };
+    if (o.w) P.weapon = attach(o.w === 'arco' ? hL : hR, o.wProp || WEAPON_PROP[o.w], o.w, o.wr);
+    if (o.o) P.off = attach(hL, o.oProp || (o.o === 'escudo' ? (name === 'Knight' ? 'shield_badge' : name === 'Barbarian' ? 'shield_round' : 'shield_square') : o.o === 'orbe' ? 'spellbook_open' : null), o.o, o.or);
+    if (o.mug && GL.props.mug_full) { const mg = GL.props.mug_full.clone(true); mg.position.set(0, 0.03, 0); hR.add(mg); P.mug = mg; }
+    root.userData.parts = P;
+    root.userData.gl = { mixer: new THREE.AnimationMixer(m), actions: {}, base: null, shot: null, last: 0, marks: {}, kind: o.weaponKind || 'melee1', walk: o.walk, idle: o.idle, float: o.float };
+    root.userData.kind = o.kind || 'hero';
+    if (o.float) m.position.y = 0.1;
+    return root;
+  }
+
+  // Animaciones del esqueleto según el estado (andar, quieto, sentado…) y golpes o hechizos que se disparan una vez
+  const ATTACK_CLIPS = {
+    melee1: ['1H_Melee_Attack_Chop', '1H_Melee_Attack_Slice_Diagonal', '1H_Melee_Attack_Stab'], melee2: ['2H_Melee_Attack_Slice', '2H_Melee_Attack_Chop'],
+    dagger: ['Dualwield_Melee_Attack_Stab', '1H_Melee_Attack_Stab'], ranged1: ['1H_Ranged_Shoot'], ranged2: ['2H_Ranged_Shoot'], magic: ['Spellcast_Shoot'], unarmed: ['Unarmed_Melee_Attack_Punch_A'],
+  };
+  function glAction(G, name, once) {
+    let a = G.actions[name];
+    if (!a) {
+      const clip = GL.clips[name];
+      if (!clip) return null;
+      a = G.mixer.clipAction(clip);
+      if (once) { a.setLoop(THREE.LoopOnce, 1); a.clampWhenFinished = true; }
+      G.actions[name] = a;
+    }
+    return a;
+  }
+  function glPlay(G, name, once, fade = 0.15) {
+    const a = glAction(G, name, once);
+    if (!a) return null;
+    if (once) {
+      if (G.shot && G.shot !== a) G.shot.fadeOut(fade);
+      a.reset().setEffectiveWeight(1).fadeIn(0.06).play();
+      G.shot = a;
+      G.shotEnd = G.time + a.getClip().duration / (a.timeScale || 1);
+      if (G.base) G.base.setEffectiveWeight(0.0);
+      return a;
+    }
+    if (G.base === a) return a;
+    if (G.base) G.base.fadeOut(fade);
+    a.reset().setEffectiveWeight(1).fadeIn(fade).play();
+    G.base = a;
+    return a;
+  }
+  // st: { t, moving, run, sit, emote, mug, attackAt, castAt, hitAt, rollAt, deadAt, fish }
+  function animateGL(model, st) {
+    const G = model.userData.gl;
+    const t = (st.t || 0) / 1000;
+    const dt = G.last ? Math.min(0.1, Math.max(0, t - G.last)) : 0;
+    G.last = t; G.time = (G.time || 0) + dt;
+    const fire = (k, at) => { if (at && at !== G.marks[k]) { G.marks[k] = at; return true; } return false; };
+    if (st.deadAt) { if (fire('dead', st.deadAt)) glPlay(G, 'Death_A', true, 0.08); G.mixer.update(dt); return; }
+    if (fire('roll', st.rollAt)) glPlay(G, 'Dodge_Forward', true, 0.05);
+    else if (fire('cast', st.castAt)) glPlay(G, G.kind === 'magic' ? 'Spellcast_Shoot' : 'Spellcast_Raise', true);
+    else if (fire('atk', st.attackAt)) { const l = ATTACK_CLIPS[G.kind] || ATTACK_CLIPS.melee1; glPlay(G, l[(G.n = (G.n || 0) + 1) % l.length], true, 0.06); }
+    else if (fire('hit', st.hitAt) && !G.shot) glPlay(G, 'Hit_A', true, 0.05);
+    if (fire('emote', st.emote && st.emoteAt)) glPlay(G, st.emote === 'cheers' || st.emote === 'dance' ? 'Cheer' : st.emote === 'wave' ? 'Interact' : st.emote === 'fight' ? '1H_Melee_Attack_Chop' : 'Interact', true);
+    if (G.shot && G.time >= G.shotEnd - 0.12) { G.shot.fadeOut(0.18); G.shot = null; if (G.base) G.base.setEffectiveWeight(1); }
+    // estado de fondo
+    let base = G.idle || (G.kind === 'melee2' ? '2H_Melee_Idle' : 'Idle');
+    if (st.sit) base = st.sitFloor ? 'Sit_Floor_Idle' : 'Sit_Chair_Idle';
+    else if (st.moving) base = st.run === false ? (G.walk || 'Walking_A') : (G.walk || 'Running_A');
+    else if (st.fish) base = '1H_Ranged_Aiming';
+    else if (st.emote === 'dance' && !G.shot) base = 'Cheer';
+    else if (st.emote === 'sleep') base = 'Sit_Floor_Idle';
+    glPlay(G, base, false);
+    if (G.shot && G.base) G.base.setEffectiveWeight(0.0);
+    if (G.float) model.userData.parts.model.position.y = 0.12 + Math.sin(t * 2.4) * 0.04;
+    G.mixer.update(dt);
+  }
+  // Pose fija (retratos): el modelo en un fotograma de una animación
+  function posePeek(model, clip = 'Idle', time = 0.4) {
+    const G = model.userData.gl;
+    if (!G) return;
+    const a = glAction(G, clip, false);
+    if (!a) return;
+    a.reset().play(); G.mixer.update(time);
+  }
+
+  // Geometría de una pieza de escenario (todas sus mallas juntas) para dibujar muchas copias de golpe
+  const matteCache = new Map();
+  function matte(m) {
+    let c = matteCache.get(m);
+    if (!c) { c = m.clone(); c.roughness = Math.max(0.8, c.roughness || 0); c.metalness = 0; matteCache.set(m, c); }
+    return c;
+  }
+  function pieceGeo(name, centered) {
+    if (centered) {
+      // la misma pieza con su centro (en planta) en el origen y apoyada en el suelo
+      if (GL.geo[name + '#c']) return GL.geo[name + '#c'];
+      const P = pieceGeo(name);
+      if (!P) return null;
+      const g = P.geometry.clone();
+      const b = P.box;
+      g.translate(-(b.min.x + b.max.x) / 2, -b.min.y, -(b.min.z + b.max.z) / 2);
+      g.computeBoundingBox();
+      GL.geo[name + '#c'] = { geometry: g, material: P.material, box: g.boundingBox };
+      return GL.geo[name + '#c'];
+    }
+    if (GL.geo[name]) return GL.geo[name];
+    const node = GL.pieces[name];
+    if (!node) return null;
+    node.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(node.matrixWorld).invert();
+    const parts = [];
+    node.traverse((c) => {
+      if (!c.isMesh) return;
+      let g = c.geometry.clone();
+      g.applyMatrix4(new THREE.Matrix4().multiplyMatrices(inv, c.matrixWorld));
+      for (const k of Object.keys(g.attributes)) if (!['position', 'normal', 'uv'].includes(k)) g.deleteAttribute(k);
+      if (!g.attributes.uv) g.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
+      if (!g.attributes.normal) g.computeVertexNormals();
+      if (g.index) g = g.toNonIndexed();
+      parts.push([g, c.material]);
+    });
+    if (!parts.length) return null;
+    const mats = [...new Set(parts.map((p) => p[1]))];
+    const geometry = THREE.BufferGeometryUtils.mergeGeometries(parts.map((p) => p[0]), mats.length > 1);
+    if (mats.length > 1) geometry.groups.forEach((gr, i) => { gr.materialIndex = mats.indexOf(parts[i][1]); });
+    geometry.computeBoundingBox();
+    const material = mats.length > 1 ? mats.map(matte) : matte(mats[0]);
+    GL.geo[name] = { geometry, material, box: geometry.boundingBox };
+    return GL.geo[name];
+  }
+  // Una copia suelta de una pieza a escala s (para decorado y muebles)
+  function piece(name, s = 1, o = {}) {
+    const P = pieceGeo(name);
+    if (!P) return null;
+    let material = P.material;
+    if (o.tint) material = [].concat(material).map((m) => { const c = m.clone(); c.color = new THREE.Color(o.tint); return c; });
+    if (Array.isArray(material) && material.length === 1) material = material[0];
+    const m = new THREE.Mesh(P.geometry, material);
+    m.scale.setScalar(s);
+    m.castShadow = true; m.receiveShadow = true;
+    return m;
+  }
+  // Decorado de las mazmorras con piezas KayKit (lo que no tiene equivalente sigue siendo low poly propio)
+  const BANNER_BY_THEME = { cripta: 'banner_patternB_white', cuevas: 'banner_patternA_brown', fortaleza: 'banner_patternA_red', nido: 'banner_patternA_green', volcan: 'banner_patternA_red' };
+  function propGL(k, theme) {
+    const g = new THREE.Group();
+    let light = null, wall = false, block = true;
+    const put = (name, s, x = 0, y = 0, z = 0, ry = 0) => { const m = piece(name, s); if (!m) return null; m.position.set(x, y, z); m.rotation.y = ry; g.add(m); return m; };
+    switch (k) {
+      case 'pillar': if (!put('pillar_decorated', 0.36)) return null; break;
+      case 'sarcophagus': if (!put('h:coffin_decorated', 0.32)) return null; break;
+      case 'coffin': if (!put('h:coffin', 0.28)) return null; break;
+      case 'tomb': if (!put('h:gravestone', 0.42)) return null; break;
+      case 'altar': if (!put('h:shrine_candles', 0.5)) return null; light = { color: '#ffc070', intensity: 1.0, dist: 3.5, y: 0.9 }; break;
+      case 'barrel': if (!put('barrel_large', 0.32)) return null; break;
+      case 'crate': if (!put('crates_stacked', 0.3)) return null; break;
+      case 'table': if (!put('table_medium_decorated_A', 0.34)) return null; break;
+      case 'bones': put('h:bone_A', 0.4, -0.08, 0.03, 0.05, 0.6); put('h:bone_B', 0.4, 0.1, 0.02, -0.06, 2); block = false; break;
+      case 'skull': if (!put('h:skull', 0.18, 0, 0, 0, 0.4)) return null; block = false; break;
+      case 'rubble': if (!put('rubble_half', 0.12, -0.2, 0, 0)) return null; block = false; break;
+      case 'candles': if (!put('candle_triple', 0.42)) return null; light = { color: '#ffc070', intensity: 0.8, dist: 2.6, y: 0.4 }; block = false; break;
+      case 'torch': wall = true; if (!put('torch_mounted', 0.42, 0, 0.82, 0.02)) return null; flame(g, 0, 1.1, 0.16, 1.4); light = { color: '#ff9a40', intensity: 1.8, dist: 5.5, y: 1.15, z: 0.35 }; block = false; break;
+      case 'banner': wall = true; if (!put(BANNER_BY_THEME[theme] || 'banner_patternA_red', 0.3, 0, 0.12, -0.12)) return null; block = false; break;
+      case 'shield': wall = true; if (!put('banner_shield_red', 0.3, 0, 0.12, -0.12)) return null; block = false; break;
+      default: return null;
+    }
+    return { obj: g, light, wall, block };
+  }
+
+  // Muebles de la taberna con piezas KayKit (barra, chimenea, estanterías… siguen siendo propios)
+  function furnitureGL(type, dir) {
+    const rotY = { E: Math.PI / 2, S: 0, W: -Math.PI / 2, N: Math.PI }[dir || 'S'] || 0;
+    const g = new THREE.Group();
+    let light = null;
+    const put = (name, s, x = 0, y = 0, z = 0, ry = 0) => { const m = piece(name, s); if (!m) return null; m.position.set(x, y, z); m.rotation.y = ry; g.add(m); return m; };
+    switch (type) {
+      case 'barrel': if (!put('barrel_large', 0.3, 0, 0, 0, rotY)) return null; break;
+      case 'crate': if (!put('box_large', 0.42, 0, 0, 0, 0.2)) return null; break;
+      case 'smallcrate': if (!put('box_large', 0.3, 0, 0, 0, -0.3)) return null; break;
+      case 'table': if (!put('table_medium_decorated_A', 0.42)) return null; light = { color: '#ffb060', intensity: 0.5, dist: 2.5, y: 0.8 }; break;
+      case 'maptable': if (!put('table_medium', 0.42)) return null; { const m = put('plate_food_A', 0.2, 0.1, 0.42, 0.05); void m; } break;
+      case 'roundtable': if (!put('table_small_decorated_A', 0.6)) return null; light = { color: '#ffb060', intensity: 0.8, dist: 3, y: 0.85 }; break;
+      case 'chair': if (!put('chair', 0.52, 0, 0, 0, rotY + Math.PI)) return null; break;
+      case 'stool': if (!put('stool', 0.62)) return null; break;
+      case 'chest': if (!put('chest', 0.34, 0, 0, 0, rotY)) return null; break;
+      default: return null;
+    }
+    return { obj: g, light };
+  }
+
+  // Héroe con modelo de verdad: clase → modelo, colores de piel, pelo y ropa, casco, capa y armas
+  function buildHeroGL(look) {
+    const npc = look.npc || null;
+    const cid = MAP.CLASSES[look.cls] ? look.cls : 'guerrero';
+    const K = MAP.CLASSES[cid];
+    const gear = look.gear || (npc ? {} : DEFAULT_GEAR[cid]);
+    const set = gear.set && SET_COL[gear.set];
+    const [name, npcCloth] = NPC_CHAR[npc] || [CLASS_CHAR[cid] || 'Knight', null];
+    const species = look.species || 'human';
+    const skin = species === 'dragonborn' ? '#9a3a2a' : MAP.SKINS[look.skin] || MAP.SKINS[0];
+    const hair = npc === 'bruja' ? '#b8b8c0' : MAP.HAIRS[look.hair] || MAP.HAIRS[0];
+    const cloth = set ? set[0] : npcCloth || look.color || K.color;
+    const W = gear.w && RULES.WEAPONS[gear.w];
+    const kind = !W ? 'unarmed' : W.kind === 'magic' ? 'magic' : W.kind === 'ranged' ? (gear.w === 'arco' ? 'ranged1' : 'ranged2') : gear.w === 'daga' ? 'dagger' : W.hands === 2 ? 'melee2' : 'melee1';
+    const helmet = !!gear.casco && !npc;
+    const cape = !!set || gear.pechoR === 'legendario' || gear.pechoR === 'epico' || npc === 'bruja';
+    const root = buildGL(name, {
+      skin, hair, cloth, helmet, cape, capeColor: set ? set[1] : RARITY[gear.pechoR] || cloth, set: gear.set,
+      w: gear.w, wr: gear.wr, o: gear.o, or: gear.or, weaponKind: kind, mug: npc === 'tabernero',
+    });
+    const sc = (MAP.SPECIES[species] || {}).scale || 1;
+    root.scale.setScalar(sc);
+    if (species === 'dwarf' || species === 'gnome' || species === 'halfling') root.userData.parts.model.scale.x *= 1.12;
+    return root;
+  }
+
+  // Enemigos humanoides con modelo de verdad (los animales y dragones siguen siendo low poly propios)
+  const ENEMY_GL = {
+    goblin: (M) => ['Barbarian', { tint: M.tint || '#8ac060', scale: 0.72, w: M.weapon === 'bow' ? 'ballesta' : 'daga', weaponKind: M.weapon === 'bow' ? 'ranged2' : 'dagger' }],
+    shaman: (M) => ['Mage', { tint: M.tint || '#8ac060', scale: 0.78, helmet: true, w: 'baston', weaponKind: 'magic' }],
+    hobgoblin: (M) => ['Knight', { tint: M.tint || '#e0905a', w: 'espada', o: 'escudo', weaponKind: 'melee1' }],
+    bugbear: (M) => ['Barbarian', { tint: M.tint || '#b08050', scale: 1.2, helmet: true, w: 'hacha', wProp: 'axe_2handed', weaponKind: 'melee2' }],
+    orc: (M) => ['Barbarian', { tint: M.tint || '#8aa870', scale: 1.06, w: M.weapon === 'spear' ? 'lanza' : 'hacha', weaponKind: M.weapon === 'spear' ? 'ranged1' : 'melee1' }],
+    warchief: (M) => ['Knight', { tint: M.tint || '#7aa060', scale: 1.2, helmet: true, cape: true, w: 'espadon', weaponKind: 'melee2' }],
+    ogre: (M) => ['Barbarian', { tint: M.tint || '#e0c890', scale: 1.55, w: 'hacha', wProp: 'axe_2handed', weaponKind: 'melee2' }],
+    troll: (M) => ['Barbarian', { tint: M.tint || '#70a870', scale: 1.5, weaponKind: 'unarmed', walk: 'Walking_B' }],
+    skeleton: (M) => (M.weapon === 'bow' ? ['Skeleton_Rogue', { tint: M.tint, helmet: true, w: 'ballesta', wProp: 'Skeleton_Crossbow', weaponKind: 'ranged2' }] : ['Skeleton_Warrior', { tint: M.tint, w: 'espada', wProp: 'Skeleton_Blade', o: 'escudo', oProp: 'Skeleton_Shield_Small_A', weaponKind: 'melee1' }]),
+    wight: (M) => ['Skeleton_Warrior', { tint: M.tint || '#9ab0d8', helmet: true, cape: true, w: 'hacha', wProp: 'Skeleton_Axe', weaponKind: 'melee1' }],
+    zombie: (M) => ['Skeleton_Minion', { tint: M.tint || '#a8c890', cape: true, weaponKind: 'unarmed', walk: 'Walking_D_Skeletons' }],
+    ghoul: (M) => ['Rogue', { tint: M.tint || '#c0c0b0', weaponKind: 'unarmed', walk: 'Walking_B' }],
+    mummy: (M) => ['Mage', { tint: M.tint || '#f0e4c8', weaponKind: 'unarmed', walk: 'Walking_D_Skeletons' }],
+    specter: (M) => ['Rogue_Hooded', { tint: M.tint || '#a8c0ff', opacity: 0.62, float: true, weaponKind: 'magic' }],
+    necromancer: (M) => ['Mage', { cloth: M.tint || '#1a2a1a', helmet: true, cape: true, w: 'baston', weaponKind: 'magic' }],
+    lich: (M) => ['Skeleton_Mage', { tint: M.tint || '#d8d0f8', helmet: true, w: 'baston', wProp: 'Skeleton_Staff', weaponKind: 'magic', float: true }],
+  };
+  function buildEnemyGL(k) {
+    const M = RULES.MONSTERS[k] || {};
+    const s = M.sprite || '';
+    let spec = null;
+    if (s.startsWith('hero:')) {
+      const cls = s.slice(5);
+      spec = [CLASS_CHAR[cls] || 'Rogue', { cloth: M.tint || (cls === 'brujo' ? '#5a1010' : '#4a3a2a'), helmet: M.boss, cape: M.boss, w: cls === 'explorador' ? 'ballesta' : cls === 'brujo' ? 'varita' : cls === 'guerrero' ? 'hacha' : 'daga', weaponKind: cls === 'explorador' ? 'ranged2' : cls === 'brujo' ? 'magic' : cls === 'guerrero' ? 'melee1' : 'dagger' }];
+    } else if (ENEMY_GL[s]) spec = ENEMY_GL[s](M);
+    if (!spec) return null;
+    const [name, o] = spec;
+    if (M.boss) { o.cape = true; o.helmet = true; }
+    const m = buildGL(name, { ...o, kind: 'enemy' });
+    m.scale.multiplyScalar(M.scale || 1);
+    return m;
+  }
+
+  root.MODELS = { mat, mesh, box, cyl, sph, cone, shade, mix, buildHero, buildEnemy, buildPet, buildMount, animate, furniture, prop, weapon, flame, candle, mug, herb, rod, RARITY, GL, loadAssets, posePeek, pieceGeo, piece, glProp: (n) => (GL.props[n] ? GL.props[n].clone(true) : null) };
 })(this);

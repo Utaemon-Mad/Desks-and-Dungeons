@@ -1030,7 +1030,7 @@
   function canvasTex(w, h, paint) {
     const c = document.createElement('canvas'); c.width = w; c.height = h;
     paint(c.getContext('2d'), w, h);
-    const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.anisotropy = 4;
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4;
     return t;
   }
 
@@ -1056,6 +1056,17 @@
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, H), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.85 }));
     floor.rotation.x = -Math.PI / 2; floor.position.set(W / 2, 0, H / 2); floor.receiveShadow = true;
     g.add(floor);
+    // tablones KayKit encima (si ya han cargado)
+    const wood = MODELS.GL.ready && MODELS.pieceGeo('floor_wood_large');
+    if (wood) {
+      const im = new THREE.InstancedMesh(wood.geometry, [].concat(wood.material).map((m) => { const c = m.clone(); c.color = new THREE.Color('#7e6a5c'); return c; }).shift(), W * H);
+      const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(0.25, 0.25, 0.25), up = new THREE.Vector3(0, 1, 0);
+      let n = 0;
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { q.setFromAxisAngle(up, ((x * 7 + y * 3) % 2) * Math.PI); m4.compose(new THREE.Vector3(x + 0.5, -0.012, y + 0.5), q, sc); im.setMatrixAt(n++, m4); }
+      im.receiveShadow = true;
+      g.add(im);
+      floor.visible = false;
+    }
     // alfombra
     const R = MAP.rug || { x0: 1, y0: 4, x1: 7, y1: 9 };
     const rugTex = canvasTex(256, 192, (c, w, h) => {
@@ -1065,7 +1076,7 @@
       c.fillStyle = '#7a2a2a'; for (let i = 0; i < 6; i++) { c.beginPath(); c.arc(w / 2, h / 2, 20 + i * 12, 0, 7); c.strokeStyle = i % 2 ? '#c8963a' : '#3a5a7a'; c.lineWidth = 2; c.stroke(); }
     });
     const rug = new THREE.Mesh(new THREE.PlaneGeometry(R.x1 - R.x0, R.y1 - R.y0), new THREE.MeshStandardMaterial({ map: rugTex, roughness: 1 }));
-    rug.rotation.x = -Math.PI / 2; rug.position.set((R.x0 + R.x1) / 2, 0.01, (R.y0 + R.y1) / 2); rug.receiveShadow = true;
+    rug.rotation.x = -Math.PI / 2; rug.position.set((R.x0 + R.x1) / 2, 0.03, (R.y0 + R.y1) / 2); rug.receiveShadow = true;
     g.add(rug);
     // paredes: yeso arriba, zócalo de madera abajo, vigas
     const wallTex = canvasTex(512, 256, (c, w, h) => {
@@ -1151,7 +1162,7 @@
 
   // Modelo de un personaje (se rehace si cambia su aspecto)
   function charModel(id, look) {
-    const key = JSON.stringify(look);
+    const key = JSON.stringify(look) + MODELS.GL.version;
     let m = T3.models.get(id);
     if (m && m.key === key) return m;
     if (m) T3.stage.scene.remove(m.obj);
@@ -1165,6 +1176,8 @@
   function ensureTavern3D() {
     if (T3.stage) return;
     T3.stage = VIEW3D.makeStage({ offset: [8.2, 10.5, 8.2], fov: 36, ambient: 0.55, sky: '#7a6a8a', ground: '#2a1a10', lights: 12 });
+    // la taberna: cálida, con brillo en velas y antorchas y un ligero efecto de maqueta
+    T3.stage.grade = { gain: [1.07, 1.0, 0.9], lift: [0.012, 0.006, 0], saturation: 1.12, contrast: 1.08, vignette: 0.42, bloom: 0.7, bloomThreshold: 0.85, tilt: 0.8, focus: 0.5 };
     T3.stage.scene.background = new THREE.Color('#0c0608');
     T3.room = buildRoom();
     T3.stage.scene.add(T3.room);
@@ -1181,7 +1194,9 @@
     ensureTavern3D();
     const st = T3.stage;
     // muebles (se rehacen al editar)
-    const fk = JSON.stringify(MAP.items);
+    // con los modelos KayKit recién cargados se rehacen el suelo y los muebles
+    if (T3.roomV !== MODELS.GL.version) { st.scene.remove(T3.room); T3.room = buildRoom(); st.scene.add(T3.room); T3.roomV = MODELS.GL.version; }
+    const fk = JSON.stringify(MAP.items) + MODELS.GL.version;
     if (fk !== T3.furnKey) {
       if (T3.furn) st.scene.remove(T3.furn.g);
       T3.furn = buildFurniture();
@@ -1199,9 +1214,12 @@
       m.obj.rotation.y = FACE[u.dir] || 0;
       const emote = u.emote && u.emote.until > now ? u.emote.e : null;
       const mugOn = u.mugUntil > now;
-      if (mugOn && !m.mug) { m.mug = MODELS.mug(); m.mug.position.set(0, -0.02, 0.05); m.obj.userData.parts.handR.add(m.mug); }
+      if (mugOn && !m.mug) {
+        if (m.obj.userData.parts.gl) { m.mug = MODELS.glProp('mug_full'); if (m.mug) m.mug.position.set(0, 0.03, 0); } else { m.mug = MODELS.mug(); m.mug.position.set(0, -0.02, 0.05); }
+        if (m.mug) m.obj.userData.parts.handR.add(m.mug);
+      }
       if (!mugOn && m.mug) { m.mug.parent.remove(m.mug); m.mug = null; }
-      MODELS.animate(m.obj, { moving: u.path.length > 0, phase: u.phase * 2.6, t: now, sit: !!seat, emote, mug: mugOn });
+      MODELS.animate(m.obj, { moving: u.path.length > 0, run: false, phase: u.phase * 2.6, t: now, sit: !!seat, emote, emoteAt: u.emote ? u.emote.until : 0, mug: mugOn });
       const top = st.project(u.px + 0.5, seat ? 1.15 : 1.35, u.py + 0.5);
       u._screen = { x: top.x, y: top.y };
     }
@@ -1209,7 +1227,8 @@
     const bk = charModel('npc:barkeep', bartenderLook);
     bk.obj.position.set(MAP.BARKEEP.x + 0.5, 0, MAP.BARKEEP.y + 0.5);
     bk.obj.rotation.y = -Math.PI / 2;
-    MODELS.animate(bk.obj, { t: now, emote: Math.floor(now / 4000) % 3 === 0 ? 'cheers' : null });
+    const bkE = Math.floor(now / 4000) % 3 === 0;
+    MODELS.animate(bk.obj, { t: now, emote: bkE ? 'cheers' : null, emoteAt: bkE ? Math.floor(now / 4000) : 0 });
     for (const [id, m] of Object.entries(MAP.MERCHANTS)) {
       const mm = charModel('npc:' + id, { cls: 'mago', skin: id === 'bruja' ? 6 : 1, hair: 0, ...m.look });
       mm.obj.position.set(m.x + 0.5, 0, m.y + 0.5);
@@ -1854,6 +1873,8 @@
   Object.assign(DD, {
     net, users, toast, logLine, blip, makeUser, portrait, drawHero: (c, x, y, l, o) => drawHero(c, x, y, l, o), me: null,
     heroImage: (look, w, h, mode) => VIEW3D.snapshot(look, w, h, mode),
+    // modelos de verdad (KayKit): se cargan al empezar; mientras, se ven los low poly propios
+    modelsReady: MODELS.loadAssets().then((ok) => { if (!ok) return; renderHeroes(); if (!loginEl.classList.contains('hidden')) buildPickers(); DD.emit('models-ready'); if (DD.me) DD.emit('look', { id: myId, look: (users.get(myId) || {}).look }); }),
     setScene(sc) { DD.scene = sc; document.body.classList.toggle('in-dungeon', sc !== 'tavern'); canvas.classList.toggle('hidden', sc !== 'tavern'); hover = null; if (sc !== 'tavern') setEditing(false); },
   });
 
