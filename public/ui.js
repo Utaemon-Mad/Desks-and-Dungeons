@@ -213,6 +213,9 @@
     const p = me();
     if (p) { const can = RULES.canEquip(it, p.char, RULES.levelFromXp(p.xp)); if (!can.ok) card.appendChild(el('div', 'tip-req bad', can.reason)); else card.appendChild(el('div', 'tip-req', 'Pulsa I para equiparlo')); }
     card.style.borderColor = R.color;
+    // en la taberna, a la izquierda de la lista de héroes para no taparse
+    const hl = $('#heroes');
+    card.style.right = DD.scene === 'tavern' && hl && hl.offsetParent && innerWidth > 820 ? Math.round(innerWidth - hl.getBoundingClientRect().left + 10) + 'px' : '';
     card.classList.remove('hidden');
     clearTimeout(cardTimer);
     cardTimer = setTimeout(() => card.classList.add('hidden'), it.rarity === 'comun' ? 3500 : 6000);
