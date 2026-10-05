@@ -367,7 +367,7 @@ setInterval(() => {
 function petFor(user) {
   const pet = user.profile.pet;
   if (!pet || levelOf(user) < RULES.PET_LEVEL) return null;
-  return { type: pet.type, name: pet.name || RULES.PETS[pet.type].name, st: RULES.petStats(pet.type, levelOf(user)) };
+  return { type: pet.type, name: pet.name || RULES.PETS[pet.type].name, st: RULES.petStats(pet.type, levelOf(user), RULES.petLevelFromXp(pet.xp)) };
 }
 
 function discoverWaystone(room, user, ws) {
@@ -1184,7 +1184,7 @@ wss.on('connection', (ws) => {
         if (i < 0) return;
         const it = from[i];
         if (msg.t === 'pet:put') {
-          const cap = RULES.petStats(p.pet.type, levelOf(user)).cap;
+          const cap = RULES.petStats(p.pet.type, levelOf(user), RULES.petLevelFromXp(p.pet.xp)).cap;
           if (RULES.petBagWeight(p.pet) + RULES.itemWeight(it) > cap) return err(`${p.pet.name} no puede con tanto peso (${cap} kg).`);
         } else if (p.bag.length >= RULES.BAG_SIZE) return err('Tu mochila está llena.');
         from.splice(i, 1); to.push(it);

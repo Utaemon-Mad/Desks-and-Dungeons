@@ -189,7 +189,7 @@
       s.title = `${B.name}: ${B.desc.replace(/ durante.*/, '')} (quedan ${Math.ceil((b.until - Date.now()) / 60000)} min)`;
       buffs.appendChild(s);
     }
-    if (combat && combat.tbuffs) for (const id of combat.tbuffs) { const A = RULES.ABILITY_BY_ID[id]; if (A) { const s = el('span', 'buff tmp', A.icon); s.title = A.name; buffs.appendChild(s); } }
+    if (combat && combat.tbuffs) for (const id of combat.tbuffs) { const A = RULES.ABILITY_BY_ID[id] || (id.startsWith('pet:') && RULES.PET_SKILLS[id.slice(4)] ? { icon: '🐾', name: RULES.PET_SKILLS[id.slice(4)].name } : null); if (A) { const s = el('span', 'buff tmp', A.icon); s.title = A.name; buffs.appendChild(s); } }
   }
   $('#mh-badge').onclick = (e) => { e.stopPropagation(); openLevelUp(); };
   $('#mh-portrait').onclick = () => openChar('ficha');
@@ -408,8 +408,9 @@
     }
     if (p.pet) {
       const P = RULES.PETS[p.pet.type];
-      const st = RULES.petStats(p.pet.type, RULES.levelFromXp(p.xp));
-      bagBox.appendChild(el('div', 'panel-title small', `${P.icon} ${p.pet.name.toUpperCase()} · lleva ${RULES.petBagWeight(p.pet)} / ${st.cap} kg`));
+      const plvl = RULES.petLevelFromXp(p.pet.xp);
+      const st = RULES.petStats(p.pet.type, RULES.levelFromXp(p.xp), plvl);
+      bagBox.appendChild(el('div', 'panel-title small', `${P.icon} ${p.pet.name.toUpperCase()} (${RULES.petTitle(p.pet.type, plvl)}, nv ${plvl}) · lleva ${RULES.petBagWeight(p.pet)} / ${st.cap} kg`));
       const pg = el('div', 'bag small');
       for (let i = 0; i < 12; i++) {
         const it = p.pet.bag[i];
@@ -709,7 +710,24 @@
     const lvl = RULES.levelFromXp(p.xp);
     const body = $('#stable-body');
     body.innerHTML = '';
-    body.appendChild(el('div', 'panel-title small', `MASCOTAS (desde el nivel ${RULES.PET_LEVEL}) · 🪙 ${p.gold}`));
+    if (p.pet) {
+      const P = RULES.PETS[p.pet.type], plvl = RULES.petLevelFromXp(p.pet.xp);
+      const st = RULES.petStats(p.pet.type, Math.max(lvl, RULES.PET_LEVEL), plvl);
+      const S = RULES.PET_SKILLS[p.pet.type];
+      const box = el('div', 'quest-box ready');
+      box.appendChild(el('b', '', `${P.icon} ${p.pet.name} · ${RULES.petTitle(p.pet.type, plvl)} · nivel ${plvl}/${RULES.PET_MAX}`));
+      if (plvl < RULES.PET_MAX) {
+        const a = RULES.petXpFor(plvl), b = RULES.petXpFor(plvl + 1);
+        const bar = el('div', 'meter xp'); const f = el('i'); f.style.width = Math.round(100 * (p.pet.xp - a) / Math.max(1, b - a)) + '%'; bar.appendChild(f);
+        bar.style.position = 'relative'; bar.style.height = '12px'; bar.style.margin = '4px 0';
+        box.appendChild(bar);
+      }
+      box.appendChild(el('small', '', `Fuerza ${st.fue}, muerde ${st.dmg[0]}–${st.dmg[1]}, vida ${st.hp}, carga ${st.cap} kg. Gana experiencia cuando lucháis juntos.`));
+      box.appendChild(el('small', '', `${plvl >= RULES.PET_SKILL_LEVEL ? '✔' : `🔒 (nivel ${RULES.PET_SKILL_LEVEL})`} Habilidad «${S.name}»: ${S.desc}`));
+      box.appendChild(el('small', '', `Evoluciona en el nivel 10 (${P.evo[0]}) y en el 20 (${P.evo[1]}): más grande, más fuerte y con la habilidad mejorada.`));
+      body.appendChild(box);
+    }
+    body.appendChild(el('div', 'panel-title small', `MASCOTAS (desde el nivel ${RULES.PET_LEVEL}) · 🪙 ${p.gold}${p.pet ? ' · cambiar de mascota empieza de cero' : ''}`));
     for (const [id, P] of Object.entries(RULES.PETS)) {
       const st = RULES.petStats(id, Math.max(lvl, RULES.PET_LEVEL));
       const r = el('div', 'buy-row');
@@ -762,6 +780,16 @@
       h('Mascotas y monturas');
       p(`🐾 Establo (en la taberna): desde el nivel ${RULES.PET_LEVEL} puedes adoptar una mascota que te sigue, muerde a tus enemigos según su Fuerza y lleva una mochila propia con su peso máximo (Equipo → «Dar a…»). Desde el nivel ${RULES.MOUNT_LEVEL}, una montura para correr por el mundo abierto (F para montar).`);
       p('Todo pesa: si llevas más de lo que tu Fuerza aguanta, andarás más lento.');
+      p(`Tu mascota sube de nivel luchando contigo (hasta el ${RULES.PET_MAX}): en el nivel ${RULES.PET_SKILL_LEVEL} aprende su habilidad y en los niveles 10 y 20 evoluciona (más grande y más fuerte).`);
+      h('El pueblo (🏛️)');
+      p('⚒️ Forja de Brunilda: mejora tus objetos hasta +10 con fragmentos de hierro, esencia arcana y polvo de estrella (los sueltan los enemigos), encanta una propiedad para cambiarla por otra, combina tres objetos de la misma rareza en uno mejor o desguaza lo que no quieras.');
+      p('🍲 Cocina de Alfonso: pesca en el mundo abierto (🎣 o G junto al agua; cuando pique, ¡tira!) y recoge hierbas con un clic. Alfonso te cocina platos que dan bonificaciones durante 30 minutos.');
+      p('📋 Tablón: tres tareas cada día y dos cada semana, iguales para todos. 🏅 Fama: logros que dan oro y títulos que se ven junto a tu nombre, y la clasificación semanal. 🏠 Habitación: los jefes que derrotas aparecen como trofeos; visita la de tus amigos desde la lista de héroes.');
+      h('Retos');
+      p('🌀 Descenso infinito: piso tras piso, cada uno más difícil, con un desafío distinto cada semana. Cada 5 pisos, un objeto épico; cada 10, legendario.');
+      p('🌋 Jefes de mundo: cada cierto tiempo aparece uno en el mundo abierto. Todos los que le hagan daño se llevan un objeto épico o legendario.');
+      p('🤺 Duelos: desde la lista de héroes, reta a un amigo en el sótano de Alfonso, con una apuesta de oro si queréis. El ganador se lo lleva todo.');
+      p('Espacio (o 🤸): voltereta de dos casillas que te hace invulnerable un instante. ⚙️ Menú → Gráficos: calidad, clima y temblor de cámara.');
       h('Subir de nivel');
       p('Con la experiencia subes de nivel y ganas 5 puntos. Aparecerá un icono rojo bajo tu retrato: púlsalo para repartirlos entre tus características.');
     } else if (guideTab === 'clases') {

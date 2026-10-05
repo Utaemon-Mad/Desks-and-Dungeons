@@ -18,6 +18,16 @@ Una taberna en 3D low-poly (Three.js, luz de velas y sombras suaves), en plan re
 - **Monturas** (desde nivel 12): caballo, lobo de guerra o lagarto de las dunas, más rápidos en el mundo abierto (tecla F).
 - **Peso**: cada objeto pesa; tu capacidad es 40 kg + 2 por punto de Fuerza. Si vas sobrecargado, andas más lento.
 - **El tabernero**: Alfonso el Tabernero sirve las jarras.
+- **Forja de Brunilda** (🏛️ Pueblo): mejora objetos hasta +10 con fragmentos de hierro, esencia arcana y polvo de estrella que sueltan los enemigos; encanta una propiedad; combina tres objetos en uno de la rareza siguiente; desguaza lo que sobra.
+- **Oficios**: pesca junto al agua del mundo abierto (con su minijuego de «¡pica!»), recoge hierbas de cada región y lleva lo que encuentres a la **cocina de Alfonso**, que prepara platos con bonificaciones de 30 minutos.
+- **Tablón de misiones**: tres tareas diarias y dos semanales, iguales para todos.
+- **Logros y títulos**: 26 logros con oro y títulos que se ven junto a tu nombre. **Clasificación semanal**: piso más hondo del Descenso, monstruos, jefes, jefes de mundo, duelos y el pez más grande.
+- **Jefes de mundo**: cada 20 minutos aparece uno en el mundo abierto durante 10 minutos; todos los que le hacen daño se llevan botín épico o legendario.
+- **Mascotas que crecen**: suben hasta el nivel 25 luchando contigo, aprenden una habilidad (aullido, desgarro, embestida, zarpazo) y evolucionan en los niveles 10 y 20.
+- **Duelos con apuesta** en la arena del sótano de Alfonso: el ganador se lleva el bote.
+- **Mi habitación**: los jefes que derrotas se exponen como trofeos en una sala en 3D con tu héroe, tu mascota y tu arma; puedes visitar la de tus amigos.
+- **Descenso infinito**: pisos cada vez más difíciles con un desafío que cambia cada semana (frenesí, marea de élites, cadáveres explosivos, sed de sangre, abstemios, gigantismo).
+- **Efectos**: ciclo de día y noche, clima por región (lluvia y tormentas, niebla en la ciénaga, tormentas de arena, nieve, ceniza), partículas, polvo al andar, enemigos que caen al morir, voltereta para esquivar, golpes críticos con congelación de un instante y temblor de cámara. Ajustes de calidad (⚙️ Menú → Gráficos) para móviles.
 - **Ambiente**: taberna de noche con ventanas góticas, lluvia y relámpagos, iluminada por antorchas, chimenea, candelabros y lámparas; mazmorras con paletas apagadas, muros en perspectiva, decorado por tema, luces de colores, ascuas y niebla de guerra.
 - **Editor de la taberna** para el dueño de la sala, con chimeneas, candelabros, lámparas, cofres, armeros y calderos nuevos.
 - Charla con bocadillos, la Crónica, gestos, dados (`/d20`, `/dado 6`), jarras y rondas. Salas privadas con `?sala=nombre`.
@@ -53,6 +63,8 @@ El juego es un único servidor Node (HTTP + WebSocket):
 | Z · X · C · V | Pergaminos: fuego, relámpago, sanación, retorno |
 | M · I | Mapa (en el mundo, mapa grande) · equipo |
 | F | Montar / desmontar (mundo abierto) |
+| Espacio | Voltereta (esquiva) |
+| G | Pescar junto al agua (y tirar cuando pica) |
 | Clic en un personaje | Hablar (misiones con ! y ?) |
 | Joystick (móvil) | Moverse |
 
@@ -71,9 +83,11 @@ El juego es un único servidor Node (HTTP + WebSocket):
 - `server/dungeon.js`: una partida en marcha: movimiento de los héroes, IA de los monstruos, proyectiles, ataques especiales de los jefes, habilidades y botín.
 - `server/gen.js`: generador de mazmorras aleatorias (salas, pasillos, decorado por tema, enemigos del nivel, cofres, trampas y sala del jefe).
 - `server/world.js`: generador del mundo abierto (uno por sala): regiones, campamentos, personajes, caminos, cuevas y piedras de viaje.
-- `server/store.js`: guarda salas y perfiles en `data/*.json` (cambia la carpeta con `DATA_DIR`).
+- `server/store.js`: guarda salas, perfiles y clasificaciones en `data/*.json` (cambia la carpeta con `DATA_DIR`).
+- `public/rules/progress.js`: materiales y forja, pesca, hierbas y cocina, tablón, logros y títulos, jefes de mundo, Descenso infinito, clasificaciones y arena.
 - `public/rules/engine.js`: las reglas del juego, compartidas por servidor y navegador: características, clases, habilidades, experiencia, objetos y rarezas, conjuntos, botín, monstruos, temas, consumibles, bufos y tiendas.
 - `public/game.js`: la taberna (dibujo, comerciantes, muebles, luces, interfaz y red) y la pantalla de entrada.
+- `public/ui2.js`: ventanas del pueblo: forja, cocina, tablón, fama, habitación, duelos, Descenso y ajustes de gráficos.
 - `public/ui.js`: ventanas: retrato con el icono de subida de nivel, reparto de puntos, ficha, equipo, tiendas, comercio, guía y tooltips.
 - `public/dungeon.js`: menú de mazmorras y partida (render 3D, efectos, barra de habilidades, joystick, controles).
 - `public/vendor/three.min.js`: Three.js r149 (licencia MIT en `THREE-LICENSE.txt`).

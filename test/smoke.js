@@ -222,6 +222,27 @@ async function instanceTests() {
   assert.ok(PROG.WORLD_BOSSES.includes(wbE.k));
   wi.damageEnemy(wi.players.get('w1'), wbE, 999999, { noCrit: true });
   assert.ok(wbUsers && wbUsers[0].id === 'w1' && !wi.worldBoss, 'botín para quien luchó');
+
+  // Pesca junto al agua y hierbas
+  let fished = null, herbed = null;
+  const fsent = [];
+  const fdef = { ...wdef, id: 'world2', tiles: wdef.tiles.slice(0, 15 * WW + 16) + 'w' + wdef.tiles.slice(15 * WW + 17), herbs: [{ id: 'h0', x: 12, y: 15, zone: 1 }] };
+  const fi = new Instance(fdef, { ...hooks, send: (u, m) => fsent.push(m), fish: (u, z) => { fished = z; }, herb: (u, z) => { herbed = z; }, kill: () => {} });
+  const fu = mk('f1');
+  fi.join(fu, { x: 15, y: 15 });
+  fi.nextEventAt = 0;
+  fi.hook('f1');
+  const fp = fi.players.get('f1');
+  assert.ok(fp.fishing, 'lanza el sedal junto al agua');
+  fp.fishing.biteAt = Date.now() - 1;
+  fi.tick(Date.now());
+  assert.ok(fsent.some((m) => m.t === 'dbite'), '¡pica!');
+  fi.hook('f1');
+  assert.strictEqual(fished, 0, 'pesca un pez');
+  fi.gather('f1', 'h0');
+  for (let i = 0; i < 80 && herbed === null; i++) { fi.tick(Date.now()); await sleep(25); }
+  assert.strictEqual(herbed, 1, 'recoge la hierba');
+  assert.ok(fi.herbs.get('h0').readyAt > Date.now(), 'la hierba vuelve a crecer más tarde');
 }
 
 (async () => {

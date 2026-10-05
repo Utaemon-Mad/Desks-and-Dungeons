@@ -594,7 +594,7 @@
     const wood = (() => { const c = document.createElement('canvas'); c.width = 128; c.height = 128; const g = c.getContext('2d'); for (let i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#5a3a20' : '#634126'; g.fillRect(0, i * 16, 128, 16); g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(0, i * 16, 128, 1.5); g.fillRect((i * 37) % 128, i * 16, 1.5, 16); } const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(4, 3); return t; })();
     const floor = new THREE.Mesh(new THREE.PlaneGeometry(9, 7), new THREE.MeshStandardMaterial({ map: wood, roughness: 0.9 }));
     floor.rotation.x = -Math.PI / 2; floor.receiveShadow = true; scene.add(floor);
-    const wallM = new THREE.MeshStandardMaterial({ color: '#6a5a4a', roughness: 0.95 });
+    const wallM = new THREE.MeshStandardMaterial({ color: '#4e4236', roughness: 0.95 });
     const back = new THREE.Mesh(new THREE.BoxGeometry(9, 3.2, 0.3), wallM); back.position.set(0, 1.6, -3.5); back.receiveShadow = true; scene.add(back);
     for (const sx of [-1, 1]) { const w = new THREE.Mesh(new THREE.BoxGeometry(0.3, 3.2, 7), wallM); w.position.set(sx * 4.5, 1.6, 0); w.receiveShadow = true; scene.add(w); }
     for (const x of [-4.3, -1.5, 1.5, 4.3]) mm.mesh(mm.box(0.25, 3.2, 0.25), mm.mat('#3a2412'), x, 1.6, -3.3, scene);
@@ -609,7 +609,7 @@
     const addL = (x, y, z, col, i, d) => { const L = new THREE.PointLight(col, i, d, 1.6); L.position.set(x, y, z); scene.add(L); lights.push({ L, i }); return L; };
     addL(-3.4, 0.6, -2.4, '#ff8a3a', 2.2, 7);
     addL(3.2, 2.2, -2.6, '#ffc070', 1.4, 6);
-    const key = new THREE.SpotLight('#ffe0b0', 2.2, 14, 0.8, 0.6, 1.2); key.position.set(1.5, 5, 3); key.castShadow = true; key.shadow.mapSize.set(1024, 1024); scene.add(key); scene.add(key.target);
+    const key = new THREE.SpotLight('#ffe0b0', 1.5, 14, 0.8, 0.6, 1.2); key.position.set(1.5, 5, 3); key.castShadow = true; key.shadow.mapSize.set(1024, 1024); scene.add(key); scene.add(key.target);
     // el héroe en el centro, con su mascota
     const hero = mm.buildHero(info.look); hero.position.set(0, 0, 0.6); hero.rotation.y = 0.2; scene.add(hero);
     let pet = null;

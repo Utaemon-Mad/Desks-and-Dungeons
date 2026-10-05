@@ -951,13 +951,13 @@
       stage.scene.background.copy(sky).multiplyScalar(storm);
       stage.scene.fog.color.copy(stage.scene.background);
       stage.scene.fog.near = wantWx === 'sand' ? 8 : wantWx === 'mist' ? 10 : 16; stage.scene.fog.far = wantWx === 'sand' ? 22 : 34;
-      stage.hemi.intensity = (0.22 + dc.light * 0.55) * storm;
+      stage.hemi.intensity = (0.1 + dc.light * 0.62) * storm;
       stage.hemi.color.set('#3a4a80').lerp(new THREE.Color('#c8d8ff'), dc.light).lerp(new THREE.Color('#ffb070'), dc.dusk * 0.6);
       stage.sun.intensity = dc.sun * 1.1 * storm;
       stage.sun.color.set('#fff0d8').lerp(new THREE.Color('#ff9a50'), dc.dusk);
       stage.sun.position.set(game.cam.x - 8 + dc.t * 16, 14, game.cam.y + 4); stage.sun.target.position.set(game.cam.x, 0, game.cam.y);
       // de noche el farol del héroe y las hogueras se notan más
-      const nightBoost = 1 + (1 - dc.light) * 0.6;
+      const nightBoost = 1 + (1 - dc.light) * 0.2;
       for (const l of L) if (l.dist) l.intensity *= nightBoost;
       if (wantWx === 'storm' && Math.random() < 0.004) game.flash = now;
       if (game.flash && now - game.flash < 140) stage.hemi.intensity += 2.5;
