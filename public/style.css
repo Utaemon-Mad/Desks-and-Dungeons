@@ -138,7 +138,7 @@ input { font-family: var(--mono); font-size: 20px; }
 .swatches { display: flex; flex-wrap: wrap; gap: 6px; }
 .swatches button { width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--ink); padding: 0; }
 .swatches button.on { box-shadow: 0 0 0 3px var(--gold); }
-#preview { width: 96px; height: 96px; background: radial-gradient(#7a4a2a, #3b2414); border: 2px solid var(--ink); border-radius: 6px; flex: none; }
+#preview { width: 112px; height: 142px; background: radial-gradient(#7a4a2a, #3b2414); border: 2px solid var(--ink); border-radius: 6px; flex: none; }
 
 /* ---------- Móvil ---------- */
 @media (max-width: 820px) {
@@ -321,7 +321,7 @@ body.in-dungeon #heroes, body.in-dungeon #log { display: none; }
 /* equipo */
 .equip { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 16px; align-items: start; }
 .doll { position: relative; height: 340px; background: rgba(20,10,4,.45); border: 2px solid #3a2414; border-radius: 6px; }
-.doll-pv { position: absolute; left: 50%; top: 60px; transform: translateX(-50%); }
+.doll-pv { position: absolute; left: 50%; top: 50px; width: 150px; height: 200px; transform: translateX(-50%); }
 .doll .icell { position: absolute; }
 .slot-c { left: 14px; top: 14px; } .slot-w { left: 14px; top: 94px; } .slot-g { left: 14px; top: 174px; } .slot-b { left: 14px; top: 254px; }
 .slot-a { right: 14px; top: 14px; } .slot-o { right: 14px; top: 94px; } .slot-p { right: 14px; top: 174px; } .slot-r { right: 14px; top: 254px; }
@@ -449,3 +449,7 @@ body.in-dungeon #heroes, body.in-dungeon #log { display: none; }
 #joy i { position: absolute; left: 50%; top: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: radial-gradient(#f4f0e8, #a8a49c); box-shadow: 0 3px 8px rgba(0,0,0,.5); pointer-events: none; }
 @media (pointer: coarse) { #joy { display: block; } }
 #scene { z-index: 2; background: transparent; }
+
+.ficha-pv { width: 180px; height: 230px; }
+.hero canvas { image-rendering: auto; }
+#mh-portrait canvas { image-rendering: auto; }

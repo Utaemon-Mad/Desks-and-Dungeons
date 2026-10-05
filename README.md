@@ -1,6 +1,6 @@
 # Desks & Dungeons · La Taberna
 
-Una taberna pixel-art isométrica, en plan red social, para quedar y charlar con tus amigos en tiempo real, y bajar juntos a mazmorras aleatorias a por botín.
+Una taberna en 3D low-poly (Three.js, luz de velas y sombras suaves), en plan red social, para quedar y charlar con tus amigos en tiempo real, y bajar juntos a mazmorras aleatorias a por botín.
 
 - **Siete clases y multiclase**: guerrero, mago, explorador, pícaro, paladín, brujo y clérigo. Puedes sumar una segunda clase: usas sus armas y armaduras y aprendes sus habilidades (más tarde, en los niveles 3, 6, 10 y 15).
 - **Siete características**: Fuerza, Destreza, Constitución, Vitalidad, Resistencia, Carisma y Suerte. Al subir de nivel aparece un **icono rojo** bajo tu retrato: púlsalo para repartir los 5 puntos que ganas.
@@ -11,7 +11,13 @@ Una taberna pixel-art isométrica, en plan red social, para quedar y charlar con
 - **Combate en tiempo real** con el movimiento llevado por el servidor (suave y sin tirones): clic para andar, clic en un enemigo para atacarlo sin parar, WASD, habilidades con energía y tiempo de espera, pociones y pergaminos. Los proyectiles enemigos van a la casilla donde estabas: si te mueves, los esquivas. Los jefes marcan en el suelo sus golpes antes de darlos.
 - **Comerciantes en la taberna**: Madre Zarza, la bruja (pociones y brebajes), el Maestro Takeshi, mercader de Oriente (armas y armaduras para tu nivel, renovadas cada 10 minutos) y el Hombre de la Túnica (pergaminos y bendiciones de 20 minutos). Todos compran lo que encuentres.
 - **Comercio entre jugadores**: cada uno pone objetos y oro y, cuando los dos aceptan, se intercambian.
-- **Mundo abierto** (🗺️) con pueblo, bosques, campamentos y cinco cuevas que llevan a mazmorras de cada tema, cada vez más difíciles.
+- **Gráficos 3D**: taberna, mazmorras y mundo en 3D low-poly con cámara cenital inclinada, luces de velas y antorchas, sombras, muros que se recortan junto al héroe y niebla de guerra. Los personajes son modelos 3D cuyo equipo se ve (armaduras, yelmos, armas, escudos, capas de conjunto y legendarias). Retratos y fichas con el modelo 3D.
+- **Botín con características**: al recoger un objeto aparece su carta con todas sus propiedades, para qué clases es y su peso. Las armas siempre son de clases del grupo.
+- **Mundo abierto grande** (🗺️, 160×120) en seis regiones cada vez más peligrosas: Valle de Brumaverde (nv 1-3), Bosque Viejo (3-6), Ciénaga (6-10), Yermo Rojo (10-14), Picos Helados (14-19) y Erial de Ceniza (19-26). Si vas sin nivel suficiente, la corrupción te va quitando vida. Campamentos con personajes, **misiones** encadenadas con historia y jefes de región, **piedras de viaje** para moverte rápido y seis cuevas-mazmorra.
+- **Mascotas** (desde nivel 5): perro, lobo, jabalí u osezno en el 🐴 Establo. Te siguen, atacan con daño basado en su Fuerza y cargan equipo (su propia mochila con peso).
+- **Monturas** (desde nivel 12): caballo, lobo de guerra o lagarto de las dunas, más rápidos en el mundo abierto (tecla F).
+- **Peso**: cada objeto pesa; tu capacidad es 40 kg + 2 por punto de Fuerza. Si vas sobrecargado, andas más lento.
+- **El tabernero**: Alfonso el Tabernero sirve las jarras.
 - **Ambiente**: taberna de noche con ventanas góticas, lluvia y relámpagos, iluminada por antorchas, chimenea, candelabros y lámparas; mazmorras con paletas apagadas, muros en perspectiva, decorado por tema, luces de colores, ascuas y niebla de guerra.
 - **Editor de la taberna** para el dueño de la sala, con chimeneas, candelabros, lámparas, cofres, armeros y calderos nuevos.
 - Charla con bocadillos, la Crónica, gestos, dados (`/d20`, `/dado 6`), jarras y rondas. Salas privadas con `?sala=nombre`.
@@ -45,7 +51,10 @@ El juego es un único servidor Node (HTTP + WebSocket):
 | Q (Mayús+Q) | Poción de vida (la grande) |
 | E · R · T | Energía · brebaje de trol · elixir |
 | Z · X · C · V | Pergaminos: fuego, relámpago, sanación, retorno |
-| M · I | Mapa · equipo |
+| M · I | Mapa (en el mundo, mapa grande) · equipo |
+| F | Montar / desmontar (mundo abierto) |
+| Clic en un personaje | Hablar (misiones con ! y ?) |
+| Joystick (móvil) | Moverse |
 
 ## Comandos del chat
 
@@ -61,13 +70,16 @@ El juego es un único servidor Node (HTTP + WebSocket):
 - `server.js`: servidor HTTP y WebSocket: salas, perfiles (personaje, puntos, equipo, mochila, consumibles, bufos), tiendas, comercio, editor de la taberna y partidas.
 - `server/dungeon.js`: una partida en marcha: movimiento de los héroes, IA de los monstruos, proyectiles, ataques especiales de los jefes, habilidades y botín.
 - `server/gen.js`: generador de mazmorras aleatorias (salas, pasillos, decorado por tema, enemigos del nivel, cofres, trampas y sala del jefe).
-- `server/world.js`: generador del mundo abierto (uno por sala).
+- `server/world.js`: generador del mundo abierto (uno por sala): regiones, campamentos, personajes, caminos, cuevas y piedras de viaje.
 - `server/store.js`: guarda salas y perfiles en `data/*.json` (cambia la carpeta con `DATA_DIR`).
 - `public/rules/engine.js`: las reglas del juego, compartidas por servidor y navegador: características, clases, habilidades, experiencia, objetos y rarezas, conjuntos, botín, monstruos, temas, consumibles, bufos y tiendas.
 - `public/game.js`: la taberna (dibujo, comerciantes, muebles, luces, interfaz y red) y la pantalla de entrada.
 - `public/ui.js`: ventanas: retrato con el icono de subida de nivel, reparto de puntos, ficha, equipo, tiendas, comercio, guía y tooltips.
-- `public/dungeon.js`: menú de mazmorras y partida (dibujo, luces, efectos, barra de habilidades, controles).
-- `public/sprites.js`: pixel art de héroes (con su equipo), comerciantes y enemigos.
+- `public/dungeon.js`: menú de mazmorras y partida (render 3D, efectos, barra de habilidades, joystick, controles).
+- `public/vendor/three.min.js`: Three.js r149 (licencia MIT en `THREE-LICENSE.txt`).
+- `public/models.js`: modelos 3D low-poly de héroes (con su equipo), personajes, enemigos, mascotas, monturas, muebles y decorado.
+- `public/view3d.js`: escenas 3D, luces y sombras, construcción de mazmorras y mundo en 3D, niebla y retratos.
+- `public/sprites.js`: pixel art de héroes, comerciantes y enemigos (vistas previas del editor).
 - `public/dsprites.js`: pixel art de las mazmorras: suelos y muros por tema, decorado, botín e iconos de objetos.
 - `public/map.js`: mapa y muebles de la taberna, puestos de los comerciantes y aspecto de clases y razas.
 - `public/dungeon-data.js`: casillas de mazmorras y mundo.

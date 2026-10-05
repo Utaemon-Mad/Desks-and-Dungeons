@@ -1605,14 +1605,11 @@
     if (atBottom) logEl.scrollTop = logEl.scrollHeight;
   }
 
+  // Retrato: el modelo 3D del héroe, de pecho para arriba
   function portrait(look, size = 58) {
     const c = document.createElement('canvas');
     c.width = size * 2; c.height = size * 2;
-    const g = c.getContext('2d');
-    g.imageSmoothingEnabled = false;
-    const spr = SPRITES.hero(look, {});
-    const k = 4; // recorte de cabeza y torso, ampliado
-    g.drawImage(spr, 0, 0, 24, 28, (c.width - 24 * k) / 2, c.height - 26 * k, 24 * k, 28 * k);
+    try { c.getContext('2d').drawImage(VIEW3D.snapshot(look, size * 2, size * 2, 'bust'), 0, 0); } catch { /* sin WebGL */ }
     return c;
   }
 
@@ -1841,6 +1838,7 @@
   Object.defineProperty(DD, 'roomName', { get: () => roomName });
   Object.assign(DD, {
     net, users, toast, logLine, blip, makeUser, portrait, drawHero: (c, x, y, l, o) => drawHero(c, x, y, l, o), me: null,
+    heroImage: (look, w, h, mode) => VIEW3D.snapshot(look, w, h, mode),
     setScene(sc) { DD.scene = sc; document.body.classList.toggle('in-dungeon', sc !== 'tavern'); canvas.classList.toggle('hidden', sc !== 'tavern'); hover = null; if (sc !== 'tavern') setEditing(false); },
   });
 
@@ -1910,8 +1908,7 @@
     }
     const pv = $('#preview'), g = pv.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pv.width, pv.height);
-    g.translate(60, 112); g.scale(1.3, 1.3);
-    drawHero(g, 0, 0, { ...look, gear }, { dir: 'E', t: 0 });
+    try { g.drawImage(VIEW3D.snapshot({ ...look, gear }, pv.width, pv.height, 'full'), 0, 0); } catch { drawHero(g, 60, 112, { ...look, gear }, { dir: 'E', t: 0 }); }
     const k = RULES.CLASSES[look.cls];
     $('#login-sheet-note').textContent = `${k.desc}${look.cls2 ? ` Multiclase con ${RULES.CLASSES[look.cls2].name.toLowerCase()}: sumas sus armas, armaduras y habilidades (las de la segunda clase llegan más tarde).` : ''}`;
   }

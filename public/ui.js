@@ -298,10 +298,8 @@
     const wrap = el('div', 'ficha');
     const left = el('div', 'ficha-left');
     const u = DD.users.get(DD.myId);
-    const pv = document.createElement('canvas'); pv.width = 120; pv.height = 150; pv.className = 'ficha-pv';
-    const g = pv.getContext('2d'); g.imageSmoothingEnabled = false;
-    g.translate(60, 140); g.scale(2.2, 2.2);
-    if (u) DD.drawHero(g, 0, 0, u.look, { dir: 'E', t: 0, noShadow: true });
+    const pv = document.createElement('canvas'); pv.width = 180; pv.height = 230; pv.className = 'ficha-pv';
+    if (u) pv.getContext('2d').drawImage(DD.heroImage(u.look, 180, 230, 'full'), 0, 0);
     left.appendChild(pv);
     left.appendChild(el('div', 'ficha-name', u ? u.name : ''));
     const c1 = RULES.CLASSES[p.char.cls], c2 = p.char.cls2 && RULES.CLASSES[p.char.cls2];
@@ -368,10 +366,8 @@
     const doll = el('div', 'doll');
     const order = [['casco', 'c'], ['amuleto', 'a'], ['arma', 'w'], ['pecho', 'p'], ['mano', 'o'], ['guantes', 'g'], ['anillo', 'r'], ['botas', 'b']];
     const u = DD.users.get(DD.myId);
-    const pv = document.createElement('canvas'); pv.width = 110; pv.height = 160; pv.className = 'doll-pv';
-    const g = pv.getContext('2d'); g.imageSmoothingEnabled = false;
-    g.translate(55, 150); g.scale(2.4, 2.4);
-    if (u) DD.drawHero(g, 0, 0, u.look, { dir: 'E', t: 0, noShadow: true });
+    const pv = document.createElement('canvas'); pv.width = 150; pv.height = 200; pv.className = 'doll-pv';
+    if (u) pv.getContext('2d').drawImage(DD.heroImage(u.look, 150, 200, 'full'), 0, 0);
     doll.appendChild(pv);
     for (const [slot, pos] of order) {
       const it = p.equip[slot];
@@ -752,6 +748,12 @@
       p('🗝️ Mazmorras: elige un tema (o al azar) y el nivel (desde 1 hasta tu nivel + 3). Se genera una mazmorra nueva cada vez. Tus amigos pueden unirse desde la misma ventana. Derrota al jefe para abrir el portal de salida.');
       p('Controles: clic en el suelo para andar (mantén pulsado para seguir al ratón), clic en un enemigo para atacarlo sin parar, WASD o flechas para moverte. 1-8: habilidades. Q: poción de vida (Mayús+Q la grande), E: energía, R/T: brebajes, Z X C V: pergaminos. M: mapa. I: equipo.');
       p('Los arqueros y chamanes disparan a la casilla donde estás: ¡muévete y esquivarás el proyectil! Los jefes marcan en rojo el suelo antes de un gran golpe: sal de ahí.');
+      h('El mundo abierto');
+      p('🗺️ Mundo: Brumaverde está en el centro y, cuanto más lejos, más nivel hace falta: valle (1-3), bosque (3-6), ciénaga (6-10), yermo (10-14), picos helados (14-19) y erial de ceniza (19-26). Si entras en una zona muy por encima de tu nivel, la corrupción te irá quitando vida.');
+      p('Habla con la gente (clic sobre ellos): los que tienen ❗ te dan misiones y los que tienen ❓ esperan que se las entregues. Las piedras de viaje 🗿 de cada campamento te llevan de una a otra. M abre el mapa grande.');
+      h('Mascotas y monturas');
+      p(`🐾 Establo (en la taberna): desde el nivel ${RULES.PET_LEVEL} puedes adoptar una mascota que te sigue, muerde a tus enemigos según su Fuerza y lleva una mochila propia con su peso máximo (Equipo → «Dar a…»). Desde el nivel ${RULES.MOUNT_LEVEL}, una montura para correr por el mundo abierto (F para montar).`);
+      p('Todo pesa: si llevas más de lo que tu Fuerza aguanta, andarás más lento.');
       h('Subir de nivel');
       p('Con la experiencia subes de nivel y ganas 5 puntos. Aparecerá un icono rojo bajo tu retrato: púlsalo para repartirlos entre tus características.');
     } else if (guideTab === 'clases') {

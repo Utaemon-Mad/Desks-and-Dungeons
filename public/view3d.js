@@ -379,5 +379,43 @@
     };
   }
 
-  root.VIEW3D = { makeStage, show, getRenderer, buildMap, fogLayer, THEME, WALL_H };
+  // ======================================================================
+  //  Retratos y vistas previas: el modelo 3D de un héroe dibujado en una imagen
+  // ======================================================================
+  let snapR = null, snapScene = null, snapCam = null;
+  const snapCache = new Map();
+  function snapshot(look, w, h, mode = 'full') {
+    const key = JSON.stringify(look) + w + 'x' + h + mode;
+    if (snapCache.has(key)) return snapCache.get(key);
+    if (!snapR) {
+      snapR = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+      snapR.outputEncoding = THREE.sRGBEncoding;
+      snapR.toneMapping = THREE.ACESFilmicToneMapping;
+      snapScene = new THREE.Scene();
+      snapScene.add(new THREE.HemisphereLight('#c8c0d8', '#3a2a1a', 0.55));
+      const key1 = new THREE.DirectionalLight('#ffe0c0', 1.05); key1.position.set(1.5, 2.5, 3); snapScene.add(key1);
+      const rim = new THREE.DirectionalLight('#8aa0ff', 0.8); rim.position.set(-2, 1.5, -2); snapScene.add(rim);
+      snapCam = new THREE.PerspectiveCamera(30, 1, 0.05, 20);
+    }
+    snapR.setPixelRatio(1);
+    snapR.setSize(w, h, false);
+    const model = M().buildHero(look);
+    model.rotation.y = mode === 'bust' ? 0.35 : 0.55;
+    M().animate(model, { t: 0 });
+    snapScene.add(model);
+    const sc = model.scale.x;
+    snapCam.aspect = w / h;
+    if (mode === 'bust') { snapCam.position.set(0.1, 0.92 * sc, 1.05); snapCam.lookAt(0, 0.82 * sc, 0); }
+    else { snapCam.position.set(0, 0.75 * sc, 2.7); snapCam.lookAt(0, 0.55 * sc, 0); }
+    snapCam.updateProjectionMatrix();
+    snapR.render(snapScene, snapCam);
+    snapScene.remove(model);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.getContext('2d').drawImage(snapR.domElement, 0, 0);
+    if (snapCache.size > 120) snapCache.clear();
+    snapCache.set(key, c);
+    return c;
+  }
+
+  root.VIEW3D = { snapshot, makeStage, show, getRenderer, buildMap, fogLayer, THEME, WALL_H };
 })(this);
