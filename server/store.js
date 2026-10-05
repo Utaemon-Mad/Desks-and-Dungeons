@@ -11,7 +11,7 @@ function hash(s) {
 
 function createStore(dir = DATA_DIR) {
   fs.mkdirSync(dir, { recursive: true });
-  const files = { rooms: 'rooms.json', dungeons: 'dungeons.json', players: 'players.json' };
+  const files = { rooms: 'rooms.json', dungeons: 'dungeons.json', players: 'players.json', meta: 'meta.json' };
   const data = {};
   const timers = {};
 
@@ -50,6 +50,8 @@ function createStore(dir = DATA_DIR) {
     deleteDungeon(id) { delete data.dungeons[id]; save('dungeons'); },
     player(id) { return data.players[id] || null; },
     setPlayer(id, value) { data.players[id] = value; save('players'); },
+    meta(key) { return data.meta[key] || null; },
+    setMeta(key, value) { data.meta[key] = value; save('meta'); },
     flushAll() { for (const name of Object.keys(files)) flush(name); },
   };
 }

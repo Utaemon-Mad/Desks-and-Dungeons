@@ -8,8 +8,9 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-'));
 process.env.DD_TEST_FAST = '1';
 const assert = require('assert');
 const WebSocket = require('ws');
-const { server } = require('../server.js');
+const { server, store } = require('../server.js');
 const RULES = require('../public/rules/engine.js');
+const PROG = require('../public/rules/progress.js');
 const GEN = require('../server/gen.js');
 const { Instance } = require('../server/dungeon.js');
 
@@ -36,7 +37,8 @@ function client(name) {
   };
   const last = (pred) => [...inbox].reverse().find(pred);
   const send = (m) => ws.send(JSON.stringify(m));
-  return new Promise((res) => ws.on('open', () => res({ ws, next, send, last, inbox })));
+  const cl = { ws, next, send, last, inbox }; (global.__clients = global.__clients || []).push(cl);
+  return new Promise((res) => ws.on('open', () => res(cl)));
 }
 
 // ---------- Reglas ----------
@@ -71,6 +73,34 @@ function rulesTests() {
     assert.ok(g.spawns.some((s) => s.boss && s.k === RULES.THEMES[theme].boss), 'tiene su jefe');
     assert.strictEqual(g.tiles.length, g.w * g.h);
   }
+}
+
+// ---------- Progresión: forja, tablón, mascotas, pesca ----------
+function progressTests() {
+  const rng = RULES.seeded('forja');
+  const sword = RULES.makeItem(rng, { ilvl: 5, rarity: 'raro', slot: 'arma', base: 'espada' });
+  const before = sword.dmg[1];
+  PROG.applyUpgrade(sword);
+  assert.ok(sword.up === 1 && sword.dmg[1] > before && /\+1$/.test(sword.name), 'mejora +1');
+  for (let i = 0; i < 4; i++) PROG.applyUpgrade(sword);
+  assert.ok(/\+5$/.test(sword.name) && !/\+1 \+/.test(sword.name), 'el nombre lleva sólo el último +N');
+  assert.ok(PROG.upgradeCost(sword).chance < 1 && PROG.upgradeCost(sword).esencia > 0, 'mejoras altas: piden esencia y pueden fallar');
+  const key = Object.keys(sword.stats)[0];
+  const r = PROG.enchant(rng, sword, key);
+  assert.ok(r && sword.stats[key] === undefined && sword.stats[r.to] > 0, 'encantar cambia una propiedad');
+  const commons = [1, 2, 3].map(() => RULES.makeItem(rng, { ilvl: 4, rarity: 'comun' }));
+  assert.strictEqual(PROG.combine(rng, commons, ['guerrero']).rarity, 'raro', 'tres comunes → un raro');
+  assert.ok(PROG.salvage(RULES.makeItem(rng, { ilvl: 4, rarity: 'epico' })).esencia >= 2, 'desguazar da materiales');
+  const b1 = PROG.boardFor(100, 14), b2 = PROG.boardFor(100, 14);
+  assert.deepStrictEqual(b1, b2, 'el tablón es igual para todos el mismo día');
+  assert.ok(b1.daily.length === 3 && b1.weekly.length === 2);
+  assert.ok(RULES.petStats('lobo', 10, 10).fue > RULES.petStats('lobo', 10, 9).fue * 1.15, 'la mascota evoluciona en el nivel 10');
+  assert.strictEqual(RULES.petLevelFromXp(0), 1);
+  assert.ok(RULES.petLevelFromXp(RULES.petXpFor(10)) === 10);
+  const f = PROG.catchFish(rng, 2);
+  assert.ok(PROG.MATS[f.id] && f.w > 0, 'pesca');
+  assert.ok(PROG.WEEKLY_MODS[PROG.weekMod()], 'desafío de la semana');
+  assert.ok(RULES.BUFFS['comida:estofado-trucha'] && RULES.BUFFS['comida:estofado-trucha'].food, 'los platos son bufos');
 }
 
 // ---------- Partida de prueba (sin red) ----------
@@ -145,10 +175,58 @@ async function instanceTests() {
   // matar al jefe abre el portal de salida y suelta botín de conjunto con suerte
   inst.damageEnemy(p, boss, 99999, { noCrit: true });
   assert.ok(inst.portal && inst.bossDead, 'portal tras el jefe');
+
+  // Esquiva: voltereta de dos casillas e invulnerable un instante
+  p.x = 3; p.y = 2; p.rollAt = 0; user.combat.en = 50;
+  inst.roll('u1', 1, 0);
+  assert.strictEqual(p.x, 5, 'la voltereta avanza dos casillas');
+  const hp0 = user.combat.hp;
+  inst.hurtPlayer(p, 10, { level: 1 });
+  assert.strictEqual(user.combat.hp, hp0, 'invulnerable durante la voltereta');
+
+  // Desafío «cadáveres explosivos» del Descenso
+  const dsent = [];
+  const dinst = new Instance({ ...def, id: 'desc', descent: { floor: 1, mod: 'explosivos' }, spawns: [{ k: 'goblin-minion', x: 6, y: 2 }], chests: [] }, { ...hooks, send: (u, m) => dsent.push(m), kill: () => {} });
+  const du = { id: 'u2', name: 'D', look: {}, profile: { ...profile } };
+  dinst.join(du);
+  dinst.damageEnemy(dinst.players.get('u2'), [...dinst.enemies.values()][0], 9999, { noCrit: true });
+  assert.ok(dinst.teles.some((t) => t.orphan), 'el cadáver va a estallar');
+
+  // Arena: los golpes al rival le quitan vida de verdad, y al caer termina el duelo
+  let ended = null;
+  const ahooks = { ...hooks, send: () => {}, duelEnd: (loser) => { ended = loser.id; } };
+  const adef = { id: 'arena1', kind: 'arena', name: 'Arena', w: PROG.ARENA.w, h: PROG.ARENA.h, tiles: PROG.arenaTiles(), start: { x: 2, y: 5 }, props: [], duel: { a: 'x1', b: 'x2', bet: 0, startAt: 0 } };
+  const ai = new Instance(adef, ahooks);
+  const mk = (id) => { const pr = { xp: 0, gold: 0, char: RULES.newChar('guerrero'), equip: {}, buffs: {} }; for (const it of RULES.starterItems('guerrero', Math.random)) pr.equip[it.slot] = it; return { id, name: id, look: { cls: 'guerrero' }, profile: pr }; };
+  const x1 = mk('x1'), x2 = mk('x2');
+  ai.join(x1, { x: 4, y: 5 }); ai.join(x2, { x: 5, y: 5 });
+  assert.ok(ai.enemies.has('pv:x2') && !ai.nearestEnemy(ai.players.get('x1'), 1).id.endsWith('x1'), 'el rival es atacable, uno mismo no');
+  const hpB = x2.combat.hp;
+  ai.damageEnemy(ai.players.get('x1'), ai.enemies.get('pv:x2'), 20, { noCrit: true, kind: 'ability' });
+  assert.ok(x2.combat.hp < hpB, 'el golpe duele al rival');
+  ai.damageEnemy(ai.players.get('x1'), ai.enemies.get('pv:x2'), 99999, { noCrit: true, kind: 'ability' });
+  await sleep(1000);
+  assert.strictEqual(ended, 'x2', 'termina el duelo');
+
+  // Jefe de mundo: aparece cerca de los héroes y reparte botín a quien le hizo daño
+  const WW = 30;
+  const wdef = { id: 'world', kind: 'world', name: 'Mundo', w: WW, h: WW, tiles: '.'.repeat(WW * WW).split('').map((c, i) => (i % WW === 0 || i < WW || i % WW === WW - 1 || i >= WW * (WW - 1) ? '#' : c)).join(''), start: { x: 15, y: 15 }, groups: [] };
+  let wbUsers = null;
+  const wi = new Instance(wdef, { ...hooks, send: () => {}, announce: () => {}, worldBoss: (users) => { wbUsers = users; }, kill: () => {} });
+  const wu = mk('w1');
+  wi.join(wu);
+  wi.nextEventAt = Date.now() - 1;
+  wi.tick(Date.now());
+  assert.ok(wi.worldBoss, 'aparece el jefe de mundo');
+  const wbE = wi.enemies.get(wi.worldBoss.id);
+  assert.ok(PROG.WORLD_BOSSES.includes(wbE.k));
+  wi.damageEnemy(wi.players.get('w1'), wbE, 999999, { noCrit: true });
+  assert.ok(wbUsers && wbUsers[0].id === 'w1' && !wi.worldBoss, 'botín para quien luchó');
 }
 
 (async () => {
   rulesTests();
+  progressTests();
   await instanceTests();
 
   await new Promise((r) => server.listen(process.env.PORT, r));
@@ -305,6 +383,71 @@ async function instanceTests() {
   b.send({ t: 'dleave' });
   assert.strictEqual((await b.next((m) => m.t === 'dexit')).reason, 'leave');
 
+  // Forja, cocina, tablón, fama, habitación, Descenso y duelos (Cris trae materiales de casa)
+  const tokC = 'c'.repeat(32);
+  const crng = RULES.seeded('cris');
+  store.setPlayer(store.hash(tokC), { xp: RULES.XP_TABLE[6], gold: 5000, char: RULES.newChar('guerrero'), equip: Object.fromEntries(RULES.starterItems('guerrero', crng).map((it) => [it.slot, it])), cons: {}, buffs: {}, mats: { hierro: 30, esencia: 10, polvo: 3, trucha: 2, menta: 1 }, bag: [1, 2, 3, 4].map(() => RULES.makeItem(crng, { ilvl: 3, rarity: 'comun', classes: ['guerrero'] })) });
+  const c = await client('Cris');
+  c.send({ t: 'join', room: 'prueba-sala', name: 'Cris', look: { cls: 'guerrero' }, token: tokC });
+  const wc = await c.next((m) => m.t === 'welcome');
+  let meC = await c.next((m) => m.t === 'me');
+  assert.ok(meC.mats.hierro === 30 && meC.board.daily.length === 3 && meC.board.weekly.length === 2, 'materiales y tablón');
+  const sw = meC.equip.arma;
+  c.send({ t: 'forge:up', id: sw.id });
+  const fr = await c.next((m) => m.t === 'forge:result');
+  assert.ok(fr.ok && fr.item.up === 1 && /\+1$/.test(fr.item.name), 'la forja mejora el arma');
+  meC = await c.next((m) => m.t === 'me' && m.equip.arma.up === 1);
+  assert.ok(meC.mats.hierro < 30, 'gasta hierro');
+  const ek = Object.keys(meC.equip.arma.stats)[0];
+  c.send({ t: 'forge:enchant', id: sw.id, key: ek });
+  assert.ok((await c.next((m) => m.t === 'forge:result')).ok, 'encantar');
+  const ids = meC.bag.slice(0, 3).map((it) => it.id);
+  c.send({ t: 'forge:combine', ids });
+  const cr = await c.next((m) => m.t === 'forge:result');
+  assert.strictEqual(cr.item.rarity, 'raro', 'combinar 3 comunes');
+  meC = await c.next((m) => m.t === 'me' && m.bag.length === 2);
+  c.send({ t: 'forge:salvage', ids: [meC.bag[0].id] });
+  assert.match((await c.next((m) => m.t === 'forge:result')).text, /Desguazado/);
+  c.send({ t: 'cook', id: 'estofado-trucha' });
+  meC = await c.next((m) => m.t === 'me' && m.buffs['comida:estofado-trucha']);
+  assert.ok(!meC.mats.trucha, 'gasta los ingredientes');
+  assert.ok(RULES.derive(meC).hp > RULES.derive({ ...meC, buffs: {} }).hp, 'el plato da vida');
+  c.send({ t: 'title:set', title: 'Leyenda de la Taberna' });
+  c.send({ t: 'ranks:get' });
+  const rk = await c.next((m) => m.t === 'ranks');
+  assert.ok(rk.boards.floor && rk.boards.kills && PROG.WEEKLY_MODS[rk.mod], 'clasificación semanal');
+  c.send({ t: 'room:get' });
+  const ri = await c.next((m) => m.t === 'roominfo');
+  assert.ok(ri.name === 'Cris' && Array.isArray(ri.trophies) && !ri.title, 'habitación (sin títulos que no tiene)');
+  // Descenso infinito
+  c.send({ t: 'descent:start' });
+  const dsc = await c.next((m) => m.t === 'dstart');
+  assert.ok(dsc.dungeon.descent && dsc.dungeon.descent.floor === 1 && /piso 1/.test(dsc.dungeon.name), 'Descenso: piso 1');
+  c.send({ t: 'dleave' });
+  await c.next((m) => m.t === 'dexit');
+  // Duelo con apuesta: Ana se rinde y Cris se lleva el bote
+  await sleep(300);
+  const goldC = c.last((m) => m.t === 'me').gold;
+  const g0 = store.player(store.hash(tokC)).gold;
+  c.send({ t: 'duel:req', to: wa.id, bet: 10 });
+  const inv = await a.next((m) => m.t === 'duel:invite');
+  assert.strictEqual(inv.bet, 10);
+  a.send({ t: 'duel:accept', from: inv.from });
+  const ad = await a.next((m) => m.t === 'dstart');
+  assert.strictEqual(ad.dungeon.kind, 'arena', 'duelo en la arena');
+  await c.next((m) => m.t === 'dstart' && m.dungeon.kind === 'arena');
+  a.send({ t: 'dleave' });
+  assert.strictEqual((await c.next((m) => m.t === 'dexit')).reason, 'arena');
+  await a.next((m) => m.t === 'dexit');
+  const won = await c.next((m) => m.t === 'system' && /Cris gana el duelo contra Ana y se lleva 20/.test(m.text), 4000);
+  assert.ok(won, 'el ganador se lleva el bote');
+  assert.ok(await c.next((m) => m.t === 'achievement' && m.id === 'duelista'), 'logro del primer duelo');
+  assert.ok(goldC > 0);
+  await sleep(200);
+  assert.strictEqual(store.player(store.hash(tokC)).gold, g0 + 10 + 30, 'bote del duelo (+10 netos) y oro del logro (+30)');
+  void wc;
+  c.ws.close();
+
   // El perfil se guarda con el token
   b.ws.close();
   await a.next((m) => m.t === 'leave' && m.id === wb.id);
@@ -328,4 +471,4 @@ async function instanceTests() {
   a.ws.close();
   server.close();
   process.exit(0);
-})().catch((e) => { console.error('✘', e); process.exit(1); });
+})().catch((e) => { console.error('✘', e); for (const cl of global.__clients || []) console.error(cl.inbox.filter((m) => m.t === 'error' || m.t === 'forge:result').slice(-5)); process.exit(1); });

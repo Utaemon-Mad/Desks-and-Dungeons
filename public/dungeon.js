@@ -1,4 +1,4 @@
-/* global DD, DUNGEON, DSPRITES, RULES, THREE, MODELS, VIEW3D */
+/* global DD, DUNGEON, DSPRITES, RULES, PROG, THREE, MODELS, VIEW3D */
 // Mazmorras y mundo abierto: menú (crear con nivel y tema o unirse a una partida), partida en tiempo real
 // con movimiento suave, habilidades, pociones, proyectiles esquivables, avisos de los jefes, luces y botín.
 (() => {
@@ -7,7 +7,8 @@
   const T = 16; // píxeles por casilla
   const $ = (s) => document.querySelector(s);
   const DCH = new Set(DUNGEON.DUNGEON_CHARS.split(''));
-  const monName = (e) => (e.elite ? 'Élite: ' : '') + ((RULES.MONSTERS[e.k] || {}).name || e.k);
+  const monName = (e) => (e.kind === 'hero' ? e.name : (e.elite ? 'Élite: ' : '') + ((RULES.MONSTERS[e.k] || {}).name || e.k));
+  const WATER_T = new Set(['w', 'v', 'q', '~']);
 
   // ======================================================================
   //  Menú de mazmorras
@@ -46,6 +47,7 @@
   }
   $('#dlevel').addEventListener('input', (e) => { menu.level = Number(e.target.value); buildThemes(); });
   $('#dgo').onclick = () => { menuEl.classList.add('hidden'); DD.net.send({ t: 'dnew', theme: menu.theme === 'random' ? null : menu.theme, level: menu.level }); };
+  { const b = document.createElement('button'); b.className = 'btn alt big'; b.type = 'button'; b.id = 'ddescent'; b.textContent = '🌀 DESCENSO INFINITO'; b.onclick = () => { menuEl.classList.add('hidden'); DD.emit('open-descent'); }; $('#dgo').after(b); }
 
   DD.on('dmenu', (m) => {
     menu.max = m.maxLevel;
@@ -77,6 +79,7 @@
     seen: null, vis: null, floaters: [], fx: [], projs: [], teles: [], particles: [], bubbles: new Map(),
     view: { s: 3, dpr: 1 }, cam: { x: 0, y: 0 }, you: null, youAt: 0, hover: null, mouse: null, showMap: true, log: [],
     keys: new Set(), sentDir: '0,0', boss: null, statics: null, auras: [], lastHurt: 0,
+    dying: new Map(), herbs: [], hitstop: 0, joyDir: null, fps: { n: 0, t: 0, v: 0 },
   };
   window.__dGame = game;
 
@@ -109,9 +112,11 @@
     for (const e of game.ents.values()) if (e.static) e.alive = true;
     for (const ev of m.events || []) onEvent(ev, now);
     for (const [id, e] of game.ents) if (!e.alive) game.ents.delete(id);
-    game.chests = m.chests; game.loot = m.loot; game.portal = m.portal; game.start = m.start;
-    // jefe a la vista
-    const boss = [...game.ents.values()].find((e) => e.kind === 'enemy' && e.boss && game.vis && game.vis[e.y * game.map.w + e.x]);
+    game.chests = m.chests; game.loot = m.loot; game.portal = m.portal; game.start = m.start; game.herbs = m.herbs || [];
+    // jefe a la vista (en la arena, el rival)
+    const boss = game.map && game.map.kind === 'arena'
+      ? [...game.ents.values()].find((e) => e.kind === 'hero' && e.id !== DD.myId)
+      : [...game.ents.values()].find((e) => e.kind === 'enemy' && e.boss && game.vis && game.vis[e.y * game.map.w + e.x]);
     game.boss = boss || null;
     updateHud();
   }
@@ -165,10 +170,11 @@
           else if (ev.dodge) float(t.x, t.y, 'Esquiva', '#9ad8ff');
           else {
             t.hitUntil = now + 140;
-            const col = t.kind === 'hero' ? '#ff5a5a' : ev.crit ? '#ffd23f' : ev.kind === 'dot' ? '#b08aff' : '#ffffff';
-            float(t.x, t.y, (ev.crit ? '¡' : '') + ev.dmg + (ev.crit ? '!' : '') + (ev.block ? ' 🛡' : ''), col, ev.t === me || ev.crit);
-            for (let i = 0; i < (ev.crit ? 10 : 5); i++) spark(t.x + 0.5, t.y + 0.3, t.kind === 'hero' ? '#c83a3a' : (RULES.MONSTERS[t.k] || {}).undead ? '#d8d0b8' : '#9a1a1a');
-            if (ev.t === me) { game.lastHurt = now; DD.blip(150, 0.06); }
+            const col = t.kind === 'hero' && t.id === me ? '#ff5a5a' : ev.crit ? '#ffd23f' : ev.kind === 'dot' ? '#b08aff' : ev.kind === 'pet' ? '#ffd8a0' : '#ffffff';
+            game.floaters.push({ x: t.x, y: t.y, text: String(ev.dmg) + (ev.block ? ' 🛡' : ''), color: col, big: ev.t === me || ev.crit, crit: !!ev.crit, start: now });
+            for (let i = 0; i < (ev.crit ? 14 : 5); i++) spark(t.x + 0.5, t.y + 0.3, t.kind === 'hero' ? '#c83a3a' : (RULES.MONSTERS[t.k] || {}).undead ? '#d8d0b8' : '#9a1a1a');
+            if (ev.crit) { ring(t.rx ?? t.x, t.ry ?? t.y, '#ffd23f'); if (ev.by === me) { game.hitstop = now + 75; if (!DD.gfx || DD.gfx.shake) game.shake = now + 200; } }
+            if (ev.t === me) { game.lastHurt = now; DD.blip(150, 0.06); if (ev.dmg > (game.you ? game.you.maxHp * 0.15 : 99) && (!DD.gfx || DD.gfx.shake)) game.shake = now + 220; }
           }
         }
         if (by && t && !ev.dodge) {
@@ -182,14 +188,17 @@
       case 'swing': { const e = game.ents.get(ev.id), t = game.ents.get(ev.t); if (e && t) { e.lunge = now; e.lungeDx = Math.sign(t.x - e.x); e.lungeDy = Math.sign(t.y - e.y); } break; }
       case 'cast': {
         const by = game.ents.get(ev.by);
-        if (by) for (let i = 0; i < 8; i++) spark(by.x + 0.5, by.y + 0.2, '#fff2a0', true);
+        if (by) { by.castAt = now; for (let i = 0; i < 8; i++) spark(by.x + 0.5, by.y + 0.2, '#fff2a0', true); }
         log(`${who(ev.by)} usa ${ev.name}`, ev.by === me ? 'mine' : '');
         DD.blip(700, 0.06);
         break;
       }
-      case 'fx': game.fx.push({ ...ev, start: now + (ev.delay || 0), dur: ev.kind === 'aura' ? ev.until : ev.kind === 'blast' || ev.kind === 'nova' ? 420 : 260 }); if (ev.kind === 'aura') game.auras.push({ id: ev.id, until: now + ev.until, radius: ev.radius }); break;
+      case 'fx': if (ev.kind === 'splash') { splash(ev.x, ev.y, 14); break; } game.fx.push({ ...ev, start: now + (ev.delay || 0), dur: ev.kind === 'aura' ? ev.until : ev.kind === 'blast' || ev.kind === 'nova' ? 420 : 260 }); if (ev.kind === 'aura') game.auras.push({ id: ev.id, until: now + ev.until, radius: ev.radius }); break;
       case 'die': {
-        for (let i = 0; i < 14; i++) spark(ev.x + 0.5, ev.y + 0.4, (RULES.MONSTERS[ev.k] || {}).undead ? '#d8d0b8' : '#8a1a1a');
+        game.dying.set(ev.id, now);
+        for (let i = 0; i < (ev.boss ? 60 : 14); i++) spark(ev.x + 0.5, ev.y + 0.4, (RULES.MONSTERS[ev.k] || {}).undead ? '#d8d0b8' : ev.boss ? (i % 2 ? '#ffd23f' : '#ff6a2a') : '#8a1a1a', ev.boss);
+        puff(ev.x + 0.5, ev.y + 0.5, '#6a5a4a', ev.boss ? 20 : 6, 0.5);
+        if (ev.boss && (!DD.gfx || DD.gfx.shake)) game.shake = now + 500;
         if (ev.xp) float(ev.x, ev.y, `+${ev.xp} PX`, '#9fe0ff', true);
         if (ev.xp !== 0) log(`${(RULES.MONSTERS[ev.k] || {}).name || ev.k} cae.${ev.xp ? ` +${ev.xp} PX` : ''}`, ev.boss ? 'good big' : 'good');
         DD.blip(ev.boss ? 90 : 120, ev.boss ? 0.4 : 0.12);
@@ -200,6 +209,7 @@
         if (ev.xp && ev.id === me) setTimeout(() => float(ev.x, ev.y, `+${ev.xp} PX`, '#9fe0ff', true), 300);
         if (ev.item) { float(ev.x, ev.y, ev.item.name, DSPRITES.RARITY[ev.item.rarity], true); log(`${who(ev.id)} recoge «${ev.item.name}» (${RULES.RARITIES[ev.item.rarity].name.toLowerCase()})`, 'loot-' + ev.item.rarity); }
         if (ev.cons) float(ev.x, ev.y, RULES.CONSUMABLES[ev.cons].name, '#ff8a8a');
+        if (ev.mat) { const M = PROG.MATS[ev.mat]; float(ev.x, ev.y, `+${ev.n} ${M.icon}`, ev.mat === 'polvo' ? '#ffe27a' : ev.mat === 'esencia' ? '#7ad0ff' : '#c8c8d0', ev.id === me); }
         if (ev.id === me) DD.blip(ev.item ? 1320 : 1046, 0.08);
         break;
       }
@@ -220,6 +230,17 @@
       case 'portal': log(`¡${ev.name} ha caído! Se abre un portal de salida.`, 'good big'); DD.toast('🏆 ¡Jefe derrotado! Recoge el botín y cruza el portal.'); for (let i = 0; i < 30; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7ad0ff', true); break;
       case 'down': log(`${who(ev.id)} cae.`, 'hurt'); break;
       case 'petdown': log(`${ev.name} huye malherido; volverá en 30 s.`, 'hurt'); break;
+      case 'petskill': { const pt = game.ents.get(ev.id); if (pt) { float(pt.x, pt.y, ev.name + '!', '#ffb040', ev.owner === me); for (let i = 0; i < 10; i++) spark(pt.x + 0.5, pt.y + 0.4, '#ffb040', true); } break; }
+      case 'roll': { const e = game.ents.get(ev.id); if (e) { e.rollAt = now; puff(ev.from.x + 0.5, ev.from.y + 0.5, dustColor(ev.from.x, ev.from.y), 6, 0.6); } if (ev.id === me) DD.blip(300, 0.04); break; }
+      case 'fish': { const e = game.ents.get(ev.id); if (e) e.fishAt = { x: ev.x, y: ev.y }; splash(ev.x, ev.y, 4); break; }
+      case 'bite': { const e = game.ents.get(ev.id); if (e && e.fishAt) splash(e.fishAt.x, e.fishAt.y, 10); break; }
+      case 'fishend': { const e = game.ents.get(ev.id); if (e) e.fishAt = null; if (ev.id === me) $('#dbite').classList.add('hidden'); break; }
+      case 'worldboss': {
+        log(`🌋 ¡${ev.name} ha aparecido!`, 'hurt big');
+        banner(`🌋 ${ev.name}`, '¡Un jefe de mundo ha aparecido! Únete a la batalla.');
+        DD.blip(80, 0.5); setTimeout(() => DD.blip(60, 0.5), 300);
+        break;
+      }
       case 'join': if (ev.id !== me) log(`${who(ev.id)} entra.`); break;
     }
   }
@@ -235,7 +256,13 @@
     game.you = m.you; game.youAt = performance.now();
     game.miniImg = null;
     const th = RULES.THEMES[m.dungeon.theme];
-    $('#dname').textContent = m.dungeon.kind === 'world' ? m.dungeon.name : `${th ? th.icon + ' ' : ''}${m.dungeon.name} · nivel ${m.dungeon.level}`;
+    const dsc = m.dungeon.descent;
+    const MOD = dsc && PROG.WEEKLY_MODS[dsc.mod];
+    $('#dname').textContent = m.dungeon.kind === 'world' ? m.dungeon.name : m.dungeon.kind === 'arena' ? `🤺 ${m.dungeon.name}${m.dungeon.duel && m.dungeon.duel.bet ? ` · ${m.dungeon.duel.bet * 2} 🪙 en juego` : ''}` : dsc ? `🌀 Descenso · piso ${dsc.floor} · nivel ${m.dungeon.level} · ${MOD.icon} ${MOD.name}` : `${th ? th.icon + ' ' : ''}${m.dungeon.name} · nivel ${m.dungeon.level}`;
+    game.dying.clear(); game.herbs = [];
+    game.duelAt = m.dungeon.duel ? performance.now() + (m.dungeon.duel.startAt - (m.you ? m.you.now : Date.now())) : 0;
+    $('#dbite').classList.add('hidden');
+    if (dsc) banner(`🌀 Piso ${dsc.floor}`, `${MOD.icon} ${MOD.name}: ${MOD.desc}`);
     $('#dlog').innerHTML = '';
     viewEl.classList.remove('hidden');
     viewEl.classList.toggle('world', m.dungeon.kind === 'world');
@@ -246,12 +273,14 @@
     buildBar();
     $('#dmount').classList.toggle('hidden', !(m.dungeon.kind === 'world' && DD.me && DD.me.mount));
     DD.toast(m.dungeon.kind === 'world'
-      ? `${m.dungeon.name}: explora, entra en las cuevas y vuelve al pueblo (casa iluminada) para descansar.`
-      : 'Clic para andar, clic en un enemigo para atacarlo. 1-8 habilidades, Q/E pociones. Derrota al jefe para abrir el portal.');
+      ? `${m.dungeon.name}: explora, pesca junto al agua (🎣/G), recoge hierbas y vuelve al pueblo (casa iluminada) para descansar.`
+      : m.dungeon.kind === 'arena' ? 'Duelo: clic en tu rival para atacarle, habilidades con 1-8, Espacio para esquivar. ¡Gana quien quede en pie!'
+      : 'Clic para andar, clic en un enemigo para atacarlo. 1-8 habilidades, Q/E pociones, Espacio esquiva. Derrota al jefe para abrir el portal.');
   });
   DD.on('dsnap', (m) => { if (game.active) { applySnap(m); updateVision(); } });
   DD.on('dme', (m) => { game.you = m; game.youAt = performance.now(); updateHud(); });
   DD.on('dwhisper', (m) => DD.toast(m.text));
+  DD.on('dbite', () => { $('#dbite').classList.remove('hidden'); DD.blip(1500, 0.2); setTimeout(() => DD.blip(1800, 0.2), 120); });
   DD.on('me', () => { if (game.active) buildBar(); });
   DD.on('dexit', (m) => {
     game.active = false;
@@ -262,6 +291,7 @@
     if (m.reason === 'win') DD.toast('🏆 ¡Mazmorra completada!');
     else if (m.reason === 'down') DD.toast(`💀 Has caído${m.lost ? ` y pierdes ${m.lost} de oro` : ''}. Vuelves a la taberna.`);
     else if (m.reason === 'return') DD.toast('🌀 El pergamino te devuelve a la taberna.');
+    else if (m.reason === 'arena') DD.toast('🤺 Fin del duelo. Alfonso os sirve algo para las heridas.');
     else DD.toast('Vuelves a la taberna: vida y energía recuperadas.');
   });
   DD.on('log', (m) => {
@@ -278,7 +308,7 @@
     const y = game.you;
     DD.emit('combat', y);
     const left = [...game.ents.values()].filter((e) => e.kind === 'enemy').length;
-    $('#dleft').textContent = game.map && game.map.kind === 'world' ? 'M: mapa' : game.portal ? '🌀 Portal abierto' : `👹 ${left}`;
+    $('#dleft').textContent = game.map && game.map.kind === 'world' ? `M: mapa · ${game.daycycle ? game.daycycle.label : ''}` : game.map && game.map.kind === 'arena' ? '🤺 Duelo' : game.portal ? (game.map.descent ? '🌀 Portal al siguiente piso' : '🌀 Portal abierto') : `👹 ${left}`;
     const b = game.boss;
     const bb = $('#dboss');
     if (b) { bb.classList.remove('hidden'); $('#dboss-name').textContent = monName(b); $('#dboss-bar').style.width = Math.max(0, 100 * b.hp / b.maxHp) + '%'; }
@@ -369,8 +399,9 @@
   function hoverTarget() {
     const h = game.hover;
     if (!h) return {};
-    const enemy = entAt(h.x, h.y, 'enemy');
+    let enemy = entAt(h.x, h.y, 'enemy');
     const hero = entAt(h.x, h.y, 'hero');
+    if (!enemy && game.map.kind === 'arena' && hero && hero.id !== DD.myId) enemy = { id: 'pv:' + hero.id };
     return { enemy, hero, x: h.x, y: h.y };
   }
 
@@ -405,6 +436,8 @@
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (/^[1-8]$/.test(k)) { const a = abilities()[Number(k) - 1]; if (a) castSkill(a); return; }
     if (k === 'm') { game.showMap = !game.showMap; return; }
+    if (k === ' ') { e.preventDefault(); doRoll(); return; }
+    if (k === 'g') { DD.net.send({ t: 'dfish' }); return; }
     if (k === 'i' || k === 'b') { DD.emit('open-char', 'equipo'); return; }
     if (k === 'c') { /* C: pergamino de sanación si lo hay, si no la ficha */ if (!(DD.me && DD.me.cons['perg-sanacion'])) { DD.emit('open-char', 'ficha'); return; } }
     const consKey = k.toUpperCase();
@@ -444,8 +477,14 @@
     if (x < 0 || y < 0 || x >= w || y >= h) return;
     const npc = !repeat && entUnder(cx, cy, ['npc']);
     if (npc) { DD.net.send({ t: 'dtalk', id: npc.npc }); game.marker = { x: npc.x, y: npc.y, at: performance.now() }; return 'talk'; }
+    if (!repeat && game.map.kind === 'arena') {
+      const foe = entUnder(cx, cy, ['hero']);
+      if (foe && foe.id !== DD.myId) { DD.net.send({ t: 'dattack', id: 'pv:' + foe.id }); game.marker = { x: foe.x, y: foe.y, at: performance.now(), enemy: true }; return 'attack'; }
+    }
     const enemy = entUnder(cx, cy, ['enemy']) || entAt(x, y, 'enemy');
     if (enemy && !repeat) { DD.net.send({ t: 'dattack', id: enemy.id }); game.marker = { x: enemy.x, y: enemy.y, at: performance.now(), enemy: true }; return 'attack'; }
+    const herb = !repeat && herbUnder(cx, cy);
+    if (herb) { DD.net.send({ t: 'dgather', id: herb.id }); game.marker = { x: herb.x, y: herb.y, at: performance.now() }; return 'gather'; }
     if (enemy && repeat) return;
     if (!game.seen[y * w + x]) return;
     DD.net.send({ t: 'dgo', x, y });
@@ -483,11 +522,16 @@
   const lootObjs = new Map(), chestObjs = new Map(), teleObjs = new Map(), projObjs = new Map();
   let portalObj = null, fogDirty = true, seenCount = -1;
   const fx3d = [];
-  const sparks3d = [];
+  let fxp = null, dustp = null, wx = null;     // chispas (aditivas), polvo/humo y clima
+  const herbObjs = new Map(), corpses = [];
 
   function ensureStage() {
     if (stage) return;
-    stage = VIEW3D.makeStage({ offset: [0, 9.5, 7.2], ambient: 0.3, sky: '#5a6aa0', ground: '#140c0a', lights: 10 });
+    stage = VIEW3D.makeStage({ offset: [0, 9.5, 7.2], ambient: 0.3, sky: '#5a6aa0', ground: '#140c0a', lights: 10, sun: 0.0001 });
+    stage.sun.castShadow = false;
+    fxp = VIEW3D.particles(stage.scene, 1400, true);
+    dustp = VIEW3D.particles(stage.scene, 800, false);
+    wx = VIEW3D.weather(stage.scene);
     window.__stage = stage;
   }
 
@@ -498,8 +542,11 @@
     models.clear(); lootObjs.clear(); chestObjs.clear(); teleObjs.clear(); projObjs.clear();
     for (const f of fx3d) stage.scene.remove(f.obj);
     fx3d.length = 0;
-    for (const s of sparks3d) stage.scene.remove(s.obj);
-    sparks3d.length = 0;
+    fxp.clear(); dustp.clear(); wx.set('none');
+    for (const o of herbObjs.values()) stage.scene.remove(o);
+    herbObjs.clear();
+    for (const c of corpses) stage.scene.remove(c.obj);
+    corpses.length = 0;
     if (portalObj) { stage.scene.remove(portalObj); portalObj = null; }
   }
 
@@ -529,7 +576,7 @@
     let key;
     if (e.kind === 'hero') key = 'h' + JSON.stringify(e.look) + (e.mount || '');
     else if (e.kind === 'npc') key = 'n' + e.npc;
-    else if (e.kind === 'pet') key = 'p' + e.k;
+    else if (e.kind === 'pet') key = 'p' + e.k + (e.evo || 0);
     else key = 'e' + e.k;
     let m = models.get(e.id);
     if (m && m.key === key) return m;
@@ -547,14 +594,20 @@
         obj.userData.mount = mount;
       } else obj = hero;
     } else if (e.kind === 'npc') obj = MODELS.buildHero(e.look);
-    else if (e.kind === 'pet') obj = MODELS.buildPet(e.k);
+    else if (e.kind === 'pet') obj = MODELS.buildPet(e.k, e.evo || 0);
     else obj = MODELS.buildEnemy(e.k);
+    if (e.big) obj.scale.multiplyScalar(1.3);
     if (e.elite || e.boss) {
-      const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 20), new THREE.MeshBasicMaterial({ color: e.boss ? '#ff3a2a' : '#ffc040', transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 20), new THREE.MeshBasicMaterial({ color: e.wb ? '#a05aff' : e.boss ? '#ff3a2a' : '#ffc040', transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
       ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03; ring.scale.setScalar(1 / obj.scale.x);
       obj.add(ring);
     }
     obj.userData.face = DIR_ANG[e.dir] || 0;
+    obj.rotation.order = 'YXZ'; // la voltereta gira sobre el eje del propio personaje
+    if (e.kind === 'hero' && obj.userData.parts && obj.userData.parts.armR) {
+      const r = MODELS.rod(); r.position.set(0, -0.32, 0.04); r.rotation.x = Math.PI / 2 + 0.3; r.visible = false;
+      obj.userData.parts.armR.add(r); obj.userData.rod = r;
+    }
     stage.scene.add(obj);
     m = { obj, key };
     models.set(e.id, m);
@@ -577,6 +630,11 @@
       g.userData.light = l.r === 'comun' ? null : col;
     } else if (l.gold) {
       for (let i = 0; i < 5; i++) MODELS.mesh(MODELS.cyl(0.06, 0.06, 0.02, 8), MODELS.mat('#ffd23f', { metal: 0.8, rough: 0.3, emissive: '#6a4a00', ei: 0.4 }), (i % 3 - 1) * 0.07, 0.02 + Math.floor(i / 3) * 0.02, (i % 2) * 0.06, g);
+    } else if (l.mat) {
+      const col = l.mat === 'polvo' ? '#ffe27a' : l.mat === 'esencia' ? '#5ab8ff' : '#a8acb8';
+      const o = MODELS.mesh(l.mat === 'hierro' ? MODELS.box(0.16, 0.07, 0.1) : new THREE.OctahedronGeometry(0.09), MODELS.mat(col, { metal: l.mat === 'hierro' ? 0.8 : 0.2, rough: 0.3, emissive: l.mat === 'hierro' ? null : col, ei: 0.9 }), 0, 0.12, 0, g);
+      void o;
+      if (l.mat !== 'hierro') g.userData.light = col;
     } else if (l.cons) {
       const C = RULES.CONSUMABLES[l.cons];
       MODELS.mesh(MODELS.sph(0.08, 7, 6), MODELS.mat(C.color, { emissive: C.color, ei: 0.6, opacity: 0.9 }), 0, 0.09, 0, g);
@@ -596,19 +654,59 @@
     return g;
   }
 
+  // Chispas brillantes (sangre, magia, oro…)
   function spark(x, y, color, up) {
-    if (!stage) return;
-    let s = sparks3d.find((q) => !q.live);
-    if (!s) {
-      if (sparks3d.length > 220) return;
-      const o = new THREE.Mesh(MODELS.box(0.05, 0.05, 0.05), new THREE.MeshBasicMaterial({ color }));
-      stage.scene.add(o);
-      s = { obj: o };
-      sparks3d.push(s);
-    }
-    s.live = true; s.obj.visible = true; s.obj.material.color.set(color);
-    s.x = x; s.z = y; s.h = 0.5; s.vx = (Math.random() - 0.5) * 2.4; s.vz = (Math.random() - 0.5) * 2.4; s.vh = up ? 1.5 + Math.random() * 2 : 0.5 + Math.random() * 2; s.life = 0; s.max = 0.45 + Math.random() * 0.4;
+    if (!fxp) return;
+    fxp.emit({ x, y: 0.5, z: y, vx: (Math.random() - 0.5) * 2.4, vy: up ? 1.5 + Math.random() * 2 : 0.5 + Math.random() * 2, vz: (Math.random() - 0.5) * 2.4, color, size: 0.08 + Math.random() * 0.06, life: 0.45 + Math.random() * 0.4, grav: 6 });
   }
+  // Polvo o humo que se levanta del suelo
+  function puff(x, z, color, n = 3, spread = 0.3) {
+    if (!dustp) return;
+    for (let i = 0; i < n; i++) dustp.emit({ x: x + (Math.random() - 0.5) * spread, y: 0.08, z: z + (Math.random() - 0.5) * spread, vx: (Math.random() - 0.5) * 0.6, vy: 0.3 + Math.random() * 0.4, vz: (Math.random() - 0.5) * 0.6, color, size: 0.22 + Math.random() * 0.15, life: 0.6 + Math.random() * 0.4, drag: 2, grow: 1.5, alpha: 0.45 });
+  }
+  // Salpicadura de agua
+  function splash(x, y, n) {
+    if (!fxp) return;
+    for (let i = 0; i < n; i++) fxp.emit({ x: x + 0.5, y: 0.1, z: y + 0.5, vx: (Math.random() - 0.5) * 1.2, vy: 1.5 + Math.random() * 1.5, vz: (Math.random() - 0.5) * 1.2, color: '#bfe0ff', size: 0.07, life: 0.5, grav: 7 });
+  }
+  // Anillo de luz (críticos)
+  function ring(x, y, color) {
+    if (!fxp) return;
+    for (let i = 0; i < 16; i++) { const a = i / 16 * Math.PI * 2; fxp.emit({ x: x + 0.5, y: 0.6, z: y + 0.5, vx: Math.cos(a) * 3, vy: 0.3, vz: Math.sin(a) * 3, color, size: 0.12, life: 0.3, drag: 5 }); }
+  }
+  // Color del polvo según el suelo
+  const DUST = { s: '#c8b088', d: '#c8885a', z: '#a8784a', n: '#f4f8ff', i: '#e0f0ff', a: '#7a6a68', m: '#5a5a3a', '=': '#a88a5a', u: '#8a8a80', '.': '#8a8070' };
+  function dustColor(x, y) { const ch = game.map ? game.map.tiles[y * game.map.w + x] : '.'; return DUST[ch] || (game.map && game.map.kind === 'world' ? '#7a8a5a' : '#7a7068'); }
+  // Planta bajo el puntero
+  function herbUnder(cx, cy) {
+    let best = null, bd = 30;
+    for (const h of game.herbs) {
+      const s = stage.project(h.x + 0.5, 0.25, h.y + 0.5);
+      const d = Math.hypot(s.x - cx, s.y - cy);
+      if (d < bd) { bd = d; best = h; }
+    }
+    return best;
+  }
+  // Rótulo grande en el centro (jefe de mundo, piso del Descenso)
+  let bannerT = 0;
+  function banner(title, sub) {
+    const b = $('#dbanner');
+    b.innerHTML = '';
+    const t = document.createElement('b'); t.textContent = title;
+    const s2 = document.createElement('small'); s2.textContent = sub || '';
+    b.append(t, s2);
+    b.classList.remove('hidden');
+    clearTimeout(bannerT); bannerT = setTimeout(() => b.classList.add('hidden'), 4200);
+  }
+  // Esquiva hacia donde se mueve (o hacia donde mira)
+  function doRoll() {
+    let dx = 0, dy = 0;
+    for (const k of game.keys) { const d = KEYDIR[k]; if (d) { dx += d[0]; dy += d[1]; } }
+    if (!dx && !dy && game.joyDir) [dx, dy] = game.joyDir;
+    DD.net.send({ t: 'droll', dx: Math.sign(dx), dy: Math.sign(dy) });
+  }
+  $('#droll').onclick = () => doRoll();
+  $('#dfish').onclick = () => DD.net.send({ t: 'dfish' });
   game.particles = { push() {} }; // compatibilidad: las chispas viven en 3D
 
   function fxColor(f) { return f.color || '#ffffff'; }
@@ -629,12 +727,20 @@
   function renderGame(now, dt) {
     if (!stage || !built || built.map !== game.map) { buildScene(); built.map = game.map; }
     const map = game.map;
+    // golpe crítico: el mundo se congela un instante (hit-stop)
+    const frozen = now < game.hitstop;
+    if (frozen) dt = 0;
     // posiciones suaves (interpolación lineal a velocidad constante)
-    for (const e of game.ents.values()) {
+    if (!frozen) for (const e of game.ents.values()) {
       const k = Math.min(1, (now - e.t0) / e.dur);
       e.rx = e.fx + (e.x - e.fx) * k; e.ry = e.fy + (e.y - e.fy) * k;
+      const was = e.moving;
       e.moving = k < 1;
-      if (e.moving) e.phase = (e.phase || 0) + dt * 11;
+      if (e.moving) {
+        e.phase = (e.phase || 0) + dt * 11;
+        // polvo al andar (más al correr montado)
+        if ((e.kind === 'hero' || e.big || e.boss) && Math.random() < (e.mount ? 0.5 : 0.18)) puff(e.rx + 0.5, e.ry + 0.55, dustColor(e.x, e.y), 1, 0.2);
+      } else if (was && e.kind === 'hero') puff(e.rx + 0.5, e.ry + 0.5, dustColor(e.x, e.y), 2, 0.3);
     }
     const me = game.ents.get(DD.myId);
     // cámara que sigue al héroe
@@ -644,7 +750,7 @@
     const zoom = (innerWidth <= 820 ? 1.18 : 1) * (game.zoom || 1);
     stage.offset.set(0, 9.5 * zoom, 7.2 * zoom);
     let shake = 0;
-    if (game.shake && game.shake > now) shake = (game.shake - now) / 260 * 0.12;
+    if (game.shake && game.shake > now) shake = Math.min(1, (game.shake - now) / 260) * 0.16;
     stage.lookAt(game.cam.x + (Math.random() - 0.5) * shake, game.cam.y + 0.6 + (Math.random() - 0.5) * shake);
 
     // lo explorado: muros, decorado y niebla
@@ -685,11 +791,36 @@
       const hit = e.hitUntil > now;
       const base = o.userData.baseScale || (o.userData.baseScale = o.scale.x);
       o.scale.setScalar(base * (hit ? 1.08 : 1));
-      MODELS.animate(o.userData.mount ? o.children[1] : o, { moving: e.moving, phase: e.phase || 0, t: now, attack: atk, sit: !!o.userData.mount });
+      // voltereta: una vuelta completa hacia delante, agachado
+      const rk = e.rollAt ? (now - e.rollAt) / 360 : 1;
+      o.rotation.x = rk < 1 ? rk * Math.PI * 2 : 0;
+      if (rk < 1) o.position.y = 0.25 * Math.sin(rk * Math.PI);
+      if (e.stun) o.rotation.z = Math.sin(now / 90) * 0.06; else o.rotation.z = 0;
+      const castK = e.castAt ? (now - e.castAt) / 450 : 1;
+      if (o.userData.rod) o.userData.rod.visible = !!e.fishing;
+      MODELS.animate(o.userData.mount ? o.children[1] : o, { moving: e.moving, phase: e.phase || 0, t: now, attack: atk, sit: !!o.userData.mount, cast: castK < 1 ? castK : 0, fish: !!e.fishing });
+      if (e.wb && Math.random() < 0.5) fxp.emit({ x: e.rx + 0.5 + (Math.random() - 0.5), y: 0.1, z: e.ry + 0.5 + (Math.random() - 0.5), vy: 1 + Math.random(), color: '#a05aff', size: 0.12, life: 0.9 });
+      if (e.kind === 'pet' && e.evo === 2 && Math.random() < 0.15) fxp.emit({ x: e.rx + 0.5, y: 0.4, z: e.ry + 0.5, vy: 0.6, vx: (Math.random() - 0.5) * 0.4, color: '#7affff', size: 0.06, life: 0.6 });
       if (o.userData.mount) MODELS.animate(o.userData.mount, { moving: e.moving, phase: (e.phase || 0) * 0.8, t: now });
       e._top = { x: e.rx + 0.5, z: e.ry + 0.5, h: (e.kind === 'hero' && o.userData.mount ? 1.6 : 1.15) * (e.boss ? 1.5 : 1) * (e.kind === 'enemy' ? Math.max(0.8, base) : 1) };
     }
-    for (const [id, m] of models) if (!game.ents.has(id)) { stage.scene.remove(m.obj); models.delete(id); }
+    for (const [id, m] of models) {
+      if (game.ents.has(id)) continue;
+      // al morir no desaparece: cae al suelo y se desvanece
+      if (game.dying.has(id) && m.obj.visible) corpses.push({ obj: m.obj, start: game.dying.get(id), y0: m.obj.rotation.y, side: Math.random() < 0.5 ? -1 : 1 });
+      else stage.scene.remove(m.obj);
+      game.dying.delete(id);
+      models.delete(id);
+    }
+    for (let i = corpses.length - 1; i >= 0; i--) {
+      const c = corpses[i];
+      const k = (now - c.start) / 1100;
+      if (k >= 1) { stage.scene.remove(c.obj); corpses.splice(i, 1); continue; }
+      const fall = Math.min(1, k * 2.6);
+      c.obj.rotation.z = c.side * fall * Math.PI / 2 * (1 - 0.15 * Math.sin(fall * Math.PI));
+      c.obj.position.y = k > 0.55 ? -(k - 0.55) * 0.6 : 0.08 * Math.sin(fall * Math.PI);
+    }
+    if (game.dying.size > 60) game.dying.clear();
 
     // botín
     const lootIds = new Set();
@@ -702,6 +833,17 @@
       if (o.children[0]) o.children[0].rotation.y = now / 900;
     }
     for (const [id, o] of lootObjs) if (!lootIds.has(id)) { stage.scene.remove(o); lootObjs.delete(id); }
+    // plantas del herbolario
+    const herbIds = new Set();
+    for (const h of game.herbs) {
+      if (!game.seen[h.y * map.w + h.x]) continue;
+      herbIds.add(h.id);
+      let o = herbObjs.get(h.id);
+      if (!o) { o = MODELS.herb(h.zone); o.position.set(h.x + 0.5, 0, h.y + 0.5); o.rotation.y = h.x; stage.scene.add(o); herbObjs.set(h.id, o); }
+      o.children[o.children.length - 1].position.y = 0.3 + Math.sin(now / 400 + h.x) * 0.03;
+      if (Math.random() < 0.03) fxp.emit({ x: h.x + 0.5, y: 0.35, z: h.y + 0.5, vy: 0.4, color: o.userData.glow, size: 0.07, life: 0.9 });
+    }
+    for (const [id, o] of herbObjs) if (!herbIds.has(id)) { stage.scene.remove(o); herbObjs.delete(id); }
     // cofres
     for (const c of game.chests) {
       let o = chestObjs.get(c.id);
@@ -777,14 +919,12 @@
       else if (f.kind === 'dash' || f.kind === 'blink') { const dx = f.to.x - f.from.x, dz = f.to.y - f.from.y; F.obj.position.set((f.from.x + f.to.x) / 2 + 0.5, 0.5, (f.from.y + f.to.y) / 2 + 0.5); F.obj.scale.z = Math.hypot(dx, dz); F.obj.lookAt(f.to.x + 0.5, 0.5, f.to.y + 0.5); F.obj.material.opacity = 0.7 * (1 - k); }
       else { const e = f.id && game.ents.get(f.id); const px = e ? e.rx : f.x, pz = e ? e.ry : f.y; F.obj.position.set(px + 0.5, 0.1 + k * (f.kind === 'heal' ? 1.2 : 0.3), pz + 0.5); F.obj.scale.setScalar(0.5 + k); F.obj.material.opacity = 0.9 * (1 - k); }
     }
-    // chispas
-    for (const s of sparks3d) {
-      if (!s.live) continue;
-      s.life += dt;
-      if (s.life >= s.max) { s.live = false; s.obj.visible = false; continue; }
-      s.x += s.vx * dt; s.z += s.vz * dt; s.h += s.vh * dt; s.vh -= 6 * dt;
-      s.obj.position.set(s.x, Math.max(0.03, s.h), s.z);
-    }
+    // partículas y clima
+    fxp.update(dt); dustp.update(dt);
+    const zoneId = map.zones && me ? Number(map.zones[me.y * map.w + me.x]) || 0 : 0;
+    const wantWx = !DD.gfx || DD.gfx.weather ? weatherFor(map, zoneId, now) : 'none';
+    wx.set(wantWx, game.cam.x, game.cam.y);
+    wx.update(dt, game.cam.x, game.cam.y);
     // ascuas de antorchas y braseros
     if (Math.random() < 0.25 && built.props) {
       const lit = built.props.filter((p) => p.light && p.o.visible);
@@ -801,6 +941,27 @@
     for (const [, o] of lootObjs) if (o.userData.light) L.push({ x: o.position.x, y: 0.6, z: o.position.z, color: o.userData.light, intensity: 0.7, dist: 2.2 });
     for (const F of fx3d) if ((F.f.kind === 'blast' || F.f.kind === 'nova') && now >= F.start) L.push({ x: F.f.x + 0.5, y: 0.8, z: F.f.y + 0.5, color: fxColor(F.f), intensity: 3 * (1 - (now - F.start) / F.dur), dist: 6 });
     if (portalObj) L.push({ x: portalObj.position.x, y: 0.9, z: portalObj.position.z, color: '#7ad0ff', intensity: 1.8, dist: 5 });
+    // día y noche en el mundo abierto
+    if (map.kind === 'world') {
+      const dc = VIEW3D.dayCycle(serverNow());
+      game.daycycle = dc;
+      const sky = new THREE.Color('#0a1020').lerp(new THREE.Color('#6a8ac8'), dc.light).lerp(new THREE.Color('#c87a4a'), dc.dusk * 0.5);
+      const storm = wantWx === 'storm' || wantWx === 'sand' ? 0.55 : wantWx === 'rain' || wantWx === 'mist' ? 0.78 : 1;
+      if (wantWx === 'sand') sky.lerp(new THREE.Color('#a8784a'), 0.5);
+      stage.scene.background.copy(sky).multiplyScalar(storm);
+      stage.scene.fog.color.copy(stage.scene.background);
+      stage.scene.fog.near = wantWx === 'sand' ? 8 : wantWx === 'mist' ? 10 : 16; stage.scene.fog.far = wantWx === 'sand' ? 22 : 34;
+      stage.hemi.intensity = (0.22 + dc.light * 0.55) * storm;
+      stage.hemi.color.set('#3a4a80').lerp(new THREE.Color('#c8d8ff'), dc.light).lerp(new THREE.Color('#ffb070'), dc.dusk * 0.6);
+      stage.sun.intensity = dc.sun * 1.1 * storm;
+      stage.sun.color.set('#fff0d8').lerp(new THREE.Color('#ff9a50'), dc.dusk);
+      stage.sun.position.set(game.cam.x - 8 + dc.t * 16, 14, game.cam.y + 4); stage.sun.target.position.set(game.cam.x, 0, game.cam.y);
+      // de noche el farol del héroe y las hogueras se notan más
+      const nightBoost = 1 + (1 - dc.light) * 0.6;
+      for (const l of L) if (l.dist) l.intensity *= nightBoost;
+      if (wantWx === 'storm' && Math.random() < 0.004) game.flash = now;
+      if (game.flash && now - game.flash < 140) stage.hemi.intensity += 2.5;
+    } else stage.sun.intensity = 0;
     stage.setLights(L);
     stage.render();
 
@@ -819,6 +980,19 @@
     drawOverlay(now);
     if (game.showMap) drawMinimap();
     updateBar();
+  }
+
+  // Clima según la zona (y la hora): el tiempo cambia cada pocos minutos, igual para todos
+  function weatherFor(map, zone, now) {
+    if (map.kind !== 'world') return map.theme === 'volcan' ? 'embers' : 'motes';
+    const slot = Math.floor(now / 240000);
+    const r = (Math.sin(slot * 91.7 + zone * 13.3) * 43758.5453) % 1;
+    const roll = Math.abs(r);
+    if (zone <= 1) return roll < 0.12 ? 'storm' : roll < 0.4 ? 'rain' : 'none';
+    if (zone === 2) return roll < 0.35 ? 'rain' : 'mist';
+    if (zone === 3) return roll < 0.4 ? 'sand' : 'none';
+    if (zone === 4) return 'snow';
+    return 'ash';
   }
 
   // Nombres, barras de vida, números flotantes y bocadillos, sobre la escena 3D
@@ -867,6 +1041,7 @@
         const isMe = e.id === DD.myId;
         g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(e.name, s.x, s.y - 8);
         g.fillStyle = isMe ? '#ffe9a8' : '#f4ead2'; g.fillText(e.name, s.x, s.y - 8);
+        if (e.title) { g.font = 'italic 600 10px "Pixelify Sans", sans-serif'; g.strokeText('«' + e.title + '»', s.x, s.y - 21); g.fillStyle = '#e8b84a'; g.fillText('«' + e.title + '»', s.x, s.y - 21); }
         if (!isMe) { g.fillStyle = '#120a08'; g.fillRect(s.x - bw / 2 - 1, s.y - 1, bw + 2, 6); g.fillStyle = '#4cc85c'; g.fillRect(s.x - bw / 2, s.y, bw * Math.max(0, e.hp / e.maxHp), 4); }
         const b = game.bubbles.get(e.id);
         if (b && b.until > now) drawBubble(s.x, s.y - 22, b.text);
@@ -876,18 +1051,56 @@
     const lh = hov && game.mouseOnMap && game.loot.find((q) => q.x === hov.x && q.y === hov.y && q.it);
     if (lh && game.mouse) { if (game.tipFor !== lh.id) { game.tipFor = lh.id; DD.showItemTip(lh.it, { clientX: game.mouse.x, clientY: game.mouse.y }, 'Pásale por encima para recogerlo'); } }
     else if (game.tipFor) { game.tipFor = null; DD.hideItemTip(); }
+    // plantas: nombre al pasar por encima
+    if (game.mouse && game.mouseOnMap && game.herbs.length) {
+      const h = herbUnder(game.mouse.x, game.mouse.y);
+      if (h) {
+        const s = P(h.x + 0.5, 0.6, h.y + 0.5);
+        const M = PROG.MATS[PROG.HERB_BY_ZONE[h.zone]];
+        g.font = '600 12px "Pixelify Sans", sans-serif';
+        g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(`${M.icon} ${M.name} (clic)`, s.x, s.y); g.fillStyle = '#b8ff9a'; g.fillText(`${M.icon} ${M.name} (clic)`, s.x, s.y);
+      }
+    }
     for (let i = game.floaters.length - 1; i >= 0; i--) {
       const f = game.floaters[i];
-      const life = (now - f.start) / 1100;
+      const life = (now - f.start) / (f.crit ? 1300 : 1100);
       if (life >= 1 || !f.text) { game.floaters.splice(i, 1); continue; }
-      const s = P(f.x + 0.5, 1.3 + life * 0.8, f.y + 0.5);
-      g.font = `700 ${f.big ? 19 : 15}px "Pixelify Sans", sans-serif`;
+      const s = P(f.x + 0.5, 1.3 + life * (f.crit ? 1.1 : 0.8), f.y + 0.5);
+      // aparecen con un pequeño "golpe" de tamaño; los críticos, enormes
+      const pop = life < 0.12 ? 1 + (1 - life / 0.12) * (f.crit ? 0.9 : 0.4) : 1;
+      const size = (f.crit ? 28 : f.big ? 19 : 15) * pop;
+      g.font = `700 ${Math.round(size)}px "Pixelify Sans", sans-serif`;
       g.globalAlpha = 1 - Math.max(0, life - 0.6) / 0.4;
       const x = s.x + (f.text.length % 3 - 1) * 6;
-      g.lineWidth = 4; g.strokeStyle = '#120604'; g.strokeText(f.text, x, s.y);
-      g.fillStyle = f.color; g.fillText(f.text, x, s.y);
+      g.lineWidth = f.crit ? 6 : 4; g.strokeStyle = f.crit ? '#3a1200' : '#120604'; g.strokeText(f.text, x, s.y);
+      if (f.crit) { const gr = g.createLinearGradient(0, s.y - size / 2, 0, s.y + size / 2); gr.addColorStop(0, '#fff6a0'); gr.addColorStop(0.5, '#ffc030'); gr.addColorStop(1, '#ff6a10'); g.fillStyle = gr; }
+      else g.fillStyle = f.color;
+      g.fillText(f.text, x, s.y);
+      if (f.crit) { g.font = '700 11px "Pixelify Sans", sans-serif'; g.lineWidth = 3; g.strokeText('¡CRÍTICO!', x, s.y - size * 0.7); g.fillStyle = '#ffe27a'; g.fillText('¡CRÍTICO!', x, s.y - size * 0.7); }
       g.globalAlpha = 1;
     }
+    // cuenta atrás del duelo
+    if (game.duelAt) {
+      const left = game.duelAt - now;
+      if (left > -900) {
+        const txt = left > 0 ? String(Math.ceil(left / 1000)) : '¡LUCHA!';
+        const k = left > 0 ? 1 - (left % 1000) / 1000 : 1 + (-left) / 900;
+        g.globalAlpha = left > 0 ? 1 : Math.max(0, 1 + left / 900);
+        g.font = `${Math.round(70 + k * 30)}px "Jacquard 12", serif`;
+        g.lineWidth = 6; g.strokeStyle = '#000'; g.strokeText(txt, innerWidth / 2, innerHeight * 0.4);
+        g.fillStyle = left > 0 ? '#f2d36b' : '#ff6a4a'; g.fillText(txt, innerWidth / 2, innerHeight * 0.4);
+        g.globalAlpha = 1;
+      } else game.duelAt = 0;
+    }
+    // imágenes por segundo
+    game.fps.n++;
+    if (now - game.fps.t > 1000) { game.fps.v = game.fps.n; game.fps.n = 0; game.fps.t = now; }
+    if (DD.gfx && DD.gfx.fps) { g.textAlign = 'left'; g.font = '600 12px monospace'; g.fillStyle = '#7dff8a'; g.fillText(`${game.fps.v} fps`, 10, innerHeight - 12); g.textAlign = 'center'; }
+    // botón de pescar junto al agua
+    const meE = game.ents.get(DD.myId);
+    const nearWater = map.kind === 'world' && meE && [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]].some(([dx, dy]) => WATER_T.has(map.tiles[(meE.y + dy) * map.w + meE.x + dx]));
+    const fb = $('#dfish');
+    if (fb.classList.contains('hidden') === !!nearWater) fb.classList.toggle('hidden', !nearWater);
     // aviso de zona del mundo
     if (map.zones && game.ents.get(DD.myId)) {
       const me = game.ents.get(DD.myId);
@@ -996,6 +1209,7 @@
     sendDirJoy(sx, sy);
   }
   function sendDirJoy(dx, dy) {
+    if (dx || dy) game.joyDir = [dx, dy];
     const key = dx + ',' + dy;
     if (key === game.sentDir) return;
     game.sentDir = key;

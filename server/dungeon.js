@@ -5,6 +5,7 @@
 const crypto = require('crypto');
 const DUNGEON = require('../public/dungeon-data.js');
 const RULES = require('../public/rules/engine.js');
+const PROG = require('../public/rules/progress.js');
 const { PROPS } = require('./gen.js');
 
 const FAST = process.env.DD_TEST_FAST ? 0.25 : 1; // las pruebas automáticas aceleran los tiempos de espera
@@ -13,6 +14,9 @@ const PROJ_SPEED = 9;          // casillas por segundo
 const AGGRO = 7, LEASH = 14;
 const MAX_SUMMONS = 6;
 const FLUSH_MS = 100;
+const WATER = new Set(['w', 'v', 'q', '~']);
+const EVENT_MS = Number(process.env.DD_EVENT_MS) || 0; // las pruebas adelantan los jefes de mundo
+const PVP_MULT = 0.55; // en la arena los golpes duelen menos: los duelos duran más
 
 const rnd = () => crypto.randomInt(0, 1e9) / 1e9;
 const randInt = (a, b) => crypto.randomInt(Math.min(a, b), Math.max(a, b) + 1);
@@ -54,6 +58,11 @@ class Instance {
     this.npcs = def.npcs || [];
     this.waystones = def.waystones || [];
     this.pets = new Map(); // dueño -> mascota
+    this.mod = def.descent ? def.descent.mod : null; // desafío semanal del Descenso
+    this.duel = def.duel || null;                     // arena: { a, b, bet, startAt }
+    this.herbs = new Map((def.herbs || []).map((h) => [h.id, { ...h, readyAt: 0 }]));
+    this.worldBoss = null;
+    this.nextEventAt = this.kind === 'world' ? Date.now() + (EVENT_MS || PROG.WORLD_EVENT.firstMs) : 0;
     for (const n of this.npcs) this.blocked.add(n.y * this.w + n.x);
     const now = Date.now();
     for (const p of def.props || []) if (PROPS[p.k] && PROPS[p.k].b) this.blocked.add(p.y * this.w + p.x);
@@ -62,7 +71,8 @@ class Instance {
     if (def.spawns) {
       const packs = new Map();
       for (const s of def.spawns) {
-        const id = this.addEnemy(s.k, s.x, s.y, this.level, now, { elite: s.elite });
+        const elite = s.elite || (this.mod === 'elites' && !s.boss && rnd() < 0.28);
+        const id = this.addEnemy(s.k, s.x, s.y, this.level, now, { elite });
         if (id && s.pack) { if (!packs.has(s.pack)) packs.set(s.pack, []); packs.get(s.pack).push(id); this.enemies.get(id).pack = s.pack; }
       }
     }
@@ -161,11 +171,14 @@ class Instance {
   addEnemy(k, x, y, level, now, o = {}) {
     const m = RULES.monsterAt(k, level, o.elite);
     if (!m) return null;
+    if (this.mod === 'frenesi') { m.ms = Math.round(m.ms * 0.75); m.atk = Math.round(m.atk * 0.8); }
+    if (this.mod === 'gigantes') { m.hp = Math.round(m.hp * 1.5); m.xp = Math.round(m.xp * 1.5); m.big = true; }
+    if (o.hpMult) m.hp = Math.round(m.hp * o.hpMult);
     const id = 'e' + ++this.seq;
     this.enemies.set(id, {
       id, k: m.k, m, x, y, hp: m.hp, maxHp: m.hp, dir: 'S', sm: m.ms, summoned: !!o.summoned,
       nextStep: now + 300 + rnd() * 600, nextAttack: now + 700 + rnd() * 700, nextSpecial: now + 4000, nextHeal: now + 3000, nextSummon: now + 5000,
-      home: { x, y }, aggro: null, stunUntil: 0, slowUntil: 0, vulnUntil: 0, vuln: 0, dots: [],
+      home: { x, y }, aggro: null, stunUntil: 0, slowUntil: 0, vulnUntil: 0, vuln: 0, dots: [], hitters: new Set(),
     });
     return id;
   }
@@ -179,13 +192,15 @@ class Instance {
     const p = {
       user, x: pos.x, y: pos.y, d, dir: 'S', sm: d.moveMs, nextStep: 0, nextAttack: 0, path: [], goal: null, kdir: null,
       target: null, pending: null, tbuffs: {}, critNext: false, regenUntil: 0, lastHurt: 0, mounted: false, talkTo: null, zone: -1,
+      stunUntil: 0, slowUntil: 0, iframeUntil: 0, rollAt: 0, fishing: null, gatherTo: null,
     };
     this.players.set(user.id, p);
-    this.spawnPet(user);
+    if (this.kind === 'arena') { c.hp = d.hp; c.en = d.en; this.addProxy(p); }
+    else this.spawnPet(user);
     const def = this.def;
     this.hooks.send(user, {
       t: 'dstart',
-      dungeon: { id: this.id, name: def.name, tiles: def.tiles, w: this.w, h: this.h, kind: this.kind, theme: def.theme || null, level: this.level, labels: def.labels || [], props: def.props || [], zones: def.zones || null, waystones: this.waystones, npcs: this.npcs.map(({ id, name, x, y, look, shop }) => ({ id, name, x, y, look, shop })) },
+      dungeon: { id: this.id, name: def.name, tiles: def.tiles, w: this.w, h: this.h, kind: this.kind, theme: def.theme || null, level: this.level, labels: def.labels || [], props: def.props || [], zones: def.zones || null, waystones: this.waystones, npcs: this.npcs.map(({ id, name, x, y, look, shop }) => ({ id, name, x, y, look, shop })), descent: def.descent || null, duel: this.duel ? { startAt: this.duel.startAt, bet: this.duel.bet } : null },
       ...this.snapshot(p), you: this.privateState(p),
     });
     this.event({ e: 'join', id: user.id });
@@ -193,6 +208,7 @@ class Instance {
 
   leave(userId) {
     this.pets.delete(userId);
+    this.enemies.delete('pv:' + userId);
     if (!this.players.delete(userId)) return;
     for (const e of this.enemies.values()) if (e.aggro === userId) e.aggro = null;
     this.event({ e: 'leave', id: userId });
@@ -211,7 +227,7 @@ class Instance {
     const want = this.hooks.petFor ? this.hooks.petFor(user) : null;
     if (!want) this.pets.delete(user.id);
     else if (!pet || pet.type !== want.type) this.spawnPet(user);
-    else { pet.st = want.st; pet.maxHp = want.st.hp; pet.name = want.name; }
+    else { pet.st = want.st; pet.maxHp = want.st.hp; pet.name = want.name; pet.plvl = want.st.plvl; pet.evo = want.st.evo; }
     this.dirty = true;
     this.sendPrivate(p);
   }
@@ -222,7 +238,7 @@ class Instance {
     if (!want) { this.pets.delete(user.id); return; }
     const p = this.players.get(user.id);
     const pos = this.freeNear(p.x + 1, p.y, (x, y) => this.freeForPet(x, y));
-    this.pets.set(user.id, { id: 'pet:' + user.id, owner: user.id, type: want.type, name: want.name, st: want.st, x: pos.x, y: pos.y, sm: 200, dir: 'S', hp: want.st.hp, maxHp: want.st.hp, nextStep: 0, nextAttack: 0, downUntil: 0 });
+    this.pets.set(user.id, { id: 'pet:' + user.id, owner: user.id, type: want.type, name: want.name, st: want.st, plvl: want.st.plvl, evo: want.st.evo, x: pos.x, y: pos.y, sm: 200, dir: 'S', hp: want.st.hp, maxHp: want.st.hp, nextStep: 0, nextAttack: 0, nextSkill: 0, downUntil: 0 });
     this.dirty = true;
   }
   // pueblos y campamentos: los monstruos no entran a por nadie
@@ -248,7 +264,8 @@ class Instance {
             pet.dir = dirName(t.x - pet.x, t.y - pet.y);
             this.event({ e: 'swing', id: pet.id, t: t.id });
             if (rnd() < 0.5) t.petAggro = pet.id;
-            this.damageEnemy(o, t, roll(pet.st.dmg), { noCrit: true, kind: 'pet', name: pet.name });
+            if (pet.plvl >= RULES.PET_SKILL_LEVEL && now >= pet.nextSkill) this.petSkill(pet, o, t, now);
+            else this.damageEnemy(o, t, roll(pet.st.dmg), { noCrit: true, kind: 'pet', name: pet.name });
           }
           continue;
         }
@@ -256,6 +273,28 @@ class Instance {
         continue;
       }
       if (cheb(pet, o) > 2 && now >= pet.nextStep) this.petStep(pet, o, now);
+    }
+  }
+
+  // Habilidad de la mascota (más fuerte si ha evolucionado)
+  petSkill(pet, o, t, now) {
+    const S = RULES.PET_SKILLS[pet.type];
+    const k = 1 + (pet.evo || 0) * 0.5;
+    pet.nextSkill = now + S.cd;
+    this.event({ e: 'petskill', id: pet.id, name: S.name, owner: o.user.id, x: t.x, y: t.y });
+    if (S.kind === 'buff') {
+      o.tbuffs['pet:' + pet.type] = { dmgPct: S.dmgPct * k, until: now + S.dur };
+      this.event({ e: 'fx', kind: 'nova', x: pet.x, y: pet.y, radius: 1, color: '#ffb040' });
+      this.damageEnemy(o, t, roll(pet.st.dmg), { noCrit: true, kind: 'pet', name: pet.name });
+    } else if (S.kind === 'bleed') {
+      this.damageEnemy(o, t, roll(pet.st.dmg), { noCrit: true, kind: 'pet', name: S.name });
+      if (this.enemies.has(t.id)) this.addDot(o, t, roll(pet.st.dmg) * S.mult * k, S.dur);
+    } else if (S.kind === 'stun') {
+      this.damageEnemy(o, t, roll(pet.st.dmg) * S.mult * k, { noCrit: true, kind: 'pet', name: S.name });
+      if (this.enemies.has(t.id)) t.stunUntil = now + S.stun * k;
+    } else if (S.kind === 'aoe') {
+      this.event({ e: 'fx', kind: 'nova', x: pet.x, y: pet.y, radius: S.radius, color: '#c88a4a' });
+      for (const e of this.enemiesNear(pet, S.radius, o)) this.damageEnemy(o, e, roll(pet.st.dmg) * S.mult * k, { noCrit: true, kind: 'pet', name: S.name });
     }
   }
 
@@ -320,6 +359,137 @@ class Instance {
     this.dirty = true;
   }
 
+  // ---------- Oficios del mundo: pesca y hierbas ----------
+  waterNear(p) {
+    for (const [dx, dy] of DIRS) if (WATER.has(this.tile(p.x + dx, p.y + dy))) return { x: p.x + dx, y: p.y + dy };
+    return null;
+  }
+  fish(userId) {
+    const p = this.players.get(userId);
+    if (!p) return;
+    if (this.kind !== 'world') return this.whisper(p, 'Aquí no hay dónde pescar.');
+    const w = this.waterNear(p);
+    if (!w) return this.whisper(p, '🎣 Acércate a la orilla (agua, vado o ciénaga) para pescar.');
+    if (p.fishing) return;
+    p.mounted = false; p.path = []; p.goal = null; p.target = null; p.kdir = null;
+    const zone = this.def.zones ? Number(this.def.zones[p.y * this.w + p.x]) || 0 : 0;
+    p.fishing = { biteAt: Date.now() + (2000 + rnd() * 3500) * FAST, bit: 0, zone, at: w };
+    p.dir = dirName(w.x - p.x, w.y - p.y);
+    this.event({ e: 'fish', id: userId, x: w.x, y: w.y });
+    this.whisper(p, '🎣 Lanzas el sedal… cuando pique, ¡tira! (pulsa otra vez)');
+  }
+  hook(userId) {
+    const p = this.players.get(userId);
+    if (!p || !p.fishing) return this.fish(userId);
+    const f = p.fishing;
+    p.fishing = null;
+    this.event({ e: 'fishend', id: userId });
+    if (!f.bit) return this.whisper(p, 'Demasiado pronto: el pez se asusta.');
+    if (Date.now() - f.bit > 1400) return this.whisper(p, 'Demasiado tarde: se ha escapado.');
+    if (this.hooks.fish) this.hooks.fish(p.user, f.zone);
+    this.event({ e: 'fx', kind: 'splash', x: f.at.x, y: f.at.y });
+  }
+  gather(userId, id) {
+    const p = this.players.get(userId);
+    const h = this.herbs.get(id);
+    if (!p || !h) return;
+    if (h.readyAt > Date.now()) return this.whisper(p, 'Ya la han recogido. Volverá a crecer.');
+    p.kdir = null; p.target = null; p.pending = null; p.fishing = null;
+    if (cheb(p, h) <= 1) return this.takeHerb(p, h);
+    p.gatherTo = id; p.goal = { x: h.x, y: h.y }; p.path = [];
+  }
+  takeHerb(p, h) {
+    p.gatherTo = null; p.goal = null; p.path = [];
+    h.readyAt = Date.now() + 120000;
+    this.event({ e: 'fx', kind: 'buff', x: h.x, y: h.y, color: '#7dff8a' });
+    if (this.hooks.herb) this.hooks.herb(p.user, h.zone);
+  }
+
+  // ---------- Esquiva: una voltereta de dos casillas, invulnerable un instante ----------
+  roll(userId, dx, dy) {
+    const p = this.players.get(userId);
+    if (!p) return;
+    const now = Date.now();
+    if (now < p.rollAt || now < p.stunUntil || (this.duel && now < this.duel.startAt)) return;
+    const c = p.user.combat;
+    if (c.en < 8) return this.whisper(p, 'No te queda energía para esquivar.');
+    dx = Math.sign(Number(dx) || 0); dy = Math.sign(Number(dy) || 0);
+    if (!dx && !dy) { const f = { N: [0, -1], S: [0, 1], E: [1, 0], W: [-1, 0] }[p.dir] || [0, 1]; [dx, dy] = f; }
+    const from = { x: p.x, y: p.y };
+    for (let i = 0; i < 2; i++) {
+      const nx = p.x + dx, ny = p.y + dy;
+      if (!this.freeForPlayer(nx, ny) || !this.noCorner(p.x, p.y, dx, dy) || (DUNGEON.TILES[this.tile(nx, ny)] || {}).portal) break;
+      p.x = nx; p.y = ny;
+    }
+    c.en -= 8;
+    p.rollAt = now + 2500 * FAST;
+    p.iframeUntil = now + 450;
+    p.mounted = false; p.fishing = null;
+    p.path = []; p.goal = null; p.pending = null;
+    p.sm = 170; p.nextStep = now + 200;
+    p.dir = dirName(dx, dy);
+    this.event({ e: 'roll', id: userId, from, to: { x: p.x, y: p.y } });
+    this.privDirty(p);
+    if (p.x !== from.x || p.y !== from.y) this.onEnter(p);
+  }
+
+  // ---------- Jefes de mundo ----------
+  tickWorldEvent(now) {
+    if (this.kind !== 'world') return;
+    const wb = this.worldBoss;
+    if (wb) {
+      if (!this.enemies.has(wb.id)) { this.worldBoss = null; return; }
+      if (now >= wb.until) {
+        const e = this.enemies.get(wb.id);
+        this.enemies.delete(wb.id);
+        this.event({ e: 'die', id: wb.id, k: e.k, x: e.x, y: e.y, xp: 0 });
+        for (const o of [...this.enemies.values()]) if (o.fromWb) this.enemies.delete(o.id);
+        this.worldBoss = null;
+        if (this.hooks.announce) this.hooks.announce(`🌫️ ${e.m.name} se retira a las sombras. Nadie pudo con él esta vez.`);
+        this.nextEventAt = now + (EVENT_MS || PROG.WORLD_EVENT.everyMs);
+      }
+      return;
+    }
+    if (!this.nextEventAt || now < this.nextEventAt || !this.players.size) return;
+    // aparece cerca de un héroe al azar, en su zona, lejos de pueblos y campamentos
+    const list = [...this.players.values()];
+    const host = list[Math.floor(rnd() * list.length)];
+    let spot = null;
+    for (let i = 0; i < 60 && !spot; i++) {
+      const a = rnd() * Math.PI * 2, r = 6 + rnd() * 6;
+      const x = Math.round(host.x + Math.cos(a) * r), y = Math.round(host.y + Math.sin(a) * r);
+      if (this.freeForEnemy(x, y) && !this.inSafe({ x, y }) && !(DUNGEON.TILES[this.tile(x, y)] || {}).portal) spot = { x, y };
+    }
+    if (!spot) { this.nextEventAt = now + 30000; return; }
+    const lvl = Math.max(...list.map((p) => p.d.level));
+    const k = PROG.WORLD_BOSSES[Math.floor(rnd() * PROG.WORLD_BOSSES.length)];
+    const id = this.addEnemy(k, spot.x, spot.y, lvl + 1, now, { hpMult: 0.6 + 0.4 * list.length });
+    const e = this.enemies.get(id);
+    e.home = spot; e.wb = true;
+    this.worldBoss = { id, until: now + (EVENT_MS ? EVENT_MS * 4 : PROG.WORLD_EVENT.lastsMs) };
+    this.event({ e: 'worldboss', id, k, x: spot.x, y: spot.y, name: e.m.name });
+    const Z = this.def.zones ? RULES.ZONES[Number(this.def.zones[spot.y * this.w + spot.x]) || 0] : null;
+    if (this.hooks.announce) this.hooks.announce(`🌋 ¡${e.m.name} (nivel ${e.m.level}) ha aparecido${Z ? ' en ' + Z.name : ''}! Todos los héroes del mundo pueden luchar contra él durante 10 minutos.`);
+  }
+
+  // ---------- Arena: cada rival es un "enemigo" fantasma que refleja al otro héroe ----------
+  addProxy(p) {
+    const id = 'pv:' + p.user.id;
+    const m = { k: 'pvp', name: p.user.name, level: p.d.level, armor: p.d.armor, ms: 300, atk: 1000, range: 1, dmg: [0, 0], xp: 0, gold: [0, 0], specials: [], sets: [] };
+    this.enemies.set(id, { id, k: 'pvp', m, x: p.x, y: p.y, hp: p.user.combat.hp, maxHp: p.d.hp, dir: p.dir, sm: 200, pvp: true, owner: p.user.id, stunUntil: 0, slowUntil: 0, vulnUntil: 0, vuln: 0, dots: [], hitters: new Set(), home: { x: p.x, y: p.y } });
+  }
+  syncProxies(now) {
+    for (const e of this.enemies.values()) {
+      if (!e.pvp) continue;
+      const p = this.players.get(e.owner);
+      if (!p) { this.enemies.delete(e.id); continue; }
+      e.x = p.x; e.y = p.y; e.hp = p.user.combat.hp; e.maxHp = p.d.hp; e.m.armor = p.d.armor; e.m.level = p.d.level;
+      if (e.stunUntil > p.stunUntil) p.stunUntil = e.stunUntil;
+      if (e.slowUntil > p.slowUntil) p.slowUntil = e.slowUntil;
+      this.tickDots(e, now);
+    }
+  }
+
   event(ev) { this.events.push(ev); this.dirty = true; }
   whisper(p, text) { this.hooks.send(p.user, { t: 'dwhisper', text }); }
 
@@ -330,22 +500,22 @@ class Instance {
     if (!p) return;
     dx = Math.sign(Number(dx) || 0); dy = Math.sign(Number(dy) || 0);
     p.kdir = dx || dy ? [dx, dy] : null;
-    if (p.kdir) { p.path = []; p.goal = null; p.target = null; p.pending = null; }
+    if (p.kdir) { p.path = []; p.goal = null; p.target = null; p.pending = null; p.fishing = null; p.gatherTo = null; }
   }
 
   go(userId, x, y) {
     const p = this.players.get(userId);
     if (!p || !Number.isInteger(x) || !Number.isInteger(y)) return;
-    p.kdir = null; p.target = null; p.pending = null; p.talkTo = null;
+    p.kdir = null; p.target = null; p.pending = null; p.talkTo = null; p.fishing = null; p.gatherTo = null;
     p.goal = { x, y };
     p.path = this.path(p, p.goal, (a, b) => this.freeForPlayer(a, b));
   }
 
   attack(userId, id) {
     const p = this.players.get(userId);
-    if (!p || !this.enemies.has(id)) return;
+    if (!p || !this.enemies.has(id) || id === 'pv:' + userId) return;
     if (p.mounted) { p.mounted = false; this.dirty = true; }
-    p.talkTo = null;
+    p.talkTo = null; p.fishing = null; p.gatherTo = null;
     p.kdir = null; p.path = []; p.goal = null; p.pending = null;
     p.target = id;
   }
@@ -373,6 +543,8 @@ class Instance {
     const now = Date.now();
     const c = p.user.combat;
     if ((c.cds['cons:' + cid] || 0) > now) return;
+    if (this.mod === 'sobrios' && !C.spell) return this.whisper(p, '🚫 Desafío «Abstemios»: esta semana no hay pociones en el Descenso.');
+    if (this.kind === 'arena' && C.spell && C.spell.kind === 'return') return this.whisper(p, 'En la arena no hay huida posible.');
     if (C.spell && C.spell.kind !== 'return' && C.spell.kind !== 'healAll' && !this.nearestEnemy(p, C.spell.range)) return this.whisper(p, 'No hay enemigos a tiro.');
     if (!this.hooks.giveCons(p.user, cid, -1)) return this.whisper(p, `No te quedan: ${C.name}.`);
     c.cds['cons:' + cid] = now + (C.spell ? 1500 : 1000);
@@ -386,10 +558,10 @@ class Instance {
       if (s.kind === 'blast') {
         const t = (a.target && this.enemies.get(a.target)) || this.nearestEnemy(p, s.range);
         this.event({ e: 'fx', kind: 'blast', x: t.x, y: t.y, radius: s.radius, from: { x: p.x, y: p.y }, color: '#ff7a2a' });
-        for (const e of this.enemiesNear(t, s.radius)) this.damageEnemy(p, e, this.spellRoll(p) * s.mult, { magic: true, name: C.name });
+        for (const e of this.enemiesNear(t, s.radius, p)) this.damageEnemy(p, e, this.spellRoll(p) * s.mult, { magic: true, name: C.name });
       }
       if (s.kind === 'chain') {
-        const list = [...this.enemies.values()].filter((e) => cheb(e, p) <= s.range && this.los(p, e)).sort((x, y) => cheb(x, p) - cheb(y, p)).slice(0, s.targets);
+        const list = [...this.enemies.values()].filter((e) => e.owner !== p.user.id && cheb(e, p) <= s.range && this.los(p, e)).sort((x, y) => cheb(x, p) - cheb(y, p)).slice(0, s.targets);
         let from = { x: p.x, y: p.y };
         for (const e of list) { this.event({ e: 'fx', kind: 'bolt', from, to: { x: e.x, y: e.y }, color: '#fff27a' }); from = { x: e.x, y: e.y }; this.damageEnemy(p, e, this.spellRoll(p) * s.mult, { magic: true, name: C.name }); }
       }
@@ -399,10 +571,11 @@ class Instance {
 
   nearestEnemy(p, range) {
     let best = null, bd = Infinity;
-    for (const e of this.enemies.values()) { const d = cheb(e, p); if (d <= range && d < bd && this.los(p, e)) { bd = d; best = e; } }
+    for (const e of this.enemies.values()) { if (e.owner === p.user.id) continue; const d = cheb(e, p); if (d <= range && d < bd && this.los(p, e)) { bd = d; best = e; } }
     return best;
   }
-  enemiesNear(c, r) { return [...this.enemies.values()].filter((e) => cheb(e, c) <= r && this.los(c, e)); }
+  // los enemigos alrededor de un punto (sin contar el fantasma de quien ataca, en la arena)
+  enemiesNear(c, r, by) { return [...this.enemies.values()].filter((e) => (!by || e.owner !== by.user.id) && cheb(e, c) <= r && this.los(c, e)); }
 
   // ---------- Tiempo ----------
   tick(now) {
@@ -413,10 +586,12 @@ class Instance {
         if (!near) { g.respawnAt = 0; this.spawnGroup(g, now); this.dirty = true; } else g.respawnAt = now + 20000;
       }
     }
+    if (this.kind === 'arena') this.syncProxies(now);
     for (const p of [...this.players.values()]) this.tickPlayer(p, now, dt);
     const pl = [...this.players.values()];
+    this.tickWorldEvent(now);
     for (const e of [...this.enemies.values()]) {
-      if (!this.enemies.has(e.id)) continue;
+      if (!this.enemies.has(e.id) || e.pvp) continue;
       // en el mundo sólo se mueven los enemigos cerca de algún héroe
       if (this.kind === 'world' && !pl.some((p) => cheb(p, e) <= 28)) continue;
       this.tickEnemy(e, now, dt);
@@ -449,6 +624,19 @@ class Instance {
         this.hurtPlayer(p, p.d.hp * 0.05 * (Z.lv[0] - 2 - p.d.level > 4 ? 2 : 1), { name: 'Corrupción', magic: true, kind: 'corrupt' });
         if (!this.players.has(p.user.id)) return;
       }
+    }
+    if (p.stunUntil > now) return;
+    if (this.duel && now < this.duel.startAt) return; // cuenta atrás del duelo
+    if (p.fishing) {
+      const f = p.fishing;
+      if (!f.bit && now >= f.biteAt) { f.bit = now; this.hooks.send(p.user, { t: 'dbite' }); this.event({ e: 'bite', id: p.user.id }); }
+      else if (f.bit && now - f.bit > 1400) { p.fishing = null; this.event({ e: 'fishend', id: p.user.id }); this.whisper(p, 'El pez se ha escapado…'); }
+      return;
+    }
+    if (p.gatherTo) {
+      const h = this.herbs.get(p.gatherTo);
+      if (!h) p.gatherTo = null;
+      else if (cheb(p, h) <= 1) this.takeHerb(p, h);
     }
     if (p.talkTo) {
       const n = this.npcs.find((x) => x.id === p.talkTo);
@@ -496,7 +684,7 @@ class Instance {
     }
     if (!step) return;
     const [dx, dy] = step;
-    const speed = p.mounted && p.mount ? 1 / (1 + p.mount.speed / 100) : 1;
+    const speed = (p.mounted && p.mount ? 1 / (1 + p.mount.speed / 100) : 1) * (p.slowUntil > now ? 1.8 : 1);
     p.sm = Math.round(p.d.moveMs * (dx && dy ? 1.41 : 1) * speed);
     p.nextStep = now + p.sm;
     p.x += dx; p.y += dy;
@@ -532,16 +720,27 @@ class Instance {
       if (cave) { this.players.delete(p.user.id); this.event({ e: 'leave', id: p.user.id }); return this.hooks.portal(p.user, cave, { x: p.x, y: p.y + 1 }); }
     }
     for (const l of [...this.loot.values()]) if (l.x === p.x && l.y === p.y) this.pickUp(p, l);
+    for (const h of this.herbs.values()) if (h.x === p.x && h.y === p.y && h.readyAt <= Date.now()) this.takeHerb(p, h);
     if (this.portal && p.x === this.portal.x && p.y === this.portal.y) {
       const r = { xp: Math.round(40 * this.level * (1 + 0.1 * this.level)), gold: Math.round(30 + 12 * this.level) };
       this.hooks.reward(p.user, r.xp, r.gold);
       this.event({ e: 'loot', id: p.user.id, gold: r.gold, xp: r.xp, x: p.x, y: p.y });
+      if (this.def.descent && this.hooks.nextFloor) {
+        this.players.delete(p.user.id); this.pets.delete(p.user.id);
+        this.event({ e: 'leave', id: p.user.id });
+        return this.hooks.nextFloor(p.user, this.def.descent, r);
+      }
+      if (this.hooks.track) this.hooks.track(p.user, 'dungeon', {});
       this.leaveTo(p, 'win', r);
     }
   }
 
   pickUp(p, l) {
     if (l.gold) { this.hooks.reward(p.user, 0, l.gold); this.event({ e: 'loot', id: p.user.id, gold: l.gold, x: l.x, y: l.y }); this.loot.delete(l.id); return; }
+    if (l.mat) {
+      if (this.hooks.giveMat) this.hooks.giveMat(p.user, l.mat, l.n || 1);
+      this.event({ e: 'loot', id: p.user.id, mat: l.mat, n: l.n || 1, x: l.x, y: l.y }); this.loot.delete(l.id); return;
+    }
     if (l.cons) {
       if (!this.hooks.giveCons(p.user, l.cons, l.n || 1)) return;
       this.event({ e: 'loot', id: p.user.id, cons: l.cons, x: l.x, y: l.y }); this.loot.delete(l.id); return;
@@ -571,6 +770,7 @@ class Instance {
     for (const it of RULES.rollLoot(rnd, { ilvl: this.level, mf: p.d.mf, classes: this.partyClasses(), chest: true })) this.dropAt(ch.x, ch.y, { item: it });
     if (rnd() < 0.5) this.dropAt(ch.x, ch.y, { cons: rnd() < 0.7 ? 'pocion-vida-p' : 'pocion-energia' });
     this.event({ e: 'chest', id: ch.id, by: p.user.id, x: ch.x, y: ch.y });
+    if (this.hooks.track) this.hooks.track(p.user, 'chest', {});
   }
 
   leaveTo(p, reason, info) {
@@ -617,8 +817,20 @@ class Instance {
     if (e.vulnUntil > Date.now()) dmg *= 1 + e.vuln / 100;
     if (o.undead && e.m.undead) dmg *= 1 + o.undead;
     dmg *= 1 - RULES.reduction(o.magic ? e.m.armor * 0.5 : e.m.armor, p.d.level);
+    if (e.pvp) {
+      // duelo: el golpe va al héroe rival (ya reducido por su armadura)
+      const t = this.players.get(e.owner);
+      if (!t || this.duelOver) return 0;
+      const before = t.user.combat.hp;
+      this.hurtPlayer(t, dmg * PVP_MULT * (o.magic ? 1 - t.d.magicRes / 100 : 1), { by: p.user.id, raw: true, canDodge: o.kind === 'melee' || o.kind === 'ranged', kind: o.kind || 'ability', crit, name: o.name || null });
+      const dealt = Math.max(0, before - t.user.combat.hp);
+      const ls = p.d.lifesteal / 100 + (o.leech || 0);
+      if (ls > 0 && dealt > 0) this.heal(p, Math.max(1, Math.round(dealt * ls)), o.leech ? o.name : 'Robo de vida');
+      return dealt;
+    }
     dmg = Math.max(1, Math.round(dmg));
     e.hp -= dmg;
+    e.hitters.add(p.user.id);
     e.aggro = e.aggro || p.user.id;
     this.wakePack(e, p.user.id);
     this.event({ e: 'hit', by: p.user.id, t: e.id, dmg, crit, kind: o.kind || 'ability', fx: o.fx || null, name: o.name || null });
@@ -690,7 +902,7 @@ class Instance {
       case 'blast': case 'nova': {
         const c0 = ab.kind === 'nova' ? { x: p.x, y: p.y } : point;
         this.event({ e: 'fx', kind: ab.kind === 'nova' ? 'nova' : 'blast', x: c0.x, y: c0.y, radius: ab.radius, from: { x: p.x, y: p.y }, color });
-        for (const e of this.enemiesNear(c0, ab.radius)) {
+        for (const e of this.enemiesNear(c0, ab.radius, p)) {
           if (ab.mult) this.damageEnemy(p, e, dmgFor(), { magic, name: ab.name, fx: ab.fx });
           if (!this.enemies.has(e.id)) continue;
           if (ab.stun) e.stunUntil = now + ab.stun;
@@ -702,6 +914,7 @@ class Instance {
       case 'cone': {
         const dx = point.x - p.x, dy = point.y - p.y;
         const hits = [...this.enemies.values()].filter((e) => {
+          if (e.owner === p.user.id) return false;
           const ex = e.x - p.x, ey = e.y - p.y, dist = Math.max(Math.abs(ex), Math.abs(ey));
           if (dist < 1 || dist > ab.range) return false;
           return (dx * ex + dy * ey) / (Math.hypot(dx, dy) * Math.hypot(ex, ey) || 1) >= 0.75 && this.los(p, e);
@@ -775,7 +988,7 @@ class Instance {
       if (!p || now > a.until) { this.auras.splice(i, 1); continue; }
       if (now < a.next) continue;
       a.next = now + 1000;
-      for (const e of this.enemiesNear(p, a.radius)) this.damageEnemy(p, e, this.spellRoll(p) * a.mult, { magic: true, name: a.name, noCrit: true, fx: 'holy' });
+      for (const e of this.enemiesNear(p, a.radius, p)) this.damageEnemy(p, e, this.spellRoll(p) * a.mult, { magic: true, name: a.name, noCrit: true, fx: 'holy' });
     }
   }
 
@@ -798,11 +1011,32 @@ class Instance {
       const xp = Math.max(1, Math.round(share * RULES.xpPenalty(o.d.level, e.m.level)));
       if (o === p) shown = xp;
       this.hooks.reward(o.user, xp, 0);
+      const pet = this.pets.get(o.user.id);
+      if (pet && pet.downUntil <= Date.now() && this.hooks.petXp && (this.kind !== 'world' || cheb(o, e) <= 20)) this.hooks.petXp(o.user, Math.max(1, Math.round(xp * 0.6)));
     }
     this.event({ e: 'die', id: e.id, k: e.k, x: e.x, y: e.y, by: p.user.id, xp: shown || Math.round(share), boss: e.m.boss || undefined, elite: e.m.elite || undefined });
-    if (this.hooks.kill) for (const o of party) if (this.kind !== 'world' || cheb(o, e) <= 20) this.hooks.kill(o.user, e.k);
+    const info = { elite: e.m.elite, boss: e.m.boss, world: !!e.wb, fam: (RULES.MONSTERS[e.k] || {}).fam };
+    if (this.hooks.kill) for (const o of party) if (this.kind !== 'world' || cheb(o, e) <= 20) this.hooks.kill(o.user, e.k, info);
+    // desafío «cadáveres explosivos»: estallan al rato
+    if (this.mod === 'explosivos' && !e.m.boss) {
+      const cells = [];
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (this.walkTile(e.x + dx, e.y + dy)) cells.push([e.x + dx, e.y + dy]);
+      const id = 't' + ++this.seq;
+      this.teles.push({ id, by: e.id, orphan: true, cells, at: Date.now() + 900, dmg: roll(e.m.dmg) * 1.6, magic: true, level: e.m.level, kind: 'nova' });
+      this.event({ e: 'tele', id, kind: 'nova', cells, dur: 900 });
+    }
+    // jefe de mundo: recompensa para todos los que le hicieron daño
+    if (e.wb) {
+      this.worldBoss = null;
+      this.nextEventAt = Date.now() + (EVENT_MS || PROG.WORLD_EVENT.everyMs);
+      for (const o of [...this.enemies.values()]) if (o.summoned) { this.enemies.delete(o.id); this.event({ e: 'die', id: o.id, k: o.k, x: o.x, y: o.y, xp: 0 }); }
+      const heroes = [...e.hitters].map((id) => this.players.get(id)).filter(Boolean);
+      if (this.hooks.worldBoss) this.hooks.worldBoss(heroes.map((h) => h.user), e.m, p.user);
+    }
     if (e.summoned) return;
-    const gold = randInt(e.m.gold[0], e.m.gold[1]);
+    for (const md of PROG.matDrops(rnd, e.m)) this.dropAt(e.x, e.y, md);
+    let gold = randInt(e.m.gold[0], e.m.gold[1]);
+    if (this.mod === 'sobrios') gold = Math.round(gold * 1.5);
     if (gold > 0) this.dropAt(e.x, e.y, { gold });
     const items = RULES.rollLoot(rnd, { ilvl: e.m.level, mf: p.d.mf, classes: this.partyClasses(), elite: e.m.elite, boss: e.m.boss, sets: e.m.sets });
     for (const it of items) this.dropAt(e.x, e.y, { item: it });
@@ -822,19 +1056,31 @@ class Instance {
     const c = p.user.combat;
     const now = Date.now();
     p.lastHurt = now;
+    if (p.iframeUntil > now && o.kind !== 'corrupt') { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true }); return; }
     if (o.canDodge && rnd() * 100 < p.d.dodge) { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true }); return; }
-    if (o.magic) dmg *= 1 - p.d.magicRes / 100;
+    if (o.raw) { /* ya viene reducido (duelos) */ } else if (o.magic) dmg *= 1 - p.d.magicRes / 100;
     else if (o.level) dmg *= 1 - RULES.reduction(p.d.armor, o.level);
     let blocked = false;
     if (!o.magic && p.d.block && rnd() * 100 < p.d.block) { dmg *= 0.35; blocked = true; }
     dmg *= 1 - Math.min(60, this.buffSum(p, 'dr')) / 100;
     dmg = Math.max(1, Math.round(dmg));
     c.hp -= dmg;
-    this.event({ e: 'hit', by: o.by || null, t: p.user.id, dmg, block: blocked || undefined, name: o.name || null, kind: o.kind || 'melee' });
+    p.fishing = null;
+    this.event({ e: 'hit', by: o.by || null, t: p.user.id, dmg, crit: o.crit || undefined, block: blocked || undefined, name: o.name || null, kind: o.kind || 'melee' });
+    // desafío «sed de sangre»: el enemigo se cura con lo que hiere
+    if (this.mod === 'vampiros' && o.by) { const e = this.enemies.get(o.by); if (e) { const h = Math.round(dmg * 0.3); e.hp = Math.min(e.maxHp, e.hp + h); this.event({ e: 'eheal', id: e.id, by: e.id, amount: h }); } }
     this.privDirty(p);
     if (c.hp > 0) return;
     c.hp = 0;
     this.event({ e: 'down', id: p.user.id });
+    if (this.kind === 'arena') {
+      // el duelo acaba: nadie muere de verdad en el sótano de Alfonso
+      if (this.duelOver) return;
+      this.duelOver = true;
+      c.hp = 1;
+      if (this.hooks.duelEnd) setTimeout(() => this.hooks.duelEnd(p.user, this), 900);
+      return;
+    }
     this.leaveTo(p, 'down');
   }
 
@@ -844,9 +1090,8 @@ class Instance {
     for (const o of this.enemies.values()) if (o.pack === e.pack && !o.aggro && cheb(o, e) <= 8) o.aggro = userId;
   }
 
-  tickEnemy(e, now, dt) {
-    const m = e.m;
-    // venenos y quemaduras
+  // venenos y quemaduras
+  tickDots(e, now) {
     for (let i = e.dots.length - 1; i >= 0; i--) {
       const d = e.dots[i];
       if (now < d.next) continue;
@@ -855,8 +1100,14 @@ class Instance {
       if (p) this.damageEnemy(p, e, d.per, { noCrit: true, magic: true, kind: 'dot' });
       else { e.hp -= Math.round(d.per); this.dirty = true; }
       if (d.left <= 0) e.dots.splice(i, 1);
-      if (!this.enemies.has(e.id)) return;
+      if (!this.enemies.has(e.id)) return false;
     }
+    return true;
+  }
+
+  tickEnemy(e, now, dt) {
+    const m = e.m;
+    if (!this.tickDots(e, now)) return;
     if (m.regen && e.hp < e.maxHp) { e.hp = Math.min(e.maxHp, e.hp + m.regen * dt); }
     if (e.stunUntil > now) return;
 
@@ -1045,7 +1296,7 @@ class Instance {
       const t = this.teles[i];
       if (now < t.at) continue;
       this.teles.splice(i, 1);
-      if (!this.enemies.has(t.by)) continue;
+      if (!t.orphan && !this.enemies.has(t.by)) continue;
       const set = new Set(t.cells.map(([x, y]) => x + ',' + y));
       this.event({ e: 'boom', id: t.id, kind: t.kind });
       for (const p of [...this.players.values()]) if (set.has(p.x + ',' + p.y)) this.hurtPlayer(p, t.dmg, { by: t.by, level: t.level, magic: t.magic, kind: t.kind });
@@ -1060,7 +1311,7 @@ class Instance {
       const s = spot[Math.floor(rnd() * spot.length)];
       const id = this.addEnemy(k, s.x, s.y, e.m.level, now, { summoned: true });
       const ne = this.enemies.get(id);
-      ne.aggro = e.aggro; ne.nextAttack = now + 1000;
+      ne.aggro = e.aggro; ne.nextAttack = now + 1000; ne.fromWb = !!e.wb;
       this.event({ e: 'summon', id, x: s.x, y: s.y });
     }
   }
@@ -1078,11 +1329,12 @@ class Instance {
     // en el mundo cada jugador recibe sólo lo que tiene cerca
     const near = viewer && this.kind === 'world' ? (o) => cheb(o, viewer) <= 26 : () => true;
     return {
-      players: [...this.players.values()].map((p) => ({ id: p.user.id, name: p.user.name, look: p.user.look, x: p.x, y: p.y, sm: p.sm, hp: Math.round(p.user.combat.hp), maxHp: p.d.hp, dir: p.dir, lvl: p.d.level, buffs: Object.keys(p.tbuffs), mount: p.mounted && p.mount ? p.mount.type : undefined })),
-      pets: [...this.pets.values()].filter((pt) => pt.downUntil <= now).map((pt) => ({ id: pt.id, owner: pt.owner, k: pt.type, name: pt.name, x: pt.x, y: pt.y, sm: pt.sm, hp: Math.round(pt.hp), maxHp: pt.maxHp, dir: pt.dir })),
-      enemies: [...this.enemies.values()].filter(near).map((e) => ({ id: e.id, k: e.k, x: e.x, y: e.y, sm: e.sm, hp: Math.max(0, Math.round(e.hp)), maxHp: e.maxHp, dir: e.dir, lvl: e.m.level, elite: e.m.elite || undefined, boss: e.m.boss || undefined, stun: e.stunUntil > now || undefined, mark: e.vulnUntil > now || undefined, summoned: e.summoned || undefined })),
+      players: [...this.players.values()].map((p) => ({ id: p.user.id, name: p.user.name, title: p.user.profile && p.user.profile.title || undefined, look: p.user.look, x: p.x, y: p.y, sm: p.sm, hp: Math.round(p.user.combat.hp), maxHp: p.d.hp, dir: p.dir, lvl: p.d.level, buffs: Object.keys(p.tbuffs), mount: p.mounted && p.mount ? p.mount.type : undefined, fishing: p.fishing ? 1 : undefined, stun: p.stunUntil > now || undefined })),
+      pets: [...this.pets.values()].filter((pt) => pt.downUntil <= now).map((pt) => ({ id: pt.id, owner: pt.owner, k: pt.type, name: pt.name, x: pt.x, y: pt.y, sm: pt.sm, hp: Math.round(pt.hp), maxHp: pt.maxHp, dir: pt.dir, evo: pt.evo || undefined, plvl: pt.plvl })),
+      enemies: [...this.enemies.values()].filter((e) => !e.pvp && near(e)).map((e) => ({ id: e.id, k: e.k, x: e.x, y: e.y, sm: e.sm, hp: Math.max(0, Math.round(e.hp)), maxHp: e.maxHp, dir: e.dir, lvl: e.m.level, elite: e.m.elite || undefined, boss: e.m.boss || undefined, wb: e.wb || undefined, big: e.m.big || undefined, stun: e.stunUntil > now || undefined, mark: e.vulnUntil > now || undefined, summoned: e.summoned || undefined })),
+      herbs: [...this.herbs.values()].filter((h) => h.readyAt <= now && near(h)).map((h) => ({ id: h.id, x: h.x, y: h.y, zone: h.zone })),
       chests: [...this.chests.values()],
-      loot: [...this.loot.values()].filter(near).map((l) => ({ id: l.id, x: l.x, y: l.y, gold: l.gold ? 1 : undefined, cons: l.cons, r: l.item ? l.item.rarity : undefined, slot: l.item ? l.item.slot : undefined, name: l.item ? l.item.name : undefined, it: l.item || undefined })),
+      loot: [...this.loot.values()].filter(near).map((l) => ({ id: l.id, x: l.x, y: l.y, gold: l.gold ? 1 : undefined, cons: l.cons, mat: l.mat, r: l.item ? l.item.rarity : undefined, slot: l.item ? l.item.slot : undefined, name: l.item ? l.item.name : undefined, it: l.item || undefined })),
       portal: this.portal,
       start: this.start,
     };

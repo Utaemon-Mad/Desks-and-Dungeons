@@ -41,6 +41,7 @@
       <button class="tool" data-act="guide" title="Guía del juego"><span class="ico">📖</span><span>Guía</span></button>
       <button class="tool tavern-only" data-act="world" title="Salir al mundo abierto"><span class="ico">🗺️</span><span>Mundo</span></button>
       <button class="tool tavern-only" data-act="stable" title="Establo: mascotas y monturas"><span class="ico">🐾</span><span>Establo</span></button>
+      <button class="tool tavern-only" data-act="svc" title="Forja, cocina, tablón, fama y arena"><span class="ico">🏛️</span><span>Pueblo</span></button>
       <button class="tool tavern-only" data-act="dungeons" title="Mazmorras"><span class="ico">🗝️</span><span>Mazmorras</span></button>
       <form id="chat-form" autocomplete="off">
         <input id="chat-input" maxlength="200" placeholder="Di algo a la taberna… (Enter)" enterkeyhint="send">
@@ -62,6 +63,16 @@
       <button data-m="hero">🧙 Cambiar de héroe</button>
       <button data-m="help">📜 Comandos</button>
       <button data-m="sound">🔔 Sonido: <b id="sound-state">sí</b></button>
+      <button data-m="gfx">⚙️ Gráficos y rendimiento</button>
+    </div>
+
+    <div id="svc-pop" class="pop panel hidden">
+      <button data-s="forge">⚒️ Forja de Brunilda</button>
+      <button data-s="cook">🍲 Cocina de Alfonso</button>
+      <button data-s="board">📋 Tablón de misiones</button>
+      <button data-s="fame">🏅 Logros, títulos y clasificación</button>
+      <button data-s="room">🏠 Mi habitación</button>
+      <button data-s="descent">🌀 Descenso infinito</button>
     </div>
 
     <!-- Editor de la taberna -->
@@ -91,6 +102,13 @@
       <div id="dlog" class="dlog"></div>
       <div id="dactions" class="dactions"></div>
       <div id="joy" title="Joystick"><i></i></div>
+      <div id="dextra">
+        <button id="droll" class="btn alt" type="button" title="Esquivar (Espacio)">🤸</button>
+        <button id="dfish" class="btn alt hidden" type="button" title="Pescar (G)">🎣</button>
+      </div>
+      <div id="dbite" class="hidden">¡PICA! <small>pulsa 🎣 o G</small></div>
+      <div id="dbanner" class="hidden"></div>
+      <div id="dcount" class="hidden"></div>
     </div>
 
     <!-- Tu héroe: retrato, nivel, vida, energía, experiencia y oro -->
@@ -234,6 +252,73 @@
     </div>
   </div>
 
+  <!-- Forja de Brunilda -->
+  <div id="forgewin" class="overlay win hidden">
+    <div class="panel sheet-panel">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">⚒️ FORJA DE BRUNILDA</div>
+      <div id="forge-tabs" class="manual-tabs">
+        <button type="button" data-tab="up">Mejorar</button>
+        <button type="button" data-tab="enchant">Encantar</button>
+        <button type="button" data-tab="combine">Combinar 3 → 1</button>
+        <button type="button" data-tab="salvage">Desguazar</button>
+      </div>
+      <div id="forge-mats" class="mats-row"></div>
+      <div id="forge-body" class="forge-body"></div>
+    </div>
+  </div>
+
+  <!-- Cocina de Alfonso -->
+  <div id="cookwin" class="overlay win hidden">
+    <div class="panel card wide">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">🍲 LA COCINA DE ALFONSO</div>
+      <div id="cook-body"></div>
+    </div>
+  </div>
+
+  <!-- Tablón de misiones -->
+  <div id="boardwin" class="overlay win hidden">
+    <div class="panel card wide">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">📋 TABLÓN DE LA TABERNA</div>
+      <div id="board-body"></div>
+    </div>
+  </div>
+
+  <!-- Fama: logros, títulos y clasificación -->
+  <div id="famewin" class="overlay win hidden">
+    <div class="panel sheet-panel">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">🏅 FAMA</div>
+      <div id="fame-tabs" class="manual-tabs">
+        <button type="button" data-tab="logros">Logros y títulos</button>
+        <button type="button" data-tab="ranks">Clasificación semanal</button>
+        <button type="button" data-tab="stats">Estadísticas</button>
+      </div>
+      <div id="fame-body" class="manual-body"></div>
+    </div>
+  </div>
+
+  <!-- Habitación con trofeos -->
+  <div id="roomwin" class="overlay win hidden">
+    <div class="panel sheet-panel room-panel">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title" id="room-title">🏠 HABITACIÓN</div>
+      <canvas id="room-cv" width="720" height="420"></canvas>
+      <div id="room-info"></div>
+    </div>
+  </div>
+
+  <!-- Ajustes de gráficos -->
+  <div id="optwin" class="overlay win hidden">
+    <div class="panel card">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">⚙️ GRÁFICOS Y RENDIMIENTO</div>
+      <div id="opt-body"></div>
+    </div>
+  </div>
+
   <!-- Guía -->
   <div id="guide" class="overlay win hidden">
     <div class="panel sheet-panel">
@@ -253,6 +338,7 @@
   <script src="map.js"></script>
   <script src="dungeon-data.js"></script>
   <script src="rules/engine.js"></script>
+  <script src="rules/progress.js"></script>
   <script src="vendor/three.min.js"></script>
   <script src="sprites.js"></script>
   <script src="models.js"></script>
@@ -260,6 +346,7 @@
   <script src="dsprites.js"></script>
   <script src="game.js"></script>
   <script src="ui.js"></script>
+  <script src="ui2.js"></script>
   <script src="dungeon.js"></script>
 </body>
 </html>

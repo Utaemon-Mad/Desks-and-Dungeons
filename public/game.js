@@ -834,7 +834,7 @@
 
   function makeUser(u) {
     return {
-      id: u.id, name: u.name, look: u.look, gold: u.gold, xp: u.xp || 0, level: u.level || 1, where: u.where || null,
+      id: u.id, name: u.name, title: u.title || null, look: u.look, gold: u.gold, xp: u.xp || 0, level: u.level || 1, where: u.where || null,
       tx: u.x, ty: u.y,          // casilla destino
       px: u.x, py: u.y,          // posición actual (continua)
       path: [], dir: 'S', phase: 0,
@@ -1272,6 +1272,11 @@
       rrect(s.x - w / 2, ny - 9, w, 17, 4, isMe ? 'rgba(90,60,10,.85)' : 'rgba(20,10,4,.75)', isMe ? '#f2c94c' : null, 1);
       ctx.fillStyle = isMe ? '#ffe9a8' : '#f4ead2';
       ctx.fillText(u.name, s.x, ny);
+      if (u.title) {
+        ctx.font = 'italic 600 10px "Pixelify Sans", sans-serif';
+        ctx.lineWidth = 3; ctx.strokeStyle = '#000'; ctx.strokeText('«' + u.title + '»', s.x, ny - 15);
+        ctx.fillStyle = '#e8b84a'; ctx.fillText('«' + u.title + '»', s.x, ny - 15);
+      }
       if (u.emote && u.emote.until > now) {
         const left = (u.emote.until - now) / 2600;
         ctx.font = '24px serif'; ctx.globalAlpha = Math.min(1, left * 3);
@@ -1569,6 +1574,7 @@
       }
       case 'system': logLine(m); break;
       case 'error': toast(m.text); break;
+      case 'title': { const u = users.get(m.id); if (u) { u.title = m.title; renderHeroes(); } break; }
       default: DD.emit(m.t, m);
     }
     if (m.t === 'chat' || m.t === 'action' || m.t === 'roll' || m.t === 'system') DD.emit('log', m);
@@ -1624,6 +1630,7 @@
       card.className = 'hero' + (u.id === myId ? ' me' : '');
       card.dataset.id = u.id;
       const name = document.createElement('div'); name.className = 'hname'; name.textContent = u.name + (u.id === myId ? ' (tú)' : '');
+      if (u.title) { const tt = document.createElement('small'); tt.className = 'htitle'; tt.textContent = ` «${u.title}»`; name.appendChild(tt); }
       const row = document.createElement('div'); row.className = 'row';
       row.appendChild(portrait(u.look));
       const stats = document.createElement('div'); stats.className = 'stats';
@@ -1645,7 +1652,9 @@
         sheetBtn.onclick = () => DD.emit('open-char', 'ficha');
         const eq = document.createElement('button'); eq.className = 'btn alt'; eq.textContent = '🎒 EQUIPO';
         eq.onclick = () => DD.emit('open-char', 'equipo');
-        acts.append(sheetBtn, eq);
+        const room = document.createElement('button'); room.className = 'btn alt'; room.textContent = '🏠 MI HABITACIÓN';
+        room.onclick = () => net.send({ t: 'room:get' });
+        acts.append(sheetBtn, eq, room);
       } else {
         const greet = document.createElement('button'); greet.className = 'btn'; greet.textContent = 'SALUDAR';
         greet.onclick = () => net.send({ t: 'greet', to: u.id });
@@ -1653,7 +1662,11 @@
         round.onclick = () => net.send({ t: 'round', to: u.id });
         const trade = document.createElement('button'); trade.className = 'btn alt'; trade.textContent = '🤝 COMERCIAR';
         trade.onclick = () => net.send({ t: 'trade:req', to: u.id });
-        acts.append(greet, round, trade);
+        const duel = document.createElement('button'); duel.className = 'btn alt'; duel.textContent = '🤺 DUELO';
+        duel.onclick = () => DD.emit('duel-ask', u);
+        const room = document.createElement('button'); room.className = 'btn alt'; room.textContent = '🏠 HABITACIÓN';
+        room.onclick = () => net.send({ t: 'room:get', id: u.id });
+        acts.append(greet, round, trade, duel, room);
       }
       card.appendChild(acts);
       heroListEl.appendChild(card);
@@ -1699,6 +1712,7 @@
     else if (act === 'guide') { closePops(); DD.emit('open-guide'); }
     else if (act === 'world') { closePops(); DD.emit('open-world'); }
     else if (act === 'stable') { closePops(); DD.emit('open-stable'); }
+    else if (act === 'svc') { closePops(); DD.emit('toggle-services', b); }
     else if (act === 'heroes') {
       closePops();
       if (window.innerWidth <= 820) heroesEl.classList.toggle('open');
@@ -1720,6 +1734,7 @@
       catch { prompt('Copia este enlace y pásaselo a tus amigos:', url); }
     } else if (m === 'hero') { net.close(); users.clear(); showLogin(); }
     else if (m === 'help') showHelp();
+    else if (m === 'gfx') DD.emit('open-options');
     else if (m === 'sound') { sound = !sound; $('#sound-state').textContent = sound ? 'sí' : 'no'; save('dd-sound', sound ? '1' : '0'); return; }
     menuPop.classList.add('hidden');
   });

@@ -1,4 +1,4 @@
-/* global DD, RULES, MAP, SPRITES, DSPRITES */
+/* global DD, RULES, MAP, SPRITES, DSPRITES, PROG */
 // Ventanas del juego: tu retrato (con el icono rojo al subir de nivel), reparto de puntos, ficha, equipo e
 // inventario, tiendas de los tres comerciantes, comercio entre jugadores, guía y tooltips de objetos.
 (() => {
@@ -96,6 +96,7 @@
   document.addEventListener('pointerdown', (e) => { if (e.pointerType === 'touch' && !e.target.closest('.icell, .ctx-menu')) hideTip(); });
   DD.showItemTip = showTip;
   DD.hideItemTip = hideTip;
+  DD.ui = { el, openOverlay, closeOverlay, itemCell: (it, o) => itemCell(it, o), actionMenu: (e, a) => actionMenu(e, a), hideTip };
 
   // Casilla de objeto (icono con borde de rareza)
   function itemCell(it, opts = {}) {
@@ -398,6 +399,13 @@
     const load = el('div', 'load' + (d.overloaded ? ' over' : ''), `⚖️ Carga ${d.weight} / ${d.capacity} kg${d.overloaded ? ' · ¡vas sobrecargado y andas más lento!' : ''}`);
     load.title = 'La Fuerza aumenta lo que puedes cargar. Una mascota lleva más.';
     bagBox.insertBefore(load, grid);
+    // materiales de la forja, peces y hierbas (no ocupan sitio en la mochila)
+    const mats = Object.entries(p.mats || {}).filter(([k, n]) => n > 0 && window.PROG && PROG.MATS[k]);
+    if (mats.length) {
+      const row = el('div', 'mats-row');
+      for (const [k, n] of mats) { const t = el('span', 'mat', `${PROG.MATS[k].icon} ${n}`); t.title = PROG.MATS[k].name + (PROG.MATS[k].desc ? ' — ' + PROG.MATS[k].desc : ''); row.appendChild(t); }
+      bagBox.insertBefore(row, grid);
+    }
     if (p.pet) {
       const P = RULES.PETS[p.pet.type];
       const st = RULES.petStats(p.pet.type, RULES.levelFromXp(p.xp));

@@ -449,11 +449,19 @@
     return m;
   }
 
-  function buildPet(type) {
+  // evo: 0 normal, 1 y 2 evolucionada (más grande, otro pelaje y, al final, runas que brillan)
+  function buildPet(type, evo = 0) {
     const P = RULES.PETS[type] || RULES.PETS.perro;
-    const m = P.sprite === 'bear' ? quadruped({ color: P.tint, len: 0.7, h: 0.28, w: 0.36, th: 0.34, hw: 0.24, hh: 0.22, ears: true, belly: true }) : quadruped({ color: P.tint, ears: true, tail: true, belly: true });
+    const tint = evo ? P.evoTint[evo - 1] : P.tint;
+    const m = P.sprite === 'bear' ? quadruped({ color: tint, len: 0.7, h: 0.28, w: 0.36, th: 0.34, hw: 0.24, hh: 0.22, ears: true, belly: true, eyes: evo === 2 ? '#7affff' : undefined }) : quadruped({ color: tint, ears: true, tail: true, belly: true, eyes: evo === 2 ? '#ff5a3a' : undefined });
     if (type === 'jabali') { const h = m.userData.parts.head; for (const sx of [-1, 1]) { const tk = mesh(cone(0.02, 0.1, 4), mat('#fff6dc'), sx * 0.06, -0.04, 0.24, h); tk.rotation.x = -1.2; } mesh(box(0.3, 0.05, 0.5), mat('#6a6e78', { metal: 0.5 }), 0, 0.15, 0, m.userData.parts.torso); }
-    m.scale.multiplyScalar(type === 'osezno' ? 0.75 : 0.7);
+    if (evo >= 1) {
+      // collar con pinchos y, al evolucionar del todo, runas brillantes en el lomo
+      mesh(box(0.2, 0.05, 0.08), mat('#3a2a1a'), 0, 0.02, 0.2, m.userData.parts.torso);
+      for (const sx of [-1, 1]) mesh(cone(0.02, 0.06, 4), mat('#c8c8d0', { metal: 0.7 }), sx * 0.08, 0.05, 0.2, m.userData.parts.torso);
+    }
+    if (evo >= 2) for (let i = 0; i < 3; i++) mesh(box(0.05, 0.02, 0.05), mat('#7affff', { emissive: '#3affff', ei: 2 }), 0, 0.14, -0.1 + i * 0.1, m.userData.parts.torso);
+    m.scale.multiplyScalar((type === 'osezno' ? 0.75 : 0.7) * (1 + evo * 0.18));
     m.userData.kind = 'pet';
     return m;
   }
@@ -506,10 +514,29 @@
     if (st.emote === 'cheers' || st.mug) { P.armR.rotation.x = -1.6; }
     if (st.emote === 'dance') { P.body.rotation.y = Math.sin(t / 200) * 0.6; P.armL.rotation.x = -2.4; P.armR.rotation.x = -2.4 + Math.sin(t / 150); }
     else P.body.rotation.y = 0;
+    if (st.cast) { const k = Math.sin(Math.min(1, st.cast) * Math.PI); P.armL.rotation.x = -2.4 * k; P.armR.rotation.x = -2.4 * k; P.armL.rotation.z = 0.5 * k; P.armR.rotation.z = -0.5 * k; }
+    if (st.fish) { P.armR.rotation.x = -1.1 + Math.sin(t / 700) * 0.05; P.armL.rotation.x = -0.9; }
     if (st.emote === 'laugh') P.head.rotation.x = Math.sin(t / 80) * 0.15;
     else if (st.emote === 'sleep') P.head.rotation.x = 0.4;
     else if (st.emote === 'think') { P.head.rotation.z = 0.2; P.armR.rotation.x = -2; }
     else { P.head.rotation.x = 0; P.head.rotation.z = 0; }
+  }
+
+  // Planta para el herbolario (cada zona la suya, con un brillo para encontrarla)
+  const HERB_LOOK = [['#4a9a3a', '#b8ff7a'], ['#7a5a3a', '#d8b8ff'], ['#5a6a2a', '#ffb05a'], ['#5a8a3a', '#ff7aa0'], ['#8aa0b0', '#bff0ff'], ['#3a2a2a', '#ff6a2a']];
+  function herb(zone) {
+    const [leaf, glow] = HERB_LOOK[zone] || HERB_LOOK[0];
+    const g = new THREE.Group();
+    for (let i = 0; i < 5; i++) { const l = mesh(cone(0.05, 0.28, 4), mat(leaf), Math.cos(i * 1.3) * 0.07, 0.12, Math.sin(i * 1.3) * 0.07, g); l.rotation.set(Math.sin(i) * 0.5, 0, Math.cos(i) * 0.5); }
+    mesh(sph(0.045, 6, 5), mat(glow, { emissive: glow, ei: 1.6 }), 0, 0.3, 0, g);
+    g.userData.glow = glow;
+    return g;
+  }
+  // Caña de pescar (en la mano derecha)
+  function rod() {
+    const g = new THREE.Group();
+    const c = mesh(cyl(0.008, 0.014, 0.9, 5), mat('#6a4426'), 0, 0.45, 0, g); c.castShadow = false;
+    return g;
   }
 
   // Jarra en la mano (taberna)
@@ -654,5 +681,5 @@
     return { obj: g, light, wall, block };
   }
 
-  root.MODELS = { mat, mesh, box, cyl, sph, cone, shade, mix, buildHero, buildEnemy, buildPet, buildMount, animate, furniture, prop, weapon, flame, candle, mug, RARITY };
+  root.MODELS = { mat, mesh, box, cyl, sph, cone, shade, mix, buildHero, buildEnemy, buildPet, buildMount, animate, furniture, prop, weapon, flame, candle, mug, herb, rod, RARITY };
 })(this);

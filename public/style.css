@@ -453,3 +453,55 @@ body.in-dungeon #heroes, body.in-dungeon #log { display: none; }
 .ficha-pv { width: 180px; height: 230px; }
 .hero canvas { image-rendering: auto; }
 #mh-portrait canvas { image-rendering: auto; }
+
+/* pueblo: forja, cocina, tablón, fama, habitación, ajustes */
+#svc-pop { display: flex; flex-direction: column; gap: 6px; min-width: 250px; }
+#svc-pop button { text-align: left; background: var(--parch); color: var(--ink); border: 2px solid var(--ink); border-radius: 4px; padding: 8px 10px; font-size: 16px; }
+#svc-pop button:hover { background: #fff6e0; }
+.htitle { color: #8a5a10; font-style: italic; font-weight: 600; }
+.mats-row { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; }
+.mat { display: inline-flex; align-items: center; gap: 3px; background: rgba(20,10,4,.5); border: 1px solid #5a3a1e; border-radius: 10px; padding: 1px 8px; font-size: 13px; color: #f0e2c4; white-space: nowrap; }
+.mat.short { border-color: #c83a2a; color: #ff9a8a; }
+.forge-body { display: flex; flex-direction: column; gap: 8px; }
+.forge-body .inv-grid { max-height: 220px; overflow: auto; }
+.forge-msg { background: rgba(20,10,4,.55); border-left: 3px solid var(--gold); border-radius: 4px; padding: 6px 10px; color: #f2d36b; }
+.forge-panel { display: flex; flex-direction: column; gap: 6px; background: rgba(20,10,4,.35); border: 2px solid #3a2414; border-radius: 6px; padding: 8px 10px; min-height: 40px; }
+.forge-panel .btn.big { align-self: flex-start; width: auto; padding: 8px 22px; }
+.cost-row { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 14px; }
+.chance { color: #9fe0ff; font-weight: 700; }
+.icell.picked { box-shadow: 0 0 0 3px var(--gold), 0 0 12px rgba(242,201,76,.8); }
+.icell.worn::after { content: 'E'; position: absolute; left: 2px; top: 1px; font-size: 10px; font-weight: 700; color: #7dff8a; text-shadow: 0 1px 0 #000; }
+.icell { position: relative; }
+.upbadge { position: absolute; right: 2px; bottom: 1px; font-size: 11px; font-weight: 700; color: #ffd23f; text-shadow: 0 1px 0 #000, 0 0 3px #000; }
+.buy-row.task .meter { position: relative; height: 14px; margin: 4px 0; }
+.buy-row.task .meter span { position: absolute; inset: 0; text-align: center; font-size: 10px; line-height: 10px; font-weight: 700; color: #fff; text-shadow: 0 1px 0 #000; }
+.buy-row.task.done { box-shadow: inset 0 0 0 2px #7dff8a; }
+.buy-row.task.claimed { opacity: .55; }
+.title-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.title-row .btn { width: auto; padding: 5px 12px; }
+.ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px; }
+.ach { background: rgba(20,10,4,.4); border: 2px solid #3a2414; border-radius: 6px; padding: 6px 8px; opacity: .7; }
+.ach.got { opacity: 1; border-color: #c8963a; background: rgba(90,60,10,.35); }
+.ach b { display: block; font-size: 14px; } .ach small { display: block; font-size: 12px; opacity: .85; }
+.rank-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; }
+.rank-box { background: rgba(20,10,4,.4); border: 2px solid #3a2414; border-radius: 6px; padding: 6px 10px; }
+.rank-box b { display: block; color: var(--gold); margin-bottom: 4px; }
+.rank-row { font-size: 14px; padding: 1px 0; } .rank-row.me { color: #7dff8a; font-weight: 700; }
+.stat-row { font-size: 15px; padding: 3px 0; border-bottom: 1px dashed rgba(200,150,58,.25); }
+.room-panel { max-width: 780px; }
+#room-cv { width: 100%; max-width: 720px; aspect-ratio: 720 / 420; height: auto; display: block; margin: 6px auto; border: 2px solid var(--ink); border-radius: 6px; background: #120c08; }
+.opt-row { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 15px; cursor: pointer; }
+.opt-row input { width: 18px; height: 18px; }
+#ddescent { margin-top: 6px; }
+
+/* partida: esquiva, pesca, rótulos */
+#dextra { position: absolute; right: 14px; bottom: 140px; z-index: 3; display: flex; flex-direction: column; gap: 6px; }
+#dextra .btn { width: 52px; height: 52px; padding: 0; font-size: 24px; border-radius: 50%; }
+#dbite { position: absolute; left: 50%; top: 30%; transform: translateX(-50%); z-index: 6; font: 700 40px "Pixelify Sans", sans-serif; color: #7ad0ff; text-shadow: 0 3px 0 #000, 0 0 18px #3a8aff; animation: bite .35s infinite alternate; pointer-events: none; text-align: center; }
+#dbite small { display: block; font-size: 16px; color: #e8f4ff; }
+@keyframes bite { from { transform: translateX(-50%) scale(1); } to { transform: translateX(-50%) scale(1.12); } }
+#dbanner { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); z-index: 6; text-align: center; pointer-events: none; animation: bannerIn .5s ease-out; }
+#dbanner b { display: block; font: 46px "Jacquard 12", serif; color: #f2d36b; text-shadow: 0 4px 0 #000, 0 0 24px rgba(255,120,40,.6); }
+#dbanner small { display: block; font: 600 16px "Pixelify Sans", sans-serif; color: #f4ead2; text-shadow: 0 2px 0 #000; }
+@keyframes bannerIn { from { opacity: 0; transform: translateX(-50%) scale(1.4); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+@media (max-width: 820px) { #dextra { bottom: 250px; } #dbanner b { font-size: 32px; } }

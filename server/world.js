@@ -261,10 +261,21 @@ function generate(roomName) {
     if (get(x, y) === 'w' && zone[y * W + x] <= 1 && [[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => get(x + dx, y + dy) === 's') && rand() < 0.35) set(x, y, 'v');
   }
 
+  // ---------- Hierbas para el herbolario: unas cuantas por zona ----------
+  const herbs = [];
+  const herbCounts = [14, 16, 16, 14, 14, 12];
+  for (let z = 0; z < 6; z++) {
+    for (let i = 0; i < herbCounts[z]; i++) {
+      const p = pickIn(z, (ch, q) => walk(ch) && seen[q.y * W + q.x] && !'=bWCHuv'.includes(ch) && !herbs.some((h) => Math.abs(h.x - q.x) + Math.abs(h.y - q.y) < 4), 1);
+      if (!p) break;
+      herbs.push({ id: 'h' + herbs.length, x: p.x, y: p.y, zone: z });
+    }
+  }
+
   return {
     id: 'world', name: 'Las Tierras de Brumaverde', kind: 'world', w: W, h: H,
     tiles: t.join(''), zones: Array.from(zone).join(''), start: { x: town.x, y: town.y + 2 }, town,
-    groups, caves, labels, npcs, waystones,
+    groups, caves, labels, npcs, waystones, herbs,
     safe: [{ x: town.x, y: town.y, r: 9 }, ...outposts.map((o) => ({ x: o.x, y: o.y, r: 6 }))],
   };
 }

@@ -735,6 +735,11 @@
     'gorthak':         { name: 'Gorthak, Señor de la Guerra', fam: 'orco', sprite: 'warchief', scale: 1.45, boss: true, hp: 320, dmg: [6, 11], armor: 7, ms: 330, atk: 1500, xp: 120, gold: [50, 90], specials: ['slam', 'charge', 'summon'], summons: 'orc', sets: ['guerrero', 'paladin', 'clerigo'] },
     'lich':            { name: 'Malakar, el Liche', fam: 'muerto', sprite: 'lich', scale: 1.4, boss: true, hp: 260, dmg: [5, 9], armor: 4, ms: 380, atk: 1900, range: 6, proj: 'necro', magic: true, xp: 120, gold: [50, 90], undead: true, specials: ['nova', 'volley', 'summon'], summons: 'skeleton', sets: ['mago', 'brujo', 'clerigo'] },
     'reina-arana':     { name: 'Arakhna, la Reina Araña', fam: 'bestia', sprite: 'spider', scale: 2, tint: '#5a2a6a', boss: true, hp: 280, dmg: [5, 10], armor: 5, ms: 280, atk: 1300, poison: true, xp: 110, gold: [45, 80], specials: ['volley', 'summon', 'slam'], summons: 'giant-spider', sets: ['picaro', 'explorador', 'brujo'] },
+    // jefes de mundo (aparecen en el mundo abierto cada cierto tiempo; mucha vida, para pelear en grupo)
+    'coloso-runas':    { name: 'El Coloso de las Runas', fam: 'orco', sprite: 'ogre', tint: '#7a8aa8', scale: 2.3, boss: true, world: true, hp: 900, dmg: [7, 12], armor: 10, ms: 430, atk: 1800, xp: 500, gold: [150, 260], specials: ['slam', 'nova', 'charge'], sets: CLASS_IDS },
+    'nyxara':          { name: 'Nyxara, Dragona de las Sombras', fam: 'dragon', sprite: 'dragon', tint: '#3a2a7a', scale: 1.7, boss: true, world: true, hp: 820, dmg: [7, 12], armor: 8, ms: 360, atk: 1600, xp: 520, gold: [160, 280], specials: ['breath', 'nova', 'summon'], summons: 'specter', sets: CLASS_IDS },
+    'rey-espectral':   { name: 'El Rey Espectral', fam: 'muerto', sprite: 'lich', tint: '#2a6aff', scale: 2, boss: true, world: true, hp: 760, dmg: [6, 11], armor: 6, ms: 380, atk: 1800, range: 6, proj: 'necro', magic: true, undead: true, xp: 500, gold: [150, 260], specials: ['nova', 'volley', 'summon'], summons: 'wight', sets: CLASS_IDS },
+    'behemot':         { name: 'Behemot del Bosque Viejo', fam: 'bestia', sprite: 'bear', tint: '#2e4a1e', scale: 2.4, boss: true, world: true, hp: 950, dmg: [7, 13], armor: 9, ms: 300, atk: 1500, xp: 520, gold: [150, 260], specials: ['slam', 'charge', 'summon'], summons: 'dire-wolf', sets: CLASS_IDS },
     'young-red-dragon': { name: 'Ignaroth, el Dragón Rojo', fam: 'dragon', sprite: 'dragon', scale: 1.3, boss: true, hp: 400, dmg: [7, 12], armor: 8, ms: 360, atk: 1600, xp: 160, gold: [80, 140], specials: ['breath', 'slam', 'summon'], summons: 'kobold', sets: CLASS_IDS },
   };
   // Claves de versiones anteriores
@@ -773,17 +778,32 @@
   // ======================================================================
   // La mascota te sigue, ataca a tus enemigos con daño según su Fuerza y lleva una mochila propia con su peso máximo
   const PETS = {
-    perro:   { name: 'Perro de guerra', icon: '🐕', sprite: 'wolf', tint: '#8a5a2a', scale: 0.72, fue: 6, cap: 30, hp: 1, price: 250, desc: 'Leal y equilibrado. Carga bastante.' },
-    lobo:    { name: 'Lobo gris', icon: '🐺', sprite: 'wolf', tint: '#8a8e98', scale: 0.8, fue: 9, cap: 22, hp: 0.9, price: 350, desc: 'Muerde más fuerte, carga menos.' },
-    jabali:  { name: 'Jabalí acorazado', icon: '🐗', sprite: 'bear', tint: '#5a3a2a', scale: 0.5, fue: 7, cap: 45, hp: 1.3, price: 450, desc: 'Una mula con colmillos: el que más carga.' },
-    osezno:  { name: 'Osezno de las cavernas', icon: '🐻', sprite: 'bear', tint: '#7a5030', scale: 0.6, fue: 11, cap: 35, hp: 1.2, price: 600, desc: 'Fuerte y resistente. Crece contigo.' },
+    perro:   { name: 'Perro de guerra', icon: '🐕', sprite: 'wolf', tint: '#8a5a2a', scale: 0.72, fue: 6, cap: 30, hp: 1, price: 250, desc: 'Leal y equilibrado. Carga bastante.', evo: ['Mastín de batalla', 'Cerbero de la taberna'], evoTint: ['#6a3a1a', '#3a1a10'] },
+    lobo:    { name: 'Lobo gris', icon: '🐺', sprite: 'wolf', tint: '#8a8e98', scale: 0.8, fue: 9, cap: 22, hp: 0.9, price: 350, desc: 'Muerde más fuerte, carga menos.', evo: ['Lobo del crepúsculo', 'Fenrir menor'], evoTint: ['#4a4e6a', '#1e2240'] },
+    jabali:  { name: 'Jabalí acorazado', icon: '🐗', sprite: 'bear', tint: '#5a3a2a', scale: 0.5, fue: 7, cap: 45, hp: 1.3, price: 450, desc: 'Una mula con colmillos: el que más carga.', evo: ['Jabalí de hierro', 'Gran verraco de guerra'], evoTint: ['#4a4040', '#2a2020'] },
+    osezno:  { name: 'Osezno de las cavernas', icon: '🐻', sprite: 'bear', tint: '#7a5030', scale: 0.6, fue: 11, cap: 35, hp: 1.2, price: 600, desc: 'Fuerte y resistente. Crece contigo.', evo: ['Oso pardo', 'Oso rúnico'], evoTint: ['#5a3a20', '#2a3a5a'] },
   };
   const PET_LEVEL = 5, MOUNT_LEVEL = 12;
-  function petStats(type, level) {
+  // La mascota sube de nivel con lo que lucháis juntos (hasta el 25) y evoluciona en los niveles 10 y 20
+  const PET_MAX = 25;
+  const petXpFor = (n) => Math.round(60 * Math.pow(Math.max(0, n - 1), 2.2));
+  function petLevelFromXp(xp) { let n = 1; while (n < PET_MAX && (xp || 0) >= petXpFor(n + 1)) n++; return n; }
+  const petEvo = (plvl) => (plvl >= 20 ? 2 : plvl >= 10 ? 1 : 0);
+  const petTitle = (type, plvl) => { const P = PETS[type]; const e = petEvo(plvl); return P ? (e ? P.evo[e - 1] : P.name) : ''; };
+  // Habilidad de cada mascota (desde su nivel 3; más fuerte al evolucionar)
+  const PET_SKILLS = {
+    perro:  { name: 'Aullido de manada', kind: 'buff', cd: 18000, dmgPct: 15, dur: 8000, desc: 'Aúlla y tu daño sube un 15% durante 8 s.' },
+    lobo:   { name: 'Desgarro', kind: 'bleed', cd: 9000, mult: 2, dur: 6000, desc: 'Desgarra a su presa: sangra el doble de su mordisco en 6 s.' },
+    jabali: { name: 'Embestida', kind: 'stun', cd: 11000, mult: 1.5, stun: 1500, desc: 'Embiste y aturde 1,5 s.' },
+    osezno: { name: 'Zarpazo', kind: 'aoe', cd: 9000, mult: 1.2, radius: 1, desc: 'Un zarpazo que alcanza a todos los que tiene alrededor.' },
+  };
+  const PET_SKILL_LEVEL = 3;
+  function petStats(type, level, plvl = 1) {
     const P = PETS[type];
     if (!P) return null;
-    const fue = Math.round(P.fue + level * 1.6);
-    return { fue, hp: Math.round((40 + level * 14) * P.hp), dmg: [Math.round(1 + fue * 0.45), Math.round(3 + fue * 0.7)], atk: 1200, cap: Math.round(P.cap + fue * 1.2), ms: 220 };
+    const evoMult = [1, 1.2, 1.45][petEvo(plvl)];
+    const fue = Math.round((P.fue + level * 1.6 + (plvl - 1) * 1.2) * evoMult);
+    return { fue, hp: Math.round((40 + level * 14 + (plvl - 1) * 10) * P.hp * evoMult), dmg: [Math.round(1 + fue * 0.45), Math.round(3 + fue * 0.7)], atk: Math.round(1200 / (1 + (plvl - 1) * 0.01)), cap: Math.round(P.cap + fue * 1.2), ms: 220, plvl, evo: petEvo(plvl) };
   }
   const MOUNTS = {
     caballo: { name: 'Caballo de guerra', icon: '🐴', speed: 60, price: 1200, minLevel: 12, color: '#6a4426', desc: '+60% de velocidad en el mundo abierto.' },
@@ -838,10 +858,10 @@
   const RULES = {
     MAX_LEVEL, BAG_SIZE, POINTS_START, POINTS_PER_LEVEL, STATS, STAT_IDS, EXTRA, CLASSES, CLASS_IDS, LEGACY_CLASS, ARMOR_TYPES,
     ABILITIES, ABILITY_BY_ID, SECOND_CLASS_LEVEL, XP_TABLE, SLOTS, SLOT_IDS, WEAPONS, FISTS, OFFHANDS, ARMOR_NAMES, JEWELS,
-    RARITIES, RARITY_ORDER, AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES,
+    RARITIES, RARITY_ORDER, AFFIXES, SLOT_AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES,
     statName, fmtStat, classId, levelFromXp, pointsTotal, pointsSpent, pointsFree, baseStats, newChar, cleanChar,
     rollRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, allowedBases,
-    PETS, PET_LEVEL, MOUNT_LEVEL, MOUNTS, petStats, petBagWeight, ZONES, QUESTS, itemWeight, classesFor,
+    PETS, PET_LEVEL, MOUNT_LEVEL, MOUNTS, petStats, PET_MAX, petXpFor, petLevelFromXp, petEvo, petTitle, PET_SKILLS, PET_SKILL_LEVEL, petBagWeight, ZONES, QUESTS, itemWeight, classesFor,
     priceScale, buyPrice, itemBuyPrice, armeroStock, seeded, gearTotals, derive, abilitiesFor, gearLook, monsterAt, reduction, xpPenalty,
   };
 
