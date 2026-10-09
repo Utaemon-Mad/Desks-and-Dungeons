@@ -679,8 +679,9 @@
   // ======================================================================
   let snapR = null, snapScene = null, snapCam = null;
   const snapCache = new Map();
-  function snapshot(look, w, h, mode = 'full') {
-    const key = JSON.stringify(look) + w + 'x' + h + mode + (M().GL ? M().GL.version : 0);
+  // rot: giro del modelo (para el editor de personaje)
+  function snapshot(look, w, h, mode = 'full', rot) {
+    const key = JSON.stringify(look) + w + 'x' + h + mode + (rot || '') + (M().GL ? M().GL.version : 0);
     if (snapCache.has(key)) return snapCache.get(key);
     if (!snapR) {
       snapR = legacy(new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }));
@@ -695,7 +696,7 @@
     snapR.setPixelRatio(1);
     snapR.setSize(w, h, false);
     const model = M().buildHero(look);
-    model.rotation.y = mode === 'bust' ? 0.35 : 0.55;
+    model.rotation.y = rot !== undefined ? rot : mode === 'bust' ? 0.35 : 0.55;
     if (model.userData.gl) M().posePeek(model, 'Idle', 0.5); else M().animate(model, { t: 0 });
     snapScene.add(model);
     const sc = model.scale.x;

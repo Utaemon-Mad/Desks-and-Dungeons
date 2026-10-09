@@ -134,7 +134,6 @@
         <div class="mh-foot"><span>🪙 <b id="mh-gold">0</b></span><span id="mh-buffs"></span></div>
       </div>
     </div>
-    <div id="tip" class="hidden"></div>
     <div id="lootcard" class="panel hidden" title="Abrir el equipo"></div>
 
     <div id="toast" class="hidden"></div>
@@ -179,30 +178,38 @@
     </div>
   </div>
 
-  <!-- Crear personaje en una casilla -->
+  <!-- Editor de personaje: crear en una casilla o cambiar el aspecto, la raza y la clase -->
   <div id="login" class="overlay hidden">
-    <form id="login-form" class="panel card" autocomplete="off">
-      <div class="logo big">Desks <span>&amp;</span> Dungeons</div>
-      <p class="tag">Nuevo héroe · casilla <b id="login-slot">1</b></p>
-
-      <label>Nombre del héroe
-        <input id="login-name" maxlength="16" required placeholder="Tu nombre">
-      </label>
-
-      <div class="field-title">Clase</div>
-      <div id="class-pick" class="class-pick"></div>
-      <div class="field-title">Raza</div>
-      <div id="species-pick" class="class-pick species"></div>
-
-      <p id="login-sheet-note" class="tag small"></p>
-      <div class="looks">
-        <div><div class="field-title">Piel</div><div id="skin-pick" class="swatches"></div></div>
-        <div><div class="field-title">Pelo</div><div id="hair-pick" class="swatches"></div></div>
-        <canvas id="preview" width="150" height="190"></canvas>
+    <form id="login-form" class="panel card editor" autocomplete="off">
+      <div class="panel-title" id="ed-title">NUEVO HÉROE</div>
+      <div class="ed-cols">
+        <div class="ed-left">
+          <canvas id="preview" width="260" height="330"></canvas>
+          <div class="ed-rot"><button type="button" class="btn alt" id="ed-rl" title="Girar">↺</button><button type="button" class="btn alt" id="ed-rr" title="Girar">↻</button></div>
+          <label id="ed-name-l">Nombre
+            <input id="login-name" maxlength="16" placeholder="Tu nombre">
+          </label>
+          <div id="ed-summary" class="ed-summary"></div>
+          <div id="ed-derived" class="ed-derived"></div>
+        </div>
+        <div class="ed-right">
+          <div class="ed-sec"><div class="field-title">Sexo</div><div id="sex-pick" class="class-pick two"></div></div>
+          <div class="ed-sec"><div class="field-title">Raza</div><div id="species-pick" class="class-pick species"></div><p id="ed-race-note" class="tag small"></p></div>
+          <div class="ed-sec"><div class="field-title">Clase</div><div id="class-pick" class="class-pick"></div><p id="login-sheet-note" class="tag small"></p></div>
+          <div class="ed-sec"><div class="field-title">Peinado</div><div id="hs-pick" class="class-pick three"></div>
+            <div class="looks">
+              <div><div class="field-title">Piel</div><div id="skin-pick" class="swatches"></div></div>
+              <div><div class="field-title">Pelo</div><div id="hair-pick" class="swatches"></div></div>
+            </div>
+          </div>
+          <div class="ed-sec" id="ed-stats-sec"><div class="field-title">Características <small>· puntos por repartir: <b id="ed-points">5</b> · máximo natural 20</small></div><div id="ed-stats" class="ed-stats"></div></div>
+          <p id="ed-edit-note" class="tag small hidden">Cambiar de raza o de clase devuelve tus puntos para que los repartas de nuevo. El sexo, el peinado y los colores se cambian sin más.</p>
+        </div>
       </div>
-
-      <button class="btn big" type="submit">CREAR Y JUGAR</button>
-      <button id="login-back" class="btn alt big" type="button">VOLVER</button>
+      <div class="edit-row">
+        <button id="login-back" class="btn alt" type="button">VOLVER</button>
+        <button id="ed-submit" class="btn" type="submit">CREAR Y JUGAR</button>
+      </div>
     </form>
   </div>
 
@@ -376,6 +383,9 @@
       <div id="guide-body" class="manual-body guide-body"></div>
     </div>
   </div>
+
+  <!-- tooltip de objetos: fuera de #app para quedar por encima de las ventanas -->
+  <div id="tip" class="hidden"></div>
 
   <script src="map.js"></script>
   <script src="dungeon-data.js"></script>

@@ -805,7 +805,22 @@ class Instance {
     const chance = Math.max(55, Math.min(99, 90 + d.hit - 4 * Math.max(0, t.m.level - d.level)));
     const kind = d.weapon.kind;
     if (rnd() * 100 >= chance) { this.event({ e: 'hit', by: p.user.id, t: t.id, miss: true, kind }); return; }
-    this.damageEnemy(p, t, this.weaponRoll(p), { kind, magic: kind === 'magic' });
+    this.damageEnemy(p, t, this.weaponRoll(p), { kind, magic: kind === 'magic', undead: (d.undead || 0) / 100, elem: this.elemRoll(p) });
+  }
+
+  // Daño elemental del arma (como en Diablo 2): fuego, frío (ralentiza), rayo y veneno (en 3 s); no lo para la armadura
+  elemRoll(p) {
+    const el = p.d.elem || {};
+    const keys = Object.keys(el);
+    if (!keys.length) return null;
+    const out = { dmg: 0, slow: false, poison: 0 };
+    for (const k of keys) {
+      const v = roll(el[k]);
+      if (k === 'veneno') out.poison += v;
+      else out.dmg += v;
+      if (k === 'frio') out.slow = true;
+    }
+    return out;
   }
 
   // Aplica el daño a un enemigo: crítico, debilidad (marca), armadura, robo de vida
@@ -817,6 +832,11 @@ class Instance {
     if (e.vulnUntil > Date.now()) dmg *= 1 + e.vuln / 100;
     if (o.undead && e.m.undead) dmg *= 1 + o.undead;
     dmg *= 1 - RULES.reduction(o.magic ? e.m.armor * 0.5 : e.m.armor, p.d.level);
+    if (o.elem) {
+      dmg += o.elem.dmg;
+      if (o.elem.slow && !e.pvp) e.slowUntil = Math.max(e.slowUntil, Date.now() + RULES.ELEMENTS.frio.slow);
+      if (o.elem.poison > 0 && !e.pvp) e.dots.push({ by: p.user.id, per: o.elem.poison / 3, left: 3, next: Date.now() + 1000 });
+    }
     if (e.pvp) {
       // duelo: el golpe va al héroe rival (ya reducido por su armadura)
       const t = this.players.get(e.owner);

@@ -288,7 +288,7 @@
   const ANIMATED = new Set(['brazier', 'campfire', 'candles', 'torch', 'altar']);
 
   // ---------- Botín ----------
-  const RARITY = { comun: '#d8d4c8', raro: '#4aa0ff', epico: '#c060ff', legendario: '#ff9a2a', conjunto: '#3ee67a' };
+  const RARITY = { inferior: '#9a9a9a', normal: '#d8d4c8', superior: '#ffffff', magico: '#7a8cff', raro: '#ffe24a', unico: '#c8a46a', conjunto: '#3ee67a' };
 
   function goldPile() {
     return cached('gold', () => {
@@ -326,8 +326,8 @@
     return cached(key, () => {
       const { c, g } = canvas(16, 16);
       const p = painter(g);
-      const glow = RARITY[it.rarity] || RARITY.comun;
-      const steel = it.rarity === 'legendario' ? '#ffe6b0' : '#d8dce4', steelD = '#7e848e';
+      const glow = RARITY[it.rarity] || RARITY.normal;
+      const steel = it.rarity === 'unico' ? '#ffe6b0' : '#d8dce4', steelD = '#7e848e';
       const wood = '#6b4228';
       const metal = { tela: '#7a5aa0', cuero: '#7a5030', malla: '#9aa0aa', placas: '#c0c6d0' }[it.type] || '#8a8a8a';
       const metalD = shade(metal, -0.35), metalL = shade(metal, 0.3);
@@ -343,7 +343,7 @@
         case 'ballesta': p.row(8, 2, 13, wood); p.rect(10, 9, 3, 5, '#4a2e1a'); p.col(5, 4, 12, steelD); p.px(5, 3, steelD); p.px(5, 13, steelD); p.row(7, 5, 13, steel); p.px(13, 8, glow); break;
         case 'baston': for (let i = 0; i < 12; i++) p.px(2 + i, 14 - i, wood); p.rect(12, 1, 3, 3, glow); p.px(13, 1, shade(glow, 0.5)); break;
         case 'varita': for (let i = 0; i < 8; i++) p.px(4 + i, 12 - i, '#3a2414'); p.rect(11, 3, 2, 2, glow); p.px(13, 2, shade(glow, 0.6)); break;
-        case 'escudo': { const face = it.set === 'paladin' || it.set === 'clerigo' ? '#e8e0c8' : '#7a2a2a'; p.rect(3, 2, 10, 10, face); p.row(12, 4, 11, face); p.row(13, 5, 10, face); p.row(14, 7, 8, face); p.row(1, 3, 12, glow); p.col(2, 2, 11, glow); p.col(13, 2, 11, glow); p.col(8, 3, 12, '#c8a040'); p.row(6, 4, 11, '#c8a040'); break; }
+        case 'escudo': { const face = it.set === 'paladin' || it.set === 'sacerdote' ? '#e8e0c8' : '#7a2a2a'; p.rect(3, 2, 10, 10, face); p.row(12, 4, 11, face); p.row(13, 5, 10, face); p.row(14, 7, 8, face); p.row(1, 3, 12, glow); p.col(2, 2, 11, glow); p.col(13, 2, 11, glow); p.col(8, 3, 12, '#c8a040'); p.row(6, 4, 11, '#c8a040'); break; }
         case 'orbe': p.rect(4, 3, 8, 8, glow); p.rect(3, 5, 10, 4, glow); p.rect(5, 4, 3, 2, shade(glow, 0.6)); p.rect(5, 11, 6, 3, '#6b4228'); p.row(14, 4, 11, '#4a2e1a'); break;
         case 'amuleto': p.px(4, 2, '#c8a040'); p.px(5, 4, '#c8a040'); p.px(6, 6, '#c8a040'); p.px(11, 2, '#c8a040'); p.px(10, 4, '#c8a040'); p.px(9, 6, '#c8a040'); p.rect(6, 7, 4, 5, '#c8a040'); p.rect(7, 8, 2, 3, glow); break;
         case 'anillo': p.rect(4, 7, 8, 6, '#c8a040'); p.rect(6, 9, 4, 2, 'rgba(0,0,0,0)'); g.clearRect(6, 9, 4, 3); p.rect(6, 4, 4, 3, glow); p.px(7, 4, shade(glow, 0.6)); break;

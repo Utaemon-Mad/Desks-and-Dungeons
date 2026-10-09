@@ -126,7 +126,7 @@
       panel.appendChild(el('p', '', `Elegidos: ${items.length}/3`));
       if (items.length === 3) {
         const same = items.every((x) => x.rarity === items[0].rarity) && PROG.COMBINE_TO[items[0].rarity];
-        if (!same) panel.appendChild(el('p', 'bad', 'Tienen que ser los tres de la misma rareza (común, raro o épico).'));
+        if (!same) panel.appendChild(el('p', 'bad', 'Tienen que ser los tres de la misma calidad (inferior, normal, superior, mágico o raro).'));
         else {
           const ilvl = Math.round(items.reduce((t, x) => t + x.ilvl, 0) / 3);
           const c = PROG.combineCost(items[0].rarity, ilvl);
@@ -154,7 +154,7 @@
       if (items.length) {
         const b = el('button', 'btn big', '🔨 DESGUAZAR');
         b.onclick = () => {
-          if (items.some((x) => ['epico', 'legendario', 'conjunto'].includes(x.rarity)) && !confirm('Hay objetos épicos o mejores. ¿Seguro que quieres desguazarlos?')) return;
+          if (items.some((x) => ['raro', 'unico', 'conjunto'].includes(x.rarity)) && !confirm('Hay objetos raros o mejores. ¿Seguro que quieres desguazarlos?')) return;
           DD.net.send({ t: 'forge:salvage', ids: [...multi] }); multi = new Set();
         };
         panel.appendChild(b);
@@ -222,7 +222,7 @@
         const bar = el('div', 'meter xp'); const fill = el('i'); fill.style.width = (100 * n / T.n) + '%'; bar.appendChild(fill); bar.appendChild(el('span', '', `${n}/${T.n}`));
         tt.appendChild(bar);
         const rw = PROG.taskReward(id, lvl());
-        tt.appendChild(el('small', '', `Recompensa: ${rw.xp} PX, ${rw.gold} 🪙, ${Object.entries(rw.mats).map(([k, v]) => `${v} ${PROG.MATS[k].icon}`).join(' ')}${rw.item ? ', un objeto épico' : ''}`));
+        tt.appendChild(el('small', '', `Recompensa: ${rw.xp} PX, ${rw.gold} 🪙, ${Object.entries(rw.mats).map(([k, v]) => `${v} ${PROG.MATS[k].icon}`).join(' ')}${rw.item ? ', un objeto raro' : ''}`));
         r.appendChild(tt);
         const btn = el('button', 'btn', claimed ? '✔' : 'RECOGER');
         btn.disabled = !done || claimed;
@@ -338,7 +338,7 @@
     if (DD.scene !== 'tavern') return;
     const M = PROG.WEEKLY_MODS[PROG.weekMod()];
     const best = (me() && me().stats && me().stats.floor) || 0;
-    if (confirm(`🌀 DESCENSO INFINITO\n\nPiso tras piso, cada uno un nivel más difícil (empiezas a tu nivel). Al derrotar al jefe, su portal te baja al siguiente piso. Cada 5 pisos, un objeto épico; cada 10, legendario. Si caes, vuelves a la taberna.\n\nDesafío de esta semana: ${M.icon} ${M.name} — ${M.desc}\nTu mejor piso: ${best}\n\n¿Bajas?`)) DD.net.send({ t: 'descent:start' });
+    if (confirm(`🌀 DESCENSO INFINITO\n\nPiso tras piso, cada uno un nivel más difícil (empiezas a tu nivel). Al derrotar al jefe, su portal te baja al siguiente piso. Cada 5 pisos, un objeto raro; cada 10, uno único. Si caes, vuelves a la taberna.\n\nDesafío de esta semana: ${M.icon} ${M.name} — ${M.desc}\nTu mejor piso: ${best}\n\n¿Bajas?`)) DD.net.send({ t: 'descent:start' });
   }
   DD.on('open-descent', askDescent);
 

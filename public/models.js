@@ -46,17 +46,17 @@
   };
   const mix = (a, b, t) => '#' + new THREE.Color(a).lerp(new THREE.Color(b), t).getHexString();
 
-  const RARITY = { comun: null, raro: '#3a8aff', epico: '#b050ff', legendario: '#ff8a1a', conjunto: '#2ee06a' };
+  const RARITY = { inferior: null, normal: null, superior: null, magico: '#4a6aff', raro: '#ffd23a', unico: '#d8a050', conjunto: '#2ee06a' };
   const STEEL = '#9aa2ae', STEEL_D = '#5e6672', LEATHER = '#6a4226', LEATHER_D = '#3e2614', WOOD = '#6b4426';
   const SET_COL = {
     guerrero: ['#7a1a1a', '#e0b040'], mago: ['#23237a', '#c8d4ff'], explorador: ['#2a4a22', '#c8e07a'], picaro: ['#16161e', '#a070ff'],
-    paladin: ['#e0d8c0', '#e8c050'], brujo: ['#2e0a30', '#6aff8a'], clerigo: ['#ece4cc', '#d8a030'],
+    paladin: ['#e0d8c0', '#e8c050'], druida: ['#3a4a22', '#9ad860'], sacerdote: ['#ece4cc', '#d8a030'],
   };
   const DEFAULT_GEAR = {
     guerrero: { w: 'espada', o: 'escudo', pecho: 'malla', casco: 'placas' }, mago: { w: 'baston', pecho: 'tela', casco: 'tela' },
     explorador: { w: 'arco', pecho: 'cuero', casco: 'cuero' }, picaro: { w: 'daga', pecho: 'cuero', casco: 'tela' },
-    paladin: { w: 'maza', o: 'escudo', pecho: 'placas' }, brujo: { w: 'varita', o: 'orbe', pecho: 'tela', casco: 'tela' },
-    clerigo: { w: 'maza', o: 'escudo', pecho: 'malla', casco: 'tela' },
+    paladin: { w: 'maza', o: 'escudo', pecho: 'placas' }, druida: { w: 'baston', pecho: 'cuero' },
+    sacerdote: { w: 'maza', o: 'escudo', pecho: 'tela' },
   };
 
   // ======================================================================
@@ -65,7 +65,7 @@
   function weapon(base, rarity, parent) {
     const g = new THREE.Group();
     const glow = RARITY[rarity];
-    const steel = mat(rarity === 'legendario' ? '#f0d8a0' : '#c8ced8', { metal: 0.7, rough: 0.35 });
+    const steel = mat(rarity === 'unico' ? '#f0d8a0' : '#c8ced8', { metal: 0.7, rough: 0.35 });
     const accent = glow ? mat(glow, { emissive: glow, ei: 0.8 }) : mat('#c8a040', { metal: 0.6, rough: 0.4 });
     const wood = mat(WOOD);
     switch (base) {
@@ -96,7 +96,7 @@
     const g = new THREE.Group();
     const glow = RARITY[rarity];
     if (base === 'escudo') {
-      const face = set === 'paladin' || set === 'clerigo' ? '#e8e0c8' : '#7a2222';
+      const face = set === 'paladin' || set === 'sacerdote' ? '#e8e0c8' : '#7a2222';
       const disc = mesh(cyl(0.2, 0.2, 0.04, 9), mat(face), 0, 0, 0, g);
       disc.rotation.x = Math.PI / 2;
       const rim = mesh(geo('rim', () => new THREE.TorusGeometry(0.2, 0.022, 4, 12)), glow ? mat(glow, { emissive: glow, ei: 0.6 }) : mat(STEEL, { metal: 0.6, rough: 0.4 }), 0, 0, 0, g);
@@ -104,7 +104,7 @@
       mesh(box(0.05, 0.26, 0.05), mat('#c8a040', { metal: 0.6, rough: 0.4 }), 0, 0, 0.03, g);
       mesh(box(0.2, 0.05, 0.05), mat('#c8a040', { metal: 0.6, rough: 0.4 }), 0, 0.03, 0.03, g);
     } else if (base === 'orbe') {
-      const c = glow || (set === 'brujo' ? '#6aff8a' : '#a060ff');
+      const c = glow || (set === 'druida' ? '#9ad860' : '#a060ff');
       mesh(sph(0.08, 8, 6), mat(c, { emissive: c, ei: 1.2, opacity: 0.85 }), 0, 0, 0, g);
     } else return null;
     if (parent) parent.add(g);
@@ -178,8 +178,8 @@
     }
     if (chest === 'kimono') mesh(box(0.06, 0.3, 0.02), mat('#e8e0d0'), 0, 0.17, 0.15, torso);
     if (look.apron) mesh(box(0.22, 0.42, 0.03), mat('#efe6d0'), 0, -0.02, 0.15, torso);
-    // capa de los conjuntos y legendarios
-    if (set || gear.pechoR === 'legendario') {
+    // capa de los conjuntos y únicos
+    if (set || gear.pechoR === 'unico') {
       const capeC = set ? shade(set[0], -0.1) : '#7a2a10';
       const cape = mesh(box(0.34, 0.6, 0.02), mat(capeC), 0, 0.03, -0.16, torso);
       cape.rotation.x = 0.12;
@@ -211,7 +211,7 @@
     }
     if (look.beard || species === 'dwarf') { const bd = mesh(cone(0.11, 0.16, 6), mat(look.beard || hairHex), 0, -0.06, 0.07, head); bd.rotation.x = Math.PI; }
     // rasgos de especie
-    if (species === 'elf' || species === 'gnome') for (const sx of [-1, 1]) { const e = mesh(cone(0.03, 0.12, 4), skin, sx * 0.15, 0.1, 0, head); e.rotation.z = -sx * 1.2; }
+    if (species === 'elf' || species === 'gnome' || species === 'goblin') for (const sx of [-1, 1]) { const big = species === 'goblin'; const e = mesh(cone(big ? 0.05 : 0.03, big ? 0.2 : 0.12, 4), skin, sx * (big ? 0.18 : 0.15), 0.1, 0, head); e.rotation.z = -sx * (big ? 1.35 : 1.2); }
     if (species === 'orc') for (const sx of [-1, 1]) mesh(cone(0.012, 0.04, 4), mat('#fff6dc'), sx * 0.04, -0.01, 0.13, head);
     if (species === 'tiefling' && helm !== 'placas') for (const sx of [-1, 1]) { const h = mesh(cone(0.025, 0.12, 5), mat('#3a2a2a'), sx * 0.08, 0.2, 0, head); h.rotation.z = -sx * 0.4; }
     if (species === 'dragonborn') { mesh(box(0.12, 0.08, 0.12), skin, 0, 0.02, 0.12, head); for (const sx of [-1, 1]) { const h = mesh(cone(0.02, 0.1, 4), mat('#d8c8a0'), sx * 0.06, 0.18, -0.06, head); h.rotation.x = -0.8; } }
@@ -333,7 +333,7 @@
       if (W) { if (o.weapon === 'arco') { P.handL.add(W); W.position.set(0, -0.12, 0.05); } else W.rotation.x = Math.PI / 2 - 0.3; P.weapon = W; }
     }
     if (o.club) { const c = mesh(cyl(0.035, 0.07, 0.5, 6), mat(WOOD), 0, 0, 0.2, P.handR); c.rotation.x = Math.PI / 2 - 0.2; P.weapon = c; }
-    if (o.staff) { const s = weapon('baston', o.staffGlow ? 'epico' : null, P.handR); s.rotation.x = 0.1; P.weapon = s; }
+    if (o.staff) { const s = weapon('baston', o.staffGlow ? 'raro' : null, P.handR); s.rotation.x = 0.1; P.weapon = s; }
     if (o.ghost) {
       for (const L of [P.legL, P.legR]) L.visible = false;
       mesh(cone(0.22, 0.5, 8), cloth, 0, 0.3, 0, body).rotation.x = Math.PI;
@@ -708,7 +708,7 @@
     Skeleton_Mage: { helmet: 'Skeleton_Mage_Hat', skel: true },
     Skeleton_Minion: { cape: 'Skeleton_Minion_Cloak', skel: true },
   };
-  const CLASS_CHAR = { guerrero: 'Barbarian', paladin: 'Knight', clerigo: 'Knight', mago: 'Mage', brujo: 'Mage', explorador: 'Rogue', picaro: 'Rogue_Hooded' };
+  const CLASS_CHAR = { guerrero: 'Barbarian', paladin: 'Knight', sacerdote: 'Mage', mago: 'Mage', druida: 'Mage', explorador: 'Rogue', picaro: 'Rogue_Hooded' };
   const NPC_CHAR = { bruja: ['Mage', '#2a1a34'], mercader: ['Rogue', '#28305a'], encapuchado: ['Rogue_Hooded', '#2a2226'], tabernero: ['Barbarian', '#6a4a2a'] };
   // Arma de la mochila → pieza del pack (las que no están se hacen con el modelo low poly propio)
   const WEAPON_PROP = { espada: 'sword_1handed', espadon: 'sword_2handed', hacha: 'axe_1handed', daga: 'dagger', baston: 'staff', varita: 'wand', ballesta: 'crossbow_2handed' };
@@ -754,8 +754,12 @@
 
   const lin = (hex) => new THREE.Color(hex).convertSRGBToLinear();
   // Material con cambio de colores: los texeles parecidos a un color "clave" pasan al color elegido (conservando el sombreado)
-  function swapMaterial(src, swaps, tint, opacity) {
+  // rects: [[u0, v0, u1, v1, desde, hacia]] recolorea una zona de la textura (las texturas KayKit son tiras de color)
+  function swapMaterial(src, swaps, tint, opacity, rects) {
     const m = src.clone();
+    const rR = [0, 1].map((i) => (rects && rects[i] ? new THREE.Vector4(...rects[i].slice(0, 4)) : new THREE.Vector4(2, 2, 2, 2)));
+    const rFrom = [0, 1].map((i) => (rects && rects[i] ? lin(rects[i][4]) : new THREE.Color(1, 1, 1)));
+    const rTo = [0, 1].map((i) => (rects && rects[i] ? lin(rects[i][5]) : new THREE.Color(1, 1, 1)));
     m.roughness = 0.88; m.metalness = 0; // acabado mate, como el arte original (sin brillos de plástico)
     const kFrom = [0, 1, 2].map((i) => (swaps[i] ? lin(swaps[i][0]) : new THREE.Color(0, 0, 0)));
     const kTo = [0, 1, 2].map((i) => (swaps[i] ? lin(swaps[i][1]) : new THREE.Color(0, 0, 0)));
@@ -765,10 +769,16 @@
     if (opacity !== undefined) { m.transparent = true; m.opacity = opacity; m.depthWrite = false; }
     m.onBeforeCompile = (sh) => {
       sh.uniforms.kFrom = { value: kFrom }; sh.uniforms.kTo = { value: kTo }; sh.uniforms.kTol = { value: kTol };
+      sh.uniforms.rR = { value: rR }; sh.uniforms.rFrom = { value: rFrom }; sh.uniforms.rTo = { value: rTo };
       sh.fragmentShader = sh.fragmentShader
-        .replace('#include <common>', '#include <common>\nuniform vec3 kFrom[3]; uniform vec3 kTo[3]; uniform float kTol[3];')
+        .replace('#include <common>', '#include <common>\nuniform vec3 kFrom[3]; uniform vec3 kTo[3]; uniform float kTol[3]; uniform vec4 rR[2]; uniform vec3 rFrom[2]; uniform vec3 rTo[2];')
         .replace('#include <map_fragment>', [
           '#include <map_fragment>',
+          '#ifdef USE_MAP',
+          'for (int i = 0; i < 2; i++) { if (vMapUv.x >= rR[i].x && vMapUv.x < rR[i].z && vMapUv.y >= rR[i].y && vMapUv.y < rR[i].w) {',
+          '  diffuseColor.rgb = diffuseColor.rgb / max(rFrom[i] * vDiffuseTint, vec3(0.02)) * rTo[i] * vDiffuseTint;',
+          '} }',
+          '#endif',
           'for (int i = 0; i < 3; i++) { if (kTol[i] > 0.0) {',
           '  float dk = length(diffuseColor.rgb - kFrom[i] * vDiffuseTint);',
           '  float w = 1.0 - smoothstep(kTol[i] * 0.55, kTol[i], dk);',
@@ -780,27 +790,59 @@
     return m;
   }
 
-  // Monta un personaje: name (modelo), o: { cloth, skin, hair, tint, opacity, helmet, cape, w, wr, o, or, scale, weaponKind, mug }
+  // Color medio del pelo de cada cabeza y zona de la textura donde está (columna 2, fila 1 de la tira de colores)
+  const HEAD_HAIR = { Knight: '#e0b888', Barbarian: '#8a8079', Mage: '#2a2629', Rogue: '#8f5039', Rogue_Hooded: '#a26149' };
+  const HAIR_RECT = [0.125, 0, 0.25, 0.25];
+  const HOOD_RECT = [0.125, 0.25, 0.25, 0.5];
+
+  // Pone en el modelo m la cabeza de otro (todos los personajes KayKit comparten esqueleto)
+  function swapHead(m, headModel) {
+    const tpl = GL.chars[headModel];
+    if (!tpl) return null;
+    let src = null, dst = null;
+    tpl.traverse((c) => { if (c.isSkinnedMesh && /_Head/.test(c.name)) src = c; });
+    m.traverse((c) => { if (c.isSkinnedMesh && /_Head/.test(c.name)) dst = c; });
+    if (!src || !dst) return null;
+    const h = new THREE.SkinnedMesh(src.geometry, src.material);
+    h.name = src.name;
+    h.castShadow = true; h.receiveShadow = true; h.frustumCulled = false;
+    dst.parent.add(h);
+    h.position.copy(dst.position); h.quaternion.copy(dst.quaternion); h.scale.copy(dst.scale);
+    h.bind(dst.skeleton, dst.bindMatrix);
+    dst.parent.remove(dst);
+    return h;
+  }
+
+  // Monta un personaje: name (modelo), o: { cloth, skin, hair, tint, opacity, helmet, cape, w, wr, o, or, scale, weaponKind, mug,
+  //   head: modelo del que sale la cabeza (sexo y peinado) }
   function buildGL(name, o = {}) {
     const def = CHAR_DEF[name];
     const tpl = GL.chars[name];
     const m = THREE.SkeletonUtils.clone(tpl);
+    const headModel = o.head && GL.chars[o.head] ? o.head : name;
+    if (headModel !== name) swapHead(m, headModel);
     const nodes = {};
     m.traverse((c) => { if (c.name) nodes[c.name] = c; });
+    let headMesh = null;
     m.traverse((c) => {
       if (!c.isMesh) return;
       const isHelmet = def.helmet && c.name === def.helmet, isCape = def.cape && c.name === def.cape;
       if (isHelmet) c.visible = !!o.helmet;
       else if (isCape) c.visible = !!o.cape;
       else if (!c.isSkinnedMesh) { c.visible = false; return; } // las armas de serie se esconden: se ponen las del equipo
-      const swaps = [];
+      const swaps = [], rects = [];
+      const isHead = c.isSkinnedMesh && /_Head/.test(c.name);
+      if (isHead) headMesh = c;
       if (!def.skel) {
         if (o.skin) swaps.push([SKIN_KEY, o.skin, 0.16]);
-        if (/Head/.test(c.name)) { if (o.hair && def.hair) swaps.push([def.hair[0], o.hair, def.hair[1]]); }
-        else if (o.cloth && def.cloth) swaps.push([def.cloth[0], o.cloth, def.cloth[1]]);
+        if (isHead) {
+          // el pelo (y la capucha) se recolorean por zona de la textura: vale para cualquier cabeza
+          if (o.hair && HEAD_HAIR[headModel]) rects.push([...HAIR_RECT, HEAD_HAIR[headModel], o.hair]);
+          if (headModel === 'Rogue_Hooded' && o.cloth) rects.push([...HOOD_RECT, '#008053', o.cloth]);
+        } else if (o.cloth && def.cloth) swaps.push([def.cloth[0], o.cloth, def.cloth[1]]);
         if (o.cape && /Cape/.test(c.name) && o.capeColor && def.cloth) swaps.push([def.cloth[0], o.capeColor, def.cloth[1] * 1.4]);
       }
-      c.material = swapMaterial(c.material, swaps, o.tint, o.opacity);
+      c.material = swapMaterial(c.material, swaps, o.tint, o.opacity, rects);
       if (o.opacity !== undefined) c.castShadow = false;
     });
     const root = new THREE.Group();
@@ -808,14 +850,14 @@
     m.scale.setScalar(s);
     root.add(m);
     const hR = nodes.handslotr || nodes['handslot.r'], hL = nodes.handslotl || nodes['handslot.l']; // el cargador quita los puntos de los nombres
-    const P = { gl: true, root, model: m, armR: hR, handR: hR, handL: hL, head: nodes.head };
+    const P = { gl: true, root, model: m, armR: hR, handR: hR, handL: hL, head: nodes.head, headMesh };
     // armas del equipo en las manos
     const attach = (hand, propName, base, rarity) => {
       let w = null;
       if (propName && GL.props[propName]) {
         w = GL.props[propName].clone(true);
         w.position.set(0, 0.033, 0); w.rotation.set(0, Math.PI, 0);
-        if (rarity && RARITY[rarity]) w.traverse((c) => { if (c.isMesh) { c.material = c.material.clone(); c.material.emissive = new THREE.Color(RARITY[rarity]); c.material.emissiveIntensity = rarity === 'legendario' || rarity === 'conjunto' ? 0.55 : 0.25; } });
+        if (rarity && RARITY[rarity]) w.traverse((c) => { if (c.isMesh) { c.material = c.material.clone(); c.material.emissive = new THREE.Color(RARITY[rarity]); c.material.emissiveIntensity = rarity === 'unico' || rarity === 'conjunto' ? 0.55 : 0.25; } });
       } else if (base) {
         w = weapon(base, rarity) || offhand(base, rarity, o.set);
         if (w) { w.scale.setScalar(1 / s); w.rotation.set(0, 0, base === 'arco' ? Math.PI / 2 : 0); }
@@ -1031,16 +1073,59 @@
     const cloth = set ? set[0] : npcCloth || look.color || K.color;
     const W = gear.w && RULES.WEAPONS[gear.w];
     const kind = !W ? 'unarmed' : W.kind === 'magic' ? 'magic' : W.kind === 'ranged' ? (gear.w === 'arco' ? 'ranged1' : 'ranged2') : gear.w === 'daga' ? 'dagger' : W.hands === 2 ? 'melee2' : 'melee1';
-    const helmet = !!gear.casco && !npc;
-    const cape = !!set || gear.pechoR === 'legendario' || gear.pechoR === 'epico' || npc === 'bruja';
+    // sexo y peinado: la cabeza sale de otro modelo (los comerciantes de la taberna conservan la suya)
+    const hs = !npc && MAP.hairstyle ? MAP.hairstyle(look.sex, look.hs) : null;
+    const helmet = !!gear.casco && !npc && !(hs && hs.id === 'capucha');
+    const cape = !!set || gear.pechoR === 'unico' || gear.pechoR === 'raro' || npc === 'bruja';
     const root = buildGL(name, {
       skin, hair, cloth, helmet, cape, capeColor: set ? set[1] : RARITY[gear.pechoR] || cloth, set: gear.set,
       w: gear.w, wr: gear.wr, o: gear.o, or: gear.or, weaponKind: kind, mug: npc === 'tabernero',
+      head: hs ? hs.head : null,
     });
-    const sc = (MAP.SPECIES[species] || {}).scale || 1;
-    root.scale.setScalar(sc);
-    if (species === 'dwarf' || species === 'gnome' || species === 'halfling') root.userData.parts.model.scale.x *= 1.12;
+    raceFeatures(root, species, { skin, hair, beard: look.beard || ((hs && hs.beard) || (species === 'dwarf' && hs && hs.head !== 'Barbarian' && look.sex !== 'f') ? hair : null), helmet });
+    const SP = MAP.SPECIES[species] || {};
+    root.scale.setScalar(SP.scale || 1);
+    const body = root.userData.parts.model;
+    if (SP.wide) { body.scale.x *= SP.wide; body.scale.z *= SP.wide; }
+    if (SP.slim) { body.scale.x *= SP.slim; body.scale.z *= SP.slim; }
     return root;
+  }
+
+  // Rasgos de raza sobre la cabeza del modelo: orejas de elfo y de goblin, colmillos de orco y barba
+  // (se colocan con la caja de la cabeza y se pegan al hueso de la cabeza para que se muevan con ella)
+  const linHex = (hex) => '#' + new THREE.Color(hex).convertSRGBToLinear().getHexString();
+  function raceFeatures(root, species, o) {
+    const P = root.userData.parts;
+    if (!P.head || !P.headMesh || (species === 'human' && !o.beard)) return;
+    root.updateMatrixWorld(true);
+    P.headMesh.geometry.computeBoundingBox();
+    const box = P.headMesh.geometry.boundingBox.clone().applyMatrix4(P.headMesh.matrixWorld);
+    const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+    const g = new THREE.Group();
+    const skin = mat(linHex(o.skin));
+    if (species === 'elf' || species === 'goblin') {
+      const big = species === 'goblin';
+      for (const sx of [-1, 1]) {
+        const e = mesh(cone(size.x * (big ? 0.09 : 0.055), size.x * (big ? 0.5 : 0.32), 5), skin, c.x + sx * size.x * (big ? 0.55 : 0.5), c.y - size.y * 0.02, c.z - size.z * 0.06, g);
+        e.rotation.z = -sx * (big ? 1.25 : 0.95); e.rotation.x = -0.25;
+      }
+    }
+    if (species === 'orc') {
+      for (const sx of [-1, 1]) mesh(cone(size.x * 0.035, size.y * 0.13, 5), mat('#f0e6c8'), c.x + sx * size.x * 0.14, box.min.y + size.y * 0.24, box.max.z - size.z * 0.06, g);
+    }
+    if (species === 'goblin') {
+      const nose = mesh(cone(size.x * 0.06, size.z * 0.22, 5), skin, c.x, c.y - size.y * 0.06, box.max.z + size.z * 0.02, g);
+      nose.rotation.x = Math.PI / 2;
+    }
+    if (o.beard) {
+      // barba poblada: una esfera achatada bajo la boca y una punta
+      const bm = mat(linHex(o.beard));
+      const b = mesh(sph(size.x * 0.27, 8, 6), bm, c.x, box.min.y + size.y * 0.16, box.max.z - size.z * 0.2, g);
+      b.scale.set(1, 0.9, 0.55);
+      const t = mesh(cone(size.x * 0.16, size.y * 0.22, 6), bm, c.x, box.min.y - size.y * 0.04, box.max.z - size.z * 0.17, g);
+      t.rotation.x = Math.PI; t.scale.z = 0.6;
+    }
+    P.head.attach(g);
   }
 
   // Enemigos humanoides con modelo de verdad (los animales y dragones siguen siendo low poly propios)
@@ -1068,7 +1153,7 @@
     let spec = null;
     if (s.startsWith('hero:')) {
       const cls = s.slice(5);
-      spec = [CLASS_CHAR[cls] || 'Rogue', { cloth: M.tint || (cls === 'brujo' ? '#5a1010' : '#4a3a2a'), helmet: M.boss, cape: M.boss, w: cls === 'explorador' ? 'ballesta' : cls === 'brujo' ? 'varita' : cls === 'guerrero' ? 'hacha' : 'daga', weaponKind: cls === 'explorador' ? 'ranged2' : cls === 'brujo' ? 'magic' : cls === 'guerrero' ? 'melee1' : 'dagger' }];
+      spec = [CLASS_CHAR[cls] || 'Rogue', { cloth: M.tint || (cls === 'mago' ? '#5a1010' : '#4a3a2a'), helmet: M.boss, cape: M.boss, w: cls === 'explorador' ? 'ballesta' : cls === 'mago' ? 'varita' : cls === 'guerrero' ? 'hacha' : 'daga', weaponKind: cls === 'explorador' ? 'ranged2' : cls === 'mago' ? 'magic' : cls === 'guerrero' ? 'melee1' : 'dagger' }];
     } else if (ENEMY_GL[s]) spec = ENEMY_GL[s](M);
     else if (ENEMY_ANIMAL[s] && GL.animals[ENEMY_ANIMAL[s]]) {
       const m = buildAnimalGL(ENEMY_ANIMAL[s], { tint: M.tint, glowEyes: M.boss ? '#ff3a2a' : null });

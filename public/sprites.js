@@ -65,10 +65,10 @@
   // ======================================================================
   // look: { cls, species, skin, hair, gear: { w, wr, o, or, casco, cascoR, pecho, pechoR, guantes, botas, set }, npc }
   // o: { back, frame (0 quieto, 1-2 andando), sit, emote, tick (0/1 para animar gestos), mug, wiping }
-  const RARITY_COL = { raro: '#4aa0ff', epico: '#c060ff', legendario: '#ff9a2a', conjunto: '#3ee67a' };
+  const RARITY_COL = { magico: '#7a8cff', raro: '#ffe24a', unico: '#c8a46a', conjunto: '#3ee67a' };
   const SET_COL = {
     guerrero: ['#7a1a1a', '#e0b040'], mago: ['#23237a', '#c8d4ff'], explorador: ['#2a4a22', '#c8e07a'], picaro: ['#16161e', '#a070ff'],
-    paladin: ['#d8d0b8', '#e8c050'], brujo: ['#2e0a30', '#6aff8a'], clerigo: ['#ece4cc', '#d8a030'],
+    paladin: ['#d8d0b8', '#e8c050'], druida: ['#3a4a22', '#9ad860'], sacerdote: ['#ece4cc', '#d8a030'],
   };
   const STEEL = '#a8aeb8', STEEL_D = '#6e747e', STEEL_L = '#d8dce4', LEATHER = '#6b4428', LEATHER_D = '#4a2e1a';
 
@@ -83,8 +83,8 @@
   const DEFAULT_GEAR = {
     guerrero: { w: 'espada', o: 'escudo', pecho: 'malla', casco: 'placas' }, mago: { w: 'baston', pecho: 'tela', casco: 'tela' },
     explorador: { w: 'arco', pecho: 'cuero', casco: 'cuero' }, picaro: { w: 'daga', pecho: 'cuero', casco: 'tela' },
-    paladin: { w: 'maza', o: 'escudo', pecho: 'placas' }, brujo: { w: 'varita', o: 'orbe', pecho: 'tela', casco: 'tela' },
-    clerigo: { w: 'maza', o: 'escudo', pecho: 'malla', casco: 'tela' },
+    paladin: { w: 'maza', o: 'escudo', pecho: 'placas' }, druida: { w: 'baston', pecho: 'cuero' },
+    sacerdote: { w: 'maza', o: 'escudo', pecho: 'tela' },
   };
 
   function drawHero(look, o) {
@@ -121,8 +121,8 @@
     const pants = gear.botas === 'placas' ? STEEL : '#3a2a20';
     const glove = gear.guantes === 'placas' || gear.guantes === 'malla' ? STEEL : gear.guantes === 'cuero' ? LEATHER : skin;
 
-    // --- capa (conjuntos y legendarios): por detrás del cuerpo ---
-    const cape = set || gear.pechoR === 'legendario';
+    // --- capa (conjuntos y únicos): por detrás del cuerpo ---
+    const cape = set || gear.pechoR === 'unico';
     if (cape && !o.sit) {
       const capeCol = set ? shade(set[0], -0.15) : '#7a2a10';
       if (back) { p.rect(6, 18 + up, 12, 11, capeCol); p.col(17, 18 + up, 28 + up, shade(capeCol, -0.3)); p.row(29 + up, 7, 16, shade(capeCol, -0.3)); }
@@ -154,7 +154,7 @@
       p.col(16, 24, 28, clothD); p.col(15, 18, 23, clothD); p.col(8, 19, 23, clothL);
       if (chest === 'kimono') { p.row(22, 8, 15, '#a02a2a'); p.row(23, 8, 15, '#a02a2a'); if (!back) { p.px(11, 18, '#e8e0d0'); p.px(12, 19, '#e8e0d0'); p.px(13, 20, '#e8e0d0'); } }
       else { p.row(23, 8, 15, accent); p.row(28, 7, 16, accent); }
-      if (!back && cid === 'clerigo' && chest === 'tela') { p.col(12, 19, 22, trim); p.row(20, 11, 13, trim); }
+      if (!back && cid === 'sacerdote' && chest === 'tela') { p.col(12, 19, 22, trim); p.row(20, 11, 13, trim); }
       if (!back && npc === 'encapuchado') { p.px(12, 25, '#c8a040'); p.px(11, 26, '#c8a040'); p.px(13, 26, '#c8a040'); }
     } else {
       // camisa base
@@ -208,6 +208,7 @@
     if (look.beard && !back) { p.rect(9, 15, 7, 3, look.beard); p.row(18, 10, 14, look.beard); p.px(12, 16, skin); }
     if (species === 'elf') { p.px(6, 13, skin); p.px(5, 12, skin); p.px(4, 11, skin); p.px(17, 13, skin); p.px(18, 12, skin); p.px(19, 11, skin); }
     if (species === 'gnome') { p.px(6, 13, skin); p.px(5, 12, skin); p.px(17, 13, skin); p.px(18, 12, skin); }
+    if (species === 'goblin') { p.px(6, 13, skin); p.px(5, 13, skin); p.px(4, 12, skin); p.px(3, 12, skin); p.px(17, 13, skin); p.px(18, 13, skin); p.px(19, 12, skin); p.px(20, 12, skin); }
     if (species === 'dragonborn' && !back) { p.rect(16, 13, 2, 3, skin); p.px(17, 13, skinD); p.row(16, 15, 17, skinD); }
 
     const helm = npc ? null : gear.casco || null;
@@ -302,7 +303,7 @@
     if (!back && handX >= 0) drawWeapon(p, gear, false, o, handX, handY);
     if (!back) drawOffhand(p, gear, o);
     if (back && gear.o === 'escudo' && !o.sit) {
-      const rim = RARITY_COL[gear.or] || '#8a6a3a', face = gear.set === 'paladin' || gear.set === 'clerigo' ? '#e8e0c8' : '#7a2a2a';
+      const rim = RARITY_COL[gear.or] || '#8a6a3a', face = gear.set === 'paladin' || gear.set === 'sacerdote' ? '#e8e0c8' : '#7a2a2a';
       p.rect(8, 17, 8, 9, face); p.row(16, 9, 14, rim); p.row(26, 9, 14, rim); p.col(7, 17, 25, rim); p.col(16, 17, 25, rim); p.col(12, 17, 25, '#c8a040'); p.row(20, 8, 15, '#c8a040');
     }
 
@@ -313,7 +314,7 @@
     const w = gear.w;
     if (!w) return;
     const glow = RARITY_COL[gear.wr];
-    const steel = gear.wr === 'legendario' ? '#ffe6b0' : STEEL_L;
+    const steel = gear.wr === 'unico' ? '#ffe6b0' : STEEL_L;
     if (back) {
       // a la espalda: en diagonal por detrás
       if (w === 'arco') { p.col(5, 14, 27, '#6b4228'); p.px(6, 13, '#6b4228'); p.px(6, 28, '#6b4228'); p.col(7, 14, 27, '#d8d0c0'); }
@@ -341,11 +342,11 @@
   function drawOffhand(p, gear) {
     if (gear.o === 'escudo') {
       const rim = RARITY_COL[gear.or] || '#8a6a3a';
-      const face = gear.set === 'paladin' ? '#e8e0c8' : gear.set === 'clerigo' ? '#f0e8d0' : '#7a2a2a';
+      const face = gear.set === 'paladin' ? '#e8e0c8' : gear.set === 'sacerdote' ? '#f0e8d0' : '#7a2a2a';
       p.rect(3, 18, 6, 8, face); p.row(17, 4, 7, rim); p.row(26, 4, 7, rim); p.col(2, 19, 24, rim); p.col(9, 19, 24, rim); p.row(27, 5, 6, rim);
       p.col(5, 19, 25, shade(face, 0.25)); p.px(6, 21, '#c8a040'); p.px(5, 22, '#c8a040'); p.px(6, 22, '#c8a040'); p.px(7, 22, '#c8a040'); p.px(6, 23, '#c8a040');
     } else if (gear.o === 'orbe') {
-      const col = RARITY_COL[gear.or] || (gear.set === 'brujo' ? '#6aff8a' : '#a060ff');
+      const col = RARITY_COL[gear.or] || (gear.set === 'druida' ? '#9ad860' : '#a060ff');
       p.rect(3, 19, 3, 3, col); p.px(4, 18, col); p.px(4, 22, col); p.px(2, 20, col); p.px(6, 20, col); p.px(3, 19, shade(col, 0.6));
     }
   }

@@ -2135,7 +2135,7 @@
   $('#main-menu').addEventListener('mousemove', (e) => { const b = e.target.closest('button'); const i = menuButtons().indexOf(b); if (i >= 0 && i !== sel) { sel = i; menuSel(); } });
   titleEl.addEventListener('pointerdown', () => pressAnyKey());
   for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('click', goMenu);
-  $('#login-back').addEventListener('click', openSlots);
+  $('#login-back').addEventListener('click', () => { if (edMode === 'edit') loginEl.classList.add('hidden'); else openSlots(); });
   window.addEventListener('keydown', (e) => {
     if (titleEl.classList.contains('hidden') && slotsEl.classList.contains('hidden') && serversEl.classList.contains('hidden')) return;
     if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
@@ -2151,35 +2151,66 @@
     if (e.key === 'Escape') goMenu();
   });
 
+  // ---------- Editor de personaje ----------
+  // create: héroe nuevo en una casilla (con el reparto de los primeros puntos); edit: cambiar aspecto, raza o clase
+  let edMode = 'create', edRot = 0.55;
+  const edAlloc = Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0]));
+  const starterCache = {};
+  const fmtMods = (mods) => Object.entries(mods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${RULES.STATS.find((x) => x.id === k).abbr}`).join(' ');
+  const edChar = () => ({ cls: look.cls, alloc: { ...edAlloc }, look: { species: look.species } });
+
+  function openEditor(mode) {
+    edMode = mode;
+    if (mode === 'create') { show(loginEl); screen = 'create'; } else loginEl.classList.remove('hidden');
+    const create = mode === 'create';
+    $('#ed-title').textContent = create ? `NUEVO HÉROE · CASILLA ${createSlot + 1}` : 'ASPECTO, RAZA Y CLASE';
+    $('#ed-submit').textContent = create ? 'CREAR Y JUGAR' : 'GUARDAR CAMBIOS';
+    $('#ed-name-l').classList.toggle('hidden', !create);
+    $('#ed-stats-sec').classList.toggle('hidden', !create);
+    $('#ed-edit-note').classList.toggle('hidden', create);
+    buildPickers();
+    if (create) setTimeout(() => $('#login-name').focus(), 50);
+  }
   function openCreate(slot) {
     createSlot = slot;
-    show(loginEl); screen = 'create';
-    $('#login-slot').textContent = slot + 1;
+    for (const k of RULES.STAT_IDS) edAlloc[k] = 0;
     $('#login-name').value = '';
-    buildPickers();
-    setTimeout(() => $('#login-name').focus(), 50);
+    openEditor('create');
+  }
+  DD.on('open-editor', (o) => { Object.assign(look, MAP.cleanLook(o.look)); openEditor('edit'); });
+
+  function pickRow(box, items, cur, onPick) {
+    box.innerHTML = '';
+    for (const it of items) {
+      const b = document.createElement('button'); b.type = 'button';
+      b.className = cur === it.id ? 'on' : '';
+      if (it.title) b.title = it.title;
+      b.innerHTML = '<span></span>' + (it.sub ? '<small></small>' : '');
+      b.firstChild.textContent = it.label;
+      if (it.sub) b.lastChild.textContent = it.sub;
+      b.onclick = () => { onPick(it.id); buildPickers(); };
+      box.appendChild(b);
+    }
+  }
+
+  function clampAlloc() {
+    const base = RULES.baseStats(edChar());
+    let budget = RULES.POINTS_START;
+    for (const k of RULES.STAT_IDS) { edAlloc[k] = Math.max(0, Math.min(edAlloc[k], RULES.STAT_MAX - base[k], budget)); budget -= edAlloc[k]; }
   }
 
   function buildPickers() {
-    const cp = $('#class-pick'); cp.innerHTML = '';
-    for (const [id, k] of Object.entries(RULES.CLASSES)) {
-      const b = document.createElement('button'); b.type = 'button';
-      b.className = look.cls === id ? 'on' : '';
-      b.title = k.desc;
-      b.innerHTML = '<span></span><small></small>';
-      b.firstChild.textContent = `${k.icon} ${k.name}`;
-      b.lastChild.textContent = RULES.statName(k.main);
-      b.onclick = () => { look.cls = id; buildPickers(); };
-      cp.appendChild(b);
-    }
-    const spSel = $('#species-pick'); spSel.innerHTML = '';
-    for (const [id, k] of Object.entries(MAP.SPECIES)) {
-      const b = document.createElement('button'); b.type = 'button';
-      b.className = look.species === id ? 'on' : '';
-      b.textContent = k.name;
-      b.onclick = () => { look.species = id; if (!MAP.skinsFor(id).includes(look.skin)) look.skin = MAP.skinsFor(id)[0]; delete look.sub; buildPickers(); };
-      spSel.appendChild(b);
-    }
+    pickRow($('#sex-pick'), Object.entries(MAP.SEXES).map(([id, name]) => ({ id, label: name })), look.sex, (id) => { look.sex = id; look.hs = MAP.hairstyle(id, id === 'm' && look.species === 'dwarf' ? 'barba' : null).id; });
+    pickRow($('#species-pick'), RULES.RACE_IDS.map((id) => ({ id, label: RULES.RACES[id].name, sub: fmtMods(RULES.RACES[id].mods), title: RULES.RACES[id].perkText })), look.species, (id) => {
+      look.species = id;
+      if (!MAP.skinsFor(id).includes(look.skin)) look.skin = MAP.skinsFor(id)[0];
+      delete look.sub;
+    });
+    $('#ed-race-note').textContent = RULES.RACES[look.species].perkText;
+    pickRow($('#class-pick'), RULES.CLASS_IDS.map((id) => { const k = RULES.CLASSES[id]; return { id, label: `${k.icon} ${k.name}`, sub: fmtMods(k.base), title: k.desc }; }), look.cls, (id) => { look.cls = id; });
+    const K = RULES.CLASSES[look.cls];
+    $('#login-sheet-note').textContent = `${K.desc} Prefiere: ${K.weapons.map((w) => (RULES.WEAPONS[w] || RULES.OFFHANDS[w]).name.toLowerCase()).join(', ')}.`;
+    pickRow($('#hs-pick'), MAP.HAIRSTYLES[look.sex].map((h) => ({ id: h.id, label: h.name })), look.hs, (id) => { look.hs = id; });
     const skinEl = $('#skin-pick'); skinEl.innerHTML = '';
     MAP.skinsFor(look.species).forEach((i) => {
       const b = document.createElement('button'); b.type = 'button';
@@ -2194,24 +2225,60 @@
       b.onclick = () => { look.hair = i; buildPickers(); };
       hairEl.appendChild(b);
     });
-    // vista previa con el equipo inicial de la clase
-    const gear = {};
-    for (const [slot, base] of RULES.CLASSES[look.cls].start) {
-      if (slot === 'arma') gear.w = base; else if (slot === 'mano') gear.o = base; else gear[slot] = base;
+
+    // características: base de raza + clase, más los primeros puntos (sin pasar de 20)
+    clampAlloc();
+    const base = RULES.baseStats(edChar());
+    const left = RULES.POINTS_START - Object.values(edAlloc).reduce((a, b) => a + b, 0);
+    $('#ed-points').textContent = left;
+    const sb = $('#ed-stats'); sb.innerHTML = '';
+    for (const S of RULES.STATS) {
+      const row = document.createElement('div'); row.className = 'ed-stat'; row.title = S.desc;
+      const v = base[S.id] + edAlloc[S.id];
+      row.innerHTML = '<div class="nm"><span></span><small></small></div><div class="bar"><i></i></div><button type="button">−</button><div class="val"></div><button type="button">+</button>';
+      row.querySelector('.nm span').textContent = S.name;
+      row.querySelector('.nm small').textContent = S.desc.split(/[,(]/)[0];
+      const bar = row.querySelector('.bar');
+      bar.firstChild.style.width = (100 * base[S.id] / RULES.STAT_MAX) + '%';
+      if (edAlloc[S.id]) { const a = document.createElement('i'); a.className = 'alloc'; a.style.cssText = `width:${100 * edAlloc[S.id] / RULES.STAT_MAX}%;margin-top:-8px;margin-left:${100 * base[S.id] / RULES.STAT_MAX}%`; bar.appendChild(a); }
+      const val = row.querySelector('.val'); val.textContent = v; if (S.id === K.main) val.classList.add('main');
+      const [minus, plus] = row.querySelectorAll('button');
+      minus.disabled = !edAlloc[S.id];
+      plus.disabled = left <= 0 || v >= RULES.STAT_MAX;
+      minus.onclick = () => { edAlloc[S.id]--; buildPickers(); };
+      plus.onclick = () => { edAlloc[S.id]++; buildPickers(); };
+      sb.appendChild(row);
     }
+
+    // vista previa: el héroe con el equipo inicial de su clase y lo que tendría en combate
+    if (!starterCache[look.cls]) starterCache[look.cls] = RULES.starterItems(look.cls, RULES.seeded('preview:' + look.cls));
+    const equip = Object.fromEntries(starterCache[look.cls].map((it) => [it.slot, it]));
+    const gear = RULES.gearLook(equip);
     const pv = $('#preview'), g = pv.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pv.width, pv.height);
-    try { g.drawImage(VIEW3D.snapshot({ ...look, gear }, pv.width, pv.height, 'full'), 0, 0); } catch { drawHero(g, 60, 112, { ...look, gear }, { dir: 'E', t: 0 }); }
-    $('#login-sheet-note').textContent = RULES.CLASSES[look.cls].desc;
+    try { g.drawImage(VIEW3D.snapshot({ ...look, gear }, pv.width, pv.height, 'full', edRot), 0, 0); } catch { drawHero(g, 130, 300, { ...look, gear }, { dir: 'E', t: 0 }); }
+    const R = RULES.RACES[look.species];
+    $('#ed-summary').textContent = `${R.name}${look.sex === 'f' ? ' · mujer' : ''} · ${K.icon} ${K.name}`;
+    const d = RULES.derive({ xp: 0, char: edMode === 'create' ? edChar() : { ...edChar(), alloc: Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0])) }, equip, bag: [], buffs: {} });
+    const dv = [['❤️ Vida', d.hp], ['⚡ Energía', d.en], ['⚔️ Daño', `${d.dmg[0]}–${d.dmg[1]}`], ['✨ Hechizos', `${d.spell[0]}–${d.spell[1]}`], ['🛡️ Armadura', d.armor], ['🎯 Crítico', d.crit + '%'], ['💨 Esquiva', d.dodge + '%'], ['🔮 Res. mágica', d.magicRes + '%']];
+    $('#ed-derived').innerHTML = '';
+    for (const [k, v] of dv) { const r = document.createElement('div'); r.innerHTML = '<span></span> <b></b>'; r.firstChild.textContent = k; r.lastChild.textContent = v; $('#ed-derived').appendChild(r); }
   }
+  $('#ed-rl').addEventListener('click', () => { edRot -= 0.6; buildPickers(); });
+  $('#ed-rr').addEventListener('click', () => { edRot += 0.6; buildPickers(); });
 
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const name = $('#login-name').value.trim().slice(0, 16);
-    if (!name) return;
     Object.assign(profile, { look: { ...look } });
     save('dd-profile', JSON.stringify(profile));
-    const m = await lobby.call({ t: 'char:new', slot: createSlot, name, look: { ...look } });
+    if (edMode === 'edit') {
+      net.send({ t: 'char:save', look: { ...look } });
+      loginEl.classList.add('hidden');
+      return;
+    }
+    const name = $('#login-name').value.trim().slice(0, 16);
+    if (!name) { $('#login-name').focus(); toast('Ponle un nombre a tu héroe.'); return; }
+    const m = await lobby.call({ t: 'char:new', slot: createSlot, name, look: { ...look }, alloc: { ...edAlloc } });
     if (m.t !== 'account') return;
     acct = m;
     enterGame(createSlot, server);

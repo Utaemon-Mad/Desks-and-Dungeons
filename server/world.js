@@ -29,15 +29,15 @@ const FLOOR = [',', ',', 'm', 'd', 'n', 'a']; // suelo limpio de cada zona
 
 // Gente del mundo
 const NPCS = {
-  alcalde: { name: 'Alcalde Brumo', look: { cls: 'paladin', skin: 1, hair: 4, beard: '#d8d8d8', gear: { pecho: 'tela' }, color: '#5a2a5a' }, lines: ['Bienvenido a Brumaverde. Desde que el cielo del sur se volvió rojo, nada va bien.', 'Las piedras de viaje te llevan de campamento en campamento. Tócalas para recordarlas.'] },
-  jacinta: { name: 'Jacinta la granjera', look: { cls: 'clerigo', skin: 2, hair: 2, gear: { pecho: 'tela' }, color: '#7a5a2a' }, lines: ['¡Un aventurero! Por fin alguien que no huye de los goblins.'] },
-  tilda: { name: 'Tilda la buhonera', shop: 'bruja', look: { cls: 'picaro', skin: 0, hair: 3, gear: { pecho: 'cuero' }, color: '#6a3a2a' }, lines: ['Pociones de Madre Zarza, a precio de pueblo. ¿Qué te pongo?'] },
-  ewan: { name: 'Ewan el leñador', look: { cls: 'guerrero', skin: 2, hair: 1, beard: '#6b4226', gear: { w: 'hacha', pecho: 'cuero' } }, lines: ['El bosque cruje de noche. No son los árboles.'] },
+  alcalde: { name: 'Alcalde Brumo', look: { cls: 'paladin', sex: 'm', hs: 'barba', skin: 1, hair: 4, beard: '#d8d8d8', gear: { pecho: 'tela' }, color: '#5a2a5a' }, lines: ['Bienvenido a Brumaverde. Desde que el cielo del sur se volvió rojo, nada va bien.', 'Las piedras de viaje te llevan de campamento en campamento. Tócalas para recordarlas.'] },
+  jacinta: { name: 'Jacinta la granjera', look: { cls: 'sacerdote', sex: 'f', hs: 'coleta', skin: 2, hair: 2, gear: { pecho: 'tela' }, color: '#7a5a2a' }, lines: ['¡Un aventurero! Por fin alguien que no huye de los goblins.'] },
+  tilda: { name: 'Tilda la buhonera', shop: 'bruja', look: { cls: 'picaro', sex: 'f', hs: 'melena', skin: 0, hair: 3, gear: { pecho: 'cuero' }, color: '#6a3a2a' }, lines: ['Pociones de Madre Zarza, a precio de pueblo. ¿Qué te pongo?'] },
+  ewan: { name: 'Ewan el leñador', look: { cls: 'guerrero', sex: 'm', hs: 'barba', skin: 2, hair: 1, beard: '#6b4226', gear: { w: 'hacha', pecho: 'cuero' } }, lines: ['El bosque cruje de noche. No son los árboles.'] },
   bran: { name: 'Bran el cazador', look: { cls: 'explorador', skin: 3, hair: 0, gear: { w: 'arco', pecho: 'cuero', casco: 'cuero' } }, lines: ['He seguido el rastro del Alfa tres lunas. Es más listo que un lobo.'] },
-  morwen: { name: 'Abuela Morwen', look: { cls: 'brujo', skin: 6, hair: 4, gear: { pecho: 'tela', casco: 'tela' }, color: '#2a3a2a' }, lines: ['Siéntate, criatura. La ciénaga habla, si sabes escuchar.'] },
+  morwen: { name: 'Abuela Morwen', look: { cls: 'druida', sex: 'f', hs: 'capucha', species: 'elf', skin: 14, hair: 4, gear: { w: 'baston', pecho: 'tela' }, color: '#2a3a2a' }, lines: ['Siéntate, criatura. La ciénaga habla, si sabes escuchar.'] },
   rhys: { name: 'Capitán Rhys', look: { cls: 'paladin', skin: 3, hair: 0, gear: { w: 'espada', o: 'escudo', pecho: 'placas', casco: 'placas' } }, lines: ['Fuerte del Desierto. Aquí aguantamos lo que baja del sur.'] },
-  tor: { name: 'Tor el ermitaño', look: { cls: 'clerigo', skin: 1, hair: 4, beard: '#e8e8e8', gear: { w: 'baston', pecho: 'tela', casco: 'tela' }, color: '#5a6a7a' }, lines: ['El viento de los picos trae voces. Últimamente, gritos.'] },
-  selene: { name: 'Selene, la Última Vigía', look: { cls: 'paladin', skin: 0, hair: 3, gear: { w: 'espadon', pecho: 'placas', casco: 'placas' }, set: 'paladin' }, lines: ['Llevo años vigilando la guarida. Ignaroth despierta un poco más cada noche.'] },
+  tor: { name: 'Tor el ermitaño', look: { cls: 'sacerdote', sex: 'm', hs: 'calvo', species: 'dwarf', skin: 1, hair: 4, beard: '#e8e8e8', gear: { w: 'baston', pecho: 'tela', casco: 'tela' }, color: '#5a6a7a' }, lines: ['El viento de los picos trae voces. Últimamente, gritos.'] },
+  selene: { name: 'Selene, la Última Vigía', look: { cls: 'paladin', sex: 'f', hs: 'melena', species: 'elf', skin: 0, hair: 3, gear: { w: 'espadon', pecho: 'placas', casco: 'placas' }, set: 'paladin' }, lines: ['Llevo años vigilando la guarida. Ignaroth despierta un poco más cada noche.'] },
   buhonero: { name: 'Buhonero', shop: 'bruja', look: { cls: 'picaro', skin: 2, hair: 1, gear: { pecho: 'cuero', casco: 'tela' }, color: '#4a3a2a' }, lines: ['Pociones, vendas, de todo. Aquí lejos, de todo vale el doble... pero te hago precio.'] },
 };
 

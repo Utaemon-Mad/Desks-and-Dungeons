@@ -156,7 +156,7 @@
     for (const l of game.log) { const d = document.createElement('div'); d.className = 'dlog-line ' + (l.cls || ''); d.textContent = l.text; el.appendChild(d); }
   }
 
-  const FX_COL = { fire: '#ff7a2a', cold: '#9ad8ff', holy: '#fff2a0', void: '#a05aff', blood: '#ff3a4a', lightning: '#fff27a' };
+  const FX_COL = { fire: '#ff7a2a', cold: '#9ad8ff', holy: '#fff2a0', void: '#a05aff', blood: '#ff3a4a', lightning: '#fff27a', nature: '#7ad85a' };
   const PROJ_COL = { arrow: '#e8dcc0', javelin: '#c8a070', bolt: '#7aff9a', necro: '#9a5aff', fire: '#ff7a2a' };
 
   function onEvent(ev, now) {
@@ -643,11 +643,11 @@
       if (it.slot === 'arma') o = MODELS.weapon(it.base, l.r);
       if (o) { o.rotation.z = Math.PI / 2; o.position.y = 0.12; o.scale.setScalar(0.8); g.add(o); }
       else MODELS.mesh(MODELS.box(0.22, 0.16, 0.22), MODELS.mat(it.slot === 'mano' ? '#7a2222' : it.type === 'placas' ? '#a8aeb8' : it.type === 'malla' ? '#7e8692' : it.type === 'cuero' ? '#6a4226' : it.slot === 'amuleto' || it.slot === 'anillo' ? '#c8a040' : '#6a4aa0', { metal: it.type === 'placas' ? 0.6 : 0 }), 0, 0.1, 0, g);
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.12, l.r === 'comun' ? 0.6 : 1.8, 6, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: l.r === 'comun' ? 0.25 : 0.45, depthWrite: false, side: THREE.DoubleSide }));
-      beam.position.y = l.r === 'comun' ? 0.3 : 0.9;
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.12, ['inferior', 'normal', 'superior'].includes(l.r) ? 0.6 : 1.8, 6, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: ['inferior', 'normal', 'superior'].includes(l.r) ? 0.25 : 0.45, depthWrite: false, side: THREE.DoubleSide }));
+      beam.position.y = ['inferior', 'normal', 'superior'].includes(l.r) ? 0.3 : 0.9;
       beam.layers.set(1);
       g.add(beam);
-      g.userData.light = l.r === 'comun' ? null : col;
+      g.userData.light = ['inferior', 'normal', 'superior'].includes(l.r) ? null : col;
     } else if (l.gold && MODELS.GL.ready && MODELS.pieceGeo('coin_stack_small')) {
       g.add(MODELS.piece('coin_stack_small', 0.28));
       g.userData.light = '#ffd23f';

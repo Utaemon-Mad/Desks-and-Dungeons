@@ -37,14 +37,16 @@
   function hideTip() { tip.classList.add('hidden'); }
   function showTip(it, ev, extra) {
     tip.innerHTML = '';
-    const R = RULES.RARITIES[it.rarity] || RULES.RARITIES.comun;
+    const R = RULES.RARITIES[it.rarity] || RULES.RARITIES.normal;
     const name = el('div', 'tip-name', it.name); name.style.color = R.color;
     tip.append(name, el('div', 'tip-type', RULES.typeLine(it)));
-    for (const l of RULES.describe(it)) tip.appendChild(el('div', 'tip-line', l));
     const p = me();
+    // características que tendrías sin lo que llevas en ese hueco (para los requisitos)
+    const stats = p ? RULES.derive({ ...p, equip: { ...p.equip, [it.slot]: p.equip[it.slot] && p.equip[it.slot].id === it.id ? it : undefined } }).stats : null;
+    for (const l of RULES.describeRich(it, stats)) tip.appendChild(el('div', 'tip-line' + (l.c ? ' ' + l.c : ''), l.t));
     if (p) {
       const lvl = RULES.levelFromXp(p.xp);
-      const can = RULES.canEquip(it, p.char, lvl);
+      const can = RULES.canEquip(it, p.char, lvl, stats);
       const req = el('div', 'tip-req', `Nivel ${it.req || 1}`);
       if (!can.ok) { req.textContent = can.reason; req.classList.add('bad'); }
       tip.appendChild(req);
@@ -106,7 +108,11 @@
       b.appendChild(itemIcon(it, 36));
       if (it.set) b.classList.add('set');
       const p = me();
-      if (p && !RULES.canEquip(it, p.char, RULES.levelFromXp(p.xp)).ok && RULES.SLOTS[it.slot]) b.classList.add('cant');
+      // en rojo lo que no puedes llevar (nivel o requisitos de características, sin contar lo que ya llevas en ese hueco)
+      if (p && RULES.SLOTS[it.slot] && !(p.equip[it.slot] && p.equip[it.slot].id === it.id)) {
+        const st = RULES.derive({ ...p, equip: { ...p.equip, [it.slot]: undefined } }).stats;
+        if (!RULES.canEquip(it, p.char, RULES.levelFromXp(p.xp), st).ok) b.classList.add('cant');
+      }
       tipOn(b, it, opts.tipExtra);
       if (opts.price !== undefined) { const pr = el('span', 'price', `${opts.price}🪙`); b.appendChild(pr); }
     } else if (opts.slot) {
@@ -200,7 +206,7 @@
     const it = m.item;
     const card = $('#lootcard');
     card.innerHTML = '';
-    const R = RULES.RARITIES[it.rarity] || RULES.RARITIES.comun;
+    const R = RULES.RARITIES[it.rarity] || RULES.RARITIES.normal;
     const top = el('div', 'lc-top');
     top.appendChild(itemIcon(it, 40));
     const t = el('div', '');
@@ -217,7 +223,7 @@
     card.style.right = DD.scene === 'tavern' && hl && hl.offsetParent && innerWidth > 820 ? Math.round(innerWidth - hl.getBoundingClientRect().left + 10) + 'px' : '';
     card.classList.remove('hidden');
     clearTimeout(cardTimer);
-    cardTimer = setTimeout(() => card.classList.add('hidden'), it.rarity === 'comun' ? 3500 : 6000);
+    cardTimer = setTimeout(() => card.classList.add('hidden'), ['inferior', 'normal', 'superior'].includes(it.rarity) ? 3500 : 6000);
   });
   $('#lootcard').onclick = () => { $('#lootcard').classList.add('hidden'); openChar('equipo'); };
 
@@ -247,15 +253,20 @@
     for (const S of RULES.STATS) {
       const row = el('div', 'lu-row' + (main.has(S.id) ? ' main' : ''));
       const nm = el('div', 'lu-name');
+      const nat = d.natural[S.id] + pending[S.id];
       nm.append(el('b', '', S.name), el('small', '', S.desc));
       const val = el('div', 'lu-val', String(d.stats[S.id] + pending[S.id]));
+      val.title = `Natural ${nat}/${RULES.STAT_MAX}${d.stats[S.id] > d.natural[S.id] ? ` · +${d.stats[S.id] - d.natural[S.id]} del equipo` : ''}`;
       if (pending[S.id]) val.classList.add('up');
+      if (nat >= RULES.STAT_MAX) val.classList.add('max');
+      const room = RULES.STAT_MAX - nat;
       const minus = el('button', 'mini', '−'); minus.type = 'button';
       minus.disabled = !pending[S.id];
       minus.onclick = () => { pending[S.id]--; renderLevelUp(); };
       const plus = el('button', 'mini plus', '+'); plus.type = 'button';
-      plus.disabled = left <= 0;
-      plus.onclick = (e) => { pending[S.id] += e.shiftKey ? Math.min(5, left) : 1; renderLevelUp(); };
+      plus.disabled = left <= 0 || room <= 0;
+      plus.title = room <= 0 ? `Máximo natural: ${RULES.STAT_MAX}` : '';
+      plus.onclick = (e) => { pending[S.id] += e.shiftKey ? Math.min(5, left, room) : 1; renderLevelUp(); };
       row.append(nm, minus, val, plus);
       box.appendChild(row);
     }
@@ -264,7 +275,7 @@
       diff(d.hp, preview.hp, '❤️ Vida'), diff(d.en, preview.en, '⚡ Energía'), diff(d.armor, preview.armor, '🛡️ Armadura'),
       diff(`${d.dmg[0]}–${d.dmg[1]}`, `${preview.dmg[0]}–${preview.dmg[1]}`, '⚔️ Daño'), diff(`${d.spell[0]}–${d.spell[1]}`, `${preview.spell[0]}–${preview.spell[1]}`, '✨ Hechizos'),
       diff(d.crit, preview.crit, '🎯 Crítico', (x) => x + '%'), diff(d.dodge, preview.dodge, '💨 Esquiva', (x) => x + '%'), diff(d.mf, preview.mf, '🍀 Botín', (x) => '+' + x + '%'),
-    ].filter(Boolean).join('<br>') || '<span class="muted">Pulsa + para repartir tus puntos. Mayús + clic suma 5.</span>';
+    ].filter(Boolean).join('<br>') || `<span class="muted">Pulsa + para repartir tus puntos. Mayús + clic suma 5. Ninguna característica pasa de ${RULES.STAT_MAX} de forma natural; el equipo sí la sube más.</span>`;
     $('#lu-ok').disabled = !used;
   }
   $('#lu-ok').onclick = () => {
@@ -306,23 +317,20 @@
     left.appendChild(pv);
     left.appendChild(el('div', 'ficha-name', u ? u.name : ''));
     const c1 = RULES.CLASSES[p.char.cls];
-    left.appendChild(el('div', 'ficha-cls', `${c1.icon} ${c1.name}`));
+    const race = RULES.RACES[d.race];
+    const look = (u && u.look) || {};
+    left.appendChild(el('div', 'ficha-cls', `${c1.icon} ${c1.name} · ${race.name}${look.sex === 'f' ? ' (mujer)' : ''}`));
     left.appendChild(el('div', 'ficha-lvl', `Nivel ${d.level} · ${p.xp} PX`));
+    left.appendChild(el('div', 'muted small', race.perkText));
     if (d.points > 0) { const b = el('button', 'btn red', `⭐ Repartir ${d.points} puntos`); b.onclick = openLevelUp; left.appendChild(b); }
-    // cambio de clase (sólo en la taberna)
-    const cc = el('div', 'class-change');
-    cc.appendChild(el('div', 'field-title', 'Clase'));
-    const s1 = document.createElement('select');
-    for (const [id, k] of Object.entries(RULES.CLASSES)) s1.appendChild(new Option(`${k.icon} ${k.name}`, id, false, id === p.char.cls));
-    const apply = el('button', 'btn alt', 'Cambiar');
-    apply.onclick = () => {
-      if (!inTavern()) { DD.toast('Vuelve a la taberna para cambiar de clase.'); return; }
-      if (s1.value === p.char.cls) return;
-      if (!confirm('Al cambiar de clase se te devuelven los puntos repartidos para que los vuelvas a asignar. ¿Seguro?')) return;
-      DD.net.send({ t: 'char:save', look: { ...u.look, gear: undefined, cls: s1.value } });
+    // aspecto, raza y clase: se cambian con el editor de personaje (sólo en la taberna)
+    const edit = el('button', 'btn alt', '✏️ Aspecto, raza y clase');
+    edit.onclick = () => {
+      if (!inTavern()) { DD.toast('Vuelve a la taberna para cambiar tu aspecto, tu raza o tu clase.'); return; }
+      closeOverlay('charwin');
+      DD.emit('open-editor', { look: { ...look, cls: p.char.cls, gear: undefined } });
     };
-    cc.append(s1, apply);
-    left.appendChild(cc);
+    left.appendChild(edit);
     const respec = el('button', 'btn alt small', `Reiniciar puntos (${10 * d.level} 🪙)`);
     respec.onclick = () => { if (!inTavern()) { DD.toast('Sólo en la taberna.'); return; } if (confirm(`¿Reiniciar todos tus puntos por ${10 * d.level} de oro?`)) DD.net.send({ t: 'char:respec' }); };
     left.appendChild(respec);
@@ -333,18 +341,22 @@
     for (const S of RULES.STATS) {
       const box = el('div', 'stat-box');
       box.title = S.desc;
-      const bonus = d.stats[S.id] - d.base[S.id] - (p.char.alloc[S.id] || 0);
-      box.append(el('span', 'abbr', S.name), el('b', '', String(d.stats[S.id])), el('small', '', bonus ? `(${d.base[S.id] + (p.char.alloc[S.id] || 0)} +${bonus} equipo)` : ''));
+      const bonus = d.stats[S.id] - d.natural[S.id];
+      box.append(el('span', 'abbr', S.name), el('b', '', String(d.stats[S.id])), el('small', '', `natural ${d.natural[S.id]}/${RULES.STAT_MAX}${bonus ? ` · ${bonus > 0 ? '+' : ''}${bonus} equipo` : ''}`));
       stats.appendChild(box);
     }
     right.appendChild(stats);
     right.appendChild(el('div', 'panel-title small', 'EN COMBATE'));
     const lines = [
       ['❤️ Vida', d.hp], ['⚡ Energía', d.en], ['🛡️ Armadura', `${d.armor}${d.block ? ` · bloqueo ${d.block}%` : ''}`],
-      ['⚔️ Daño del arma', `${d.dmg[0]}–${d.dmg[1]} (${d.weapon.name})`], ['⏱️ Golpes por segundo', (1000 / d.atkMs).toFixed(2)], ['✨ Poder de hechizos', `${d.spell[0]}–${d.spell[1]}`],
+      ['⚔️ Daño del arma', `${d.dmg[0]}–${d.dmg[1]} (${d.weapon.name})`],
+      ['📈 Bonificación de daño', `+${d.statPct}% por ${RULES.statName(d.weapon.stat)} · +${d.mastery}% por nivel`],
+      ['⏱️ Golpes por segundo', (1000 / d.atkMs).toFixed(2)], ['✨ Poder de hechizos', `${d.spell[0]}–${d.spell[1]}`], ['🎯 Puntería', '+' + d.hit + '%'],
       ['🎯 Crítico', `${d.crit}% (×${d.critMult})`], ['💨 Esquiva', d.dodge + '%'], ['🔮 Resistencia mágica', d.magicRes + '%'],
       ['💖 Regeneración', `${d.hpRegen}/s vida · ${d.enRegen}/s energía`], ['🍀 Hallazgo de botín', '+' + d.mf + '%'], ['🪙 Descuento en tiendas', d.discount + '%'],
     ];
+    for (const [k, r] of Object.entries(d.elem || {})) lines.push([`${RULES.ELEMENTS[k].icon} Daño de ${RULES.ELEMENTS[k].name}`, `${r[0]}–${r[1]}`]);
+    if (d.undead) lines.push(['💀 Contra no muertos', '+' + d.undead + '%']);
     if (d.lifesteal) lines.push(['🩸 Robo de vida', d.lifesteal + '%']);
     if (d.cdr) lines.push(['⏳ Enfriamiento', '-' + d.cdr + '%']);
     const tbl = el('div', 'derived');
@@ -429,7 +441,7 @@
     if (RULES.SLOTS[it.slot]) acts.push(['Equipar', () => DD.net.send({ t: 'inv:equip', id: it.id })]);
     if (inTavern()) acts.push([`Vender (${it.value} 🪙)`, () => DD.net.send({ t: 'shop:sell', id: it.id })]);
     if (me().pet) acts.push([`Dar a ${me().pet.name}`, () => DD.net.send({ t: 'pet:put', id: it.id })]);
-    acts.push(['Tirar', () => { if (it.rarity === 'comun' || confirm(`¿Tirar «${it.name}»? Se perderá para siempre.`)) DD.net.send({ t: 'inv:drop', id: it.id }); }, true]);
+    acts.push(['Tirar', () => { if (['inferior', 'normal', 'superior'].includes(it.rarity) || confirm(`¿Tirar «${it.name}»? Se perderá para siempre.`)) DD.net.send({ t: 'inv:drop', id: it.id }); }, true]);
     actionMenu(e, acts);
   }
 
@@ -502,11 +514,11 @@
     const grid = el('div', 'bag small');
     for (let i = 0; i < RULES.BAG_SIZE; i++) {
       const it = p.bag[i];
-      grid.appendChild(itemCell(it, { tipExtra: it ? `Clic para vender por ${it.value} 🪙` : '', onClick: () => { if (it) { if (it.rarity !== 'comun' && it.rarity !== 'raro' && !confirm(`¿Vender «${it.name}» por ${it.value} de oro?`)) return; DD.net.send({ t: 'shop:sell', id: it.id }); } } }));
+      grid.appendChild(itemCell(it, { tipExtra: it ? `Clic para vender por ${it.value} 🪙` : '', onClick: () => { if (it) { if (!['inferior', 'normal', 'superior', 'magico'].includes(it.rarity) && !confirm(`¿Vender «${it.name}» por ${it.value} de oro?`)) return; DD.net.send({ t: 'shop:sell', id: it.id }); } } }));
     }
     right.appendChild(grid);
-    const commons = p.bag.filter((it) => it.rarity === 'comun');
-    const sellAll = el('button', 'btn alt', `Vender todo lo común (${commons.length}) · ${commons.reduce((a, b) => a + b.value, 0)} 🪙`);
+    const commons = p.bag.filter((it) => ['inferior', 'normal', 'superior'].includes(it.rarity));
+    const sellAll = el('button', 'btn alt', `Vender lo normal, superior e inferior (${commons.length}) · ${commons.reduce((a, b) => a + b.value, 0)} 🪙`);
     sellAll.disabled = !commons.length;
     sellAll.onclick = () => DD.net.send({ t: 'shop:sell', ids: commons.map((it) => it.id) });
     right.appendChild(sellAll);
@@ -787,16 +799,18 @@
       p('🍲 Cocina de Alfonso: pesca en el mundo abierto (🎣 o G junto al agua; cuando pique, ¡tira!) y recoge hierbas con un clic. Alfonso te cocina platos que dan bonificaciones durante 30 minutos.');
       p('📋 Tablón: tres tareas cada día y dos cada semana, iguales para todos. 🏅 Fama: logros que dan oro y títulos que se ven junto a tu nombre, y la clasificación semanal. 🏠 Habitación: los jefes que derrotas aparecen como trofeos; visita la de tus amigos desde la lista de héroes.');
       h('Retos');
-      p('🌀 Descenso infinito: piso tras piso, cada uno más difícil, con un desafío distinto cada semana. Cada 5 pisos, un objeto épico; cada 10, legendario.');
-      p('🌋 Jefes de mundo: cada cierto tiempo aparece uno en el mundo abierto. Todos los que le hagan daño se llevan un objeto épico o legendario.');
+      p('🌀 Descenso infinito: piso tras piso, cada uno más difícil, con un desafío distinto cada semana. Cada 5 pisos, un objeto raro; cada 10, uno único.');
+      p('🌋 Jefes de mundo: cada cierto tiempo aparece uno en el mundo abierto. Todos los que le hagan daño se llevan un objeto raro o único.');
       p('🤺 Duelos: desde la lista de héroes, reta a un amigo en el sótano de Alfonso, con una apuesta de oro si queréis. El ganador se lo lleva todo.');
       p('Espacio (o 🤸): voltereta de dos casillas que te hace invulnerable un instante. ⚙️ Menú → Gráficos: calidad, clima y temblor de cámara.');
       h('Subir de nivel');
-      p('Con la experiencia subes de nivel y ganas 5 puntos. Aparecerá un icono rojo bajo tu retrato: púlsalo para repartirlos entre tus características.');
+      p(`Empiezas con ${RULES.POINTS_START} puntos para repartir en el editor. Cada nivel da 1 punto más, y cada 5 niveles uno extra (hasta el nivel ${RULES.MAX_LEVEL}). Aparecerá un icono rojo bajo tu retrato: púlsalo para repartirlos. Ninguna característica pasa de ${RULES.STAT_MAX} de forma natural (raza + clase + puntos); el equipo sí puede subirla más.`);
     } else if (guideTab === 'clases') {
+      h('Razas');
+      for (const id of RULES.RACE_IDS) { const R = RULES.RACES[id]; p(`${R.name}: ${Object.entries(R.mods).map(([s, v]) => `${v > 0 ? '+' : ''}${v} ${RULES.statName(s)}`).join(', ')}. ${R.perkText}`); }
       for (const [id, k] of Object.entries(RULES.CLASSES)) {
         h(`${k.icon} ${k.name}`);
-        p(`${k.desc} Característica principal: ${RULES.statName(k.main)}. Armaduras: ${k.armor.map((a) => RULES.ARMOR_TYPES[a]).join(', ')}. Armas: ${k.weapons.map((w) => (RULES.WEAPONS[w] || RULES.OFFHANDS[w]).name).join(', ')}.`);
+        p(`${k.desc} Característica principal: ${RULES.statName(k.main)} (${Object.entries(k.base).map(([s, v]) => `+${v} ${RULES.statName(s)}`).join(', ')}). Prefiere armaduras de ${k.armor.map((a) => RULES.ARMOR_TYPES[a].toLowerCase()).join(', ')} y ${k.weapons.map((w) => (RULES.WEAPONS[w] || RULES.OFFHANDS[w]).name.toLowerCase()).join(', ')}; puede llevar cualquier cosa si cumple los requisitos.`);
         p('Habilidades: ' + RULES.ABILITIES[id].map((a) => `${a.icon} ${a.name} (nv ${a.lvl})`).join(' · '));
       }
       h('Tus personajes');
@@ -804,13 +818,28 @@
     } else if (guideTab === 'stats') {
       for (const S of RULES.STATS) { h(S.name); p(S.desc); }
     } else if (guideTab === 'botin') {
-      h('Rarezas');
-      for (const id of ['comun', 'raro', 'epico', 'legendario']) {
+      h('Calidades (como en Diablo 2)');
+      const QD = {
+        inferior: 'Agrietado, dañado o tosco: un 25% menos de daño o defensa y sin propiedades.',
+        normal: 'El objeto base, sin propiedades.',
+        superior: 'Un 5–15% más de daño o defensa.',
+        magico: 'Un prefijo («Espada corta cruel») y/o un sufijo («… del Zorro»).',
+        raro: 'De 3 a 6 propiedades y un nombre al azar («Mordisco Lúgubre»).',
+        unico: 'Nombre propio y siempre las mismas propiedades, de los escalones más altos.',
+        conjunto: 'Piezas de clase que sueltan los jefes; dan bonificaciones con 2 y 4 piezas.',
+      };
+      for (const id of RULES.RARITY_ORDER) {
         const R = RULES.RARITIES[id];
-        const x = el('p', '', `${R.name}: ${Math.round(R.chance * 100)}% de probabilidad por enemigo · ${R.affixes[1]} propiedades extra · ×${R.mult} de poder.`);
+        const x = el('p', '', `${R.name}${R.chance ? ` (${Math.round(R.chance * 100)}% por enemigo)` : ''}: ${QD[id]}`);
         x.style.color = R.color; body.appendChild(x);
       }
-      p('La Suerte y los bufos de hallazgo aumentan las probabilidades de raro, épico y legendario. Los élites tiran dos veces y los jefes tres, siempre con algo raro o mejor.');
+      p('Los anillos y amuletos son siempre mágicos o mejores. La Suerte y los bufos dan hallazgo mágico, que cuenta entero para los mágicos y menos para raros y únicos (rendimientos decrecientes). Los élites tiran dos veces y los jefes tres, siempre con algo mágico o mejor.');
+      h('Tipos base y requisitos');
+      p(`Cada arma y armadura tiene tres niveles: normal, excepcional (desde el nivel ${RULES.TIERS[1].lvl} de objeto) y élite (desde el ${RULES.TIERS[2].lvl}). Cuanto más alto, más daño o defensa y más Fuerza, Destreza o Inteligencia pide. Cualquier clase puede llevar cualquier cosa si cumple los requisitos.`);
+      p('Daño: cada punto de la característica del arma suma un 5% (Fuerza para espadas, hachas, mazas, mandobles, martillos y lanzas; Destreza para arcos y ballestas; las dos al 75% para las dagas; Inteligencia para bastones y varitas). Además, cada nivel del personaje suma un 4% (dominio de combate).');
+      for (const [id, W] of Object.entries(RULES.WEAPONS)) p(`${W.tiers.map((t) => t[0]).join(' → ')}: ${W.hands === 2 ? 'a dos manos' : 'a una mano'}, velocidad ${RULES.speedName(W.ms)}${W.undead ? `, +${W.undead}% contra no muertos` : ''}.`);
+      h('Prefijos y sufijos');
+      p('Cada propiedad tiene escalones según el nivel del objeto: «dentado» (+10–20% de daño) aparece desde el nivel 1, «despiadado» (+101–130%) desde el 43 y «feroz» (+131–170%) desde el 50. Lo mismo con «del Zorro», «del Tigre» o «del Coloso» para la vida, «del Buey» o «del Titán» para la Fuerza, y el daño de fuego, frío, rayo y veneno.');
       h('Conjuntos de clase (sólo jefes)');
       for (const [cls, S] of Object.entries(RULES.SETS)) {
         const x = el('p', '', `${S.name} (${RULES.CLASSES[cls].name}): ${S.pieces.map((q) => q[2]).join(', ')}. 2 piezas: ${Object.entries(S.b2).map(([k, v]) => RULES.fmtStat(k, v)).join(', ')}. 4 piezas: ${Object.entries(S.b4).map(([k, v]) => RULES.fmtStat(k, v)).join(', ')}.`);
