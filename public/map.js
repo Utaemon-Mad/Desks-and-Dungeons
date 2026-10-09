@@ -213,15 +213,18 @@
     return out;
   }
 
-  // Los tres servidores (salas) del juego: cada uno con su taberna, su mundo y sus partidas
+  // Los tres servidores (salas) del juego: cada uno con su taberna, su mundo y sus partidas.
+  // El id no cambia nunca (con él se guardan los muebles y las partidas); el nombre es el de serie:
+  // el dueño de cada servidor puede cambiarlo desde «Elegir servidor».
   const SERVERS = [
-    { id: 'taberna', name: 'La Taberna', desc: 'El servidor de siempre.' },
-    { id: 'putiferricida', name: 'Putiferricida', desc: 'La sala del grupo.' },
-    { id: 'brumaverde', name: 'Brumaverde', desc: 'Un servidor nuevo, con su propio mundo.' },
+    { id: 'taberna', name: 'Lejano' },
+    { id: 'putiferricida', name: 'Humbrio' },
+    { id: 'brumaverde', name: 'Sangriento' },
   ];
+  const SERVER_NAME_MAX = 20;
 
   const MAP = createMap();
-  Object.assign(MAP, { SERVERS, createMap, defaultItems, sanitizeItems, MERCHANTS, merchantAt, CLASSES, LEGACY_CLASS, SPECIES, SKINS, SPECIES_SKINS, skinsFor, DRAGON_COLORS, HAIRS, cleanLook });
+  Object.assign(MAP, { SERVERS, SERVER_NAME_MAX, createMap, defaultItems, sanitizeItems, MERCHANTS, merchantAt, CLASSES, LEGACY_CLASS, SPECIES, SKINS, SPECIES_SKINS, skinsFor, DRAGON_COLORS, HAIRS, cleanLook });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = MAP;
   else root.MAP = MAP;

@@ -1259,9 +1259,11 @@
     st.setLights(L);
     // cámara: la sala entera a la vista (en móvil, más cerca y siguiendo al héroe)
     const mobile = innerWidth <= 820;
-    const zoom = mobile ? 1.15 : Math.max(1.05, Math.min(1.45, (1280 / innerWidth) * 1.3 * Math.max(1, 780 / innerHeight)));
+    const zoom = (mobile ? 1.15 : Math.max(1.05, Math.min(1.45, (1280 / innerWidth) * 1.3 * Math.max(1, 780 / innerHeight)))) * DD.camZoom;
     st.offset.set(8.2 * zoom, 10.5 * zoom, 8.2 * zoom);
-    const fx = mobile && me && !me.where ? me.px + 0.5 : 7.4, fz = mobile && me && !me.where ? me.py + 0.5 : 6.4;
+    // con la cámara cerca (móvil o zoom), sigue al héroe; si no, se ve la sala entera
+    const follow = (mobile || DD.camZoom < 0.9) && me && !me.where;
+    const fx = follow ? me.px + 0.5 : 7.4, fz = follow ? me.py + 0.5 : 6.4;
     T3.cam = T3.cam || { x: fx, z: fz };
     T3.cam.x += (fx - T3.cam.x) * 0.08; T3.cam.z += (fz - T3.cam.z) * 0.08;
     const panelShift = !mobile && !heroesEl.classList.contains('closed') ? 0.9 : 0;
@@ -1496,7 +1498,7 @@
       case 'welcome': {
         users.clear();
         myId = m.id; roomName = m.room;
-        roomNameEl.textContent = (MAP.SERVERS.find((x) => x.id === m.room) || { name: m.room }).name;
+        roomNameEl.textContent = m.serverName || m.room;
         history.replaceState(null, '', `?sala=${encodeURIComponent(m.room)}`);
         for (const u of m.users) users.set(u.id, makeUser(u));
         MAP.setItems(m.items);
@@ -1596,6 +1598,7 @@
       }
       case 'system': logLine(m); break;
       case 'error': toast(m.text); break;
+      case 'server-name': if (m.id === roomName) roomNameEl.textContent = m.name; break;
       case 'kicked': net.close(); connEl.classList.add('hidden'); toTitle(); toast(m.text); break;
       case 'title': { const u = users.get(m.id); if (u) { u.title = m.title; renderHeroes(); } break; }
       default: DD.emit(m.t, m);
@@ -1788,6 +1791,67 @@
   function load(k) { try { return localStorage.getItem(k); } catch { return null; } }
   function save(k, v) { try { localStorage.setItem(k, v); } catch { /* sin almacenamiento */ } }
 
+  // ======================================================================
+  //  Zoom del juego: Ctrl + rueda, pellizco en el panel táctil o en el iPad, Ctrl + / − / 0 y la rueda
+  //  sobre la escena acercan o alejan la cámara. El navegador no hace zoom: la interfaz no cambia de tamaño.
+  // ======================================================================
+  const ZOOM_MIN = 0.5, ZOOM_MAX = 1.8;
+  DD.camZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, Number(load('dd-zoom')) || 1));
+  function setZoom(z) {
+    DD.camZoom = Math.max(ZOOM_MIN, Math.min(ZOOM_MAX, z));
+    save('dd-zoom', DD.camZoom.toFixed(3));
+  }
+  const overGame = (t) => t && (t.id === 'scene' || t.id === 'dcanvas' || t.id === 'gl');
+  window.addEventListener('wheel', (e) => {
+    if (!(e.ctrlKey || e.metaKey || overGame(e.target))) return;
+    e.preventDefault();
+    const d = e.deltaMode === 1 ? e.deltaY * 33 : e.deltaY; // líneas → píxeles
+    setZoom(DD.camZoom * Math.exp(Math.max(-0.12, Math.min(0.12, d * 0.002)))); // una muesca ≈ 11 %; el pellizco del panel, más fino
+  }, { passive: false });
+  window.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
+    if (e.key === '+' || e.key === '=' || e.code === 'NumpadAdd') setZoom(DD.camZoom / 1.12);
+    else if (e.key === '-' || e.key === '_' || e.code === 'NumpadSubtract') setZoom(DD.camZoom * 1.12);
+    else if (e.key === '0' || e.code === 'Numpad0') setZoom(1);
+    else return;
+    e.preventDefault();
+  });
+  // iPad (Safari): el gesto de pellizco se convierte en zoom de la cámara
+  let gestureZoom = 1;
+  document.addEventListener('gesturestart', (e) => { e.preventDefault(); gestureZoom = DD.camZoom; }, { passive: false });
+  document.addEventListener('gesturechange', (e) => { e.preventDefault(); setZoom(gestureZoom / (e.scale || 1)); }, { passive: false });
+  document.addEventListener('gestureend', (e) => e.preventDefault(), { passive: false });
+  // pellizco con dos dedos en otros navegadores táctiles
+  let pinch = null;
+  const dist = (t) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+  document.addEventListener('touchstart', (e) => { if (e.touches.length === 2) pinch = { d: dist(e.touches), z: DD.camZoom }; }, { passive: true });
+  document.addEventListener('touchmove', (e) => {
+    if (e.touches.length !== 2 || !pinch) return;
+    e.preventDefault();
+    setZoom(pinch.z * pinch.d / Math.max(1, dist(e.touches)));
+  }, { passive: false });
+  document.addEventListener('touchend', (e) => { if (e.touches.length < 2) pinch = null; });
+
+  // ======================================================================
+  //  Pantalla completa (en el iPad, si Safari no la permite, se explica cómo instalar el juego)
+  // ======================================================================
+  const fsElement = () => document.fullscreenElement || document.webkitFullscreenElement;
+  function toggleFullscreen() {
+    const el = document.documentElement;
+    if (fsElement()) { const r = (document.exitFullscreen || document.webkitExitFullscreen).call(document); if (r && r.then) r.then(fsLabel); return; }
+    const req = el.requestFullscreen || el.webkitRequestFullscreen;
+    if (!req) { toast('Para jugar a pantalla completa en el iPad: Compartir → «Añadir a pantalla de inicio» y abre el juego desde ese icono.'); return; }
+    try { const r = req.call(el, { navigationUI: 'hide' }); if (r && r.then) r.then(fsLabel, () => toast('El navegador no ha dejado poner la pantalla completa.')); } catch { toast('El navegador no ha dejado poner la pantalla completa.'); }
+  }
+  function fsLabel() {
+    const on = !!fsElement();
+    for (const b of document.querySelectorAll('[data-fs]')) b.textContent = on ? '⤡ Salir de pantalla completa' : '⛶ Pantalla completa';
+  }
+  document.addEventListener('fullscreenchange', fsLabel);
+  document.addEventListener('webkitfullscreenchange', fsLabel);
+  for (const b of document.querySelectorAll('[data-fs]')) b.addEventListener('click', toggleFullscreen);
+  DD.toggleFullscreen = toggleFullscreen;
+
 
   // ======================================================================
   //  Editor de la taberna (sólo el dueño de la sala)
@@ -1891,7 +1955,8 @@
   const profile = (() => { try { return JSON.parse(load('dd-profile')) || {}; } catch { return {}; } })();
   const look = MAP.cleanLook(Object.assign({ cls: 'guerrero', species: 'human', skin: 0, hair: 0 }, profile.look));
   const validServer = (id) => (MAP.SERVERS.some((x) => x.id === id) ? id : null);
-  const serverName = (id) => (MAP.SERVERS.find((x) => x.id === id) || MAP.SERVERS[0]).name;
+  // nombre actual del servidor (el dueño puede cambiarlo; llega con la cuenta)
+  const serverName = (id) => ((acct && acct.servers.find((x) => x.id === id)) || MAP.SERVERS.find((x) => x.id === id) || MAP.SERVERS[0]).name;
   let server = validServer(new URLSearchParams(location.search).get('sala')) || validServer(load('dd-server')) || MAP.SERVERS[0].id;
   let acct = null;      // { slots, last, servers } de la cuenta
   let screen = 'press'; // press | menu | slots | servers | create
@@ -2012,13 +2077,27 @@
     const box = $('#server-list'); box.innerHTML = '';
     for (const sv of MAP.SERVERS) {
       const st = acct && acct.servers.find((x) => x.id === sv.id);
-      const b = document.createElement('button'); b.type = 'button';
+      const name = serverName(sv.id);
+      const b = document.createElement('div');
       b.className = 'server' + (sv.id === server ? ' cur' : '');
+      b.tabIndex = 0;
       b.innerHTML = '<div class="info"><div class="nm"></div><div class="sub"></div></div><div class="on"></div>';
-      b.querySelector('.nm').textContent = (sv.id === server ? '✔ ' : '') + sv.name;
-      b.querySelector('.sub').textContent = sv.desc;
+      b.querySelector('.nm').textContent = (sv.id === server ? '✔ ' : '') + name;
+      b.querySelector('.sub').textContent = st ? (st.mine ? '👑 Eres el dueño de este servidor' : st.online ? 'Hay gente jugando' : 'Ahora mismo está vacío') : '';
       b.querySelector('.on').textContent = st ? `👥 ${st.online}` : '';
-      b.onclick = () => { server = sv.id; save('dd-server', server); toast(`Servidor: ${sv.name}`); goMenu(); };
+      b.onclick = () => { server = sv.id; save('dd-server', server); toast(`Servidor: ${name}`); goMenu(); };
+      if (st && st.canEdit) {
+        const ed = document.createElement('button'); ed.type = 'button'; ed.className = 'btn alt rename'; ed.textContent = '✏️ Nombre';
+        ed.title = 'Cambiar el nombre del servidor';
+        ed.onclick = async (e) => {
+          e.stopPropagation();
+          const nn = (prompt('Nuevo nombre del servidor:', name) || '').trim().slice(0, MAP.SERVER_NAME_MAX);
+          if (!nn || nn === name) return;
+          const m = await lobby.call({ t: 'server:rename', id: sv.id, name: nn });
+          if (m.t === 'account') { acct = m; toast(`El servidor ahora se llama «${nn}».`); renderMenu(); }
+        };
+        b.appendChild(ed);
+      }
       box.appendChild(b);
     }
   }

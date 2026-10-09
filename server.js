@@ -39,6 +39,7 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.glb': 'model/gltf-binary',
   '.txt': 'text/plain; charset=utf-8',
+  '.webmanifest': 'application/manifest+json; charset=utf-8',
 };
 
 const server = http.createServer((req, res) => {
@@ -152,8 +153,39 @@ function slotInfo(p) {
   return { name: p.name || 'Aventurero', cls: p.char.cls, level: RULES.levelFromXp(p.xp || 0), title: p.title || null, look: lookFrom(p), server: r.server || null, at: r.at || 'tavern', place: r.place || null };
 }
 
-function accountInfo(a, extra) {
-  return { t: 'account', slots: a.slots.map(slotInfo), last: a.last && a.slots[a.last.slot] ? a.last : null, servers: MAP.SERVERS.map((sv) => ({ ...sv, online: rooms.has(sv.id) ? rooms.get(sv.id).users.size : 0 })), ...extra };
+// Servidores con su nombre actual (el dueño puede cambiarlo; se guarda en meta 'servers'), su gente y su dueño
+const serverName = (id) => (store.meta('servers') || {})[id] || (MAP.SERVERS.find((x) => x.id === id) || {}).name || id;
+function serverOwner(id) {
+  if (rooms.has(id)) return rooms.get(id).ownerId;
+  const saved = store.room(id);
+  return saved ? saved.ownerId : null;
+}
+function serversView(pid) {
+  return MAP.SERVERS.map((sv) => {
+    const owner = serverOwner(sv.id);
+    return { id: sv.id, name: serverName(sv.id), online: rooms.has(sv.id) ? rooms.get(sv.id).users.size : 0, mine: !!pid && owner === pid, canEdit: !!pid && (!owner || owner === pid) };
+  });
+}
+
+function accountInfo(a, pid, extra) {
+  return { t: 'account', slots: a.slots.map(slotInfo), last: a.last && a.slots[a.last.slot] ? a.last : null, servers: serversView(pid), ...extra };
+}
+
+// Cambia el nombre de un servidor: sólo su dueño (si aún no tiene, quien lo renombra pasa a serlo)
+function renameServer(pid, id, name) {
+  if (!MAP.SERVERS.some((x) => x.id === id)) return 'Ese servidor no existe.';
+  name = cleanText(name, MAP.SERVER_NAME_MAX);
+  if (!name) return 'Escribe un nombre.';
+  const owner = serverOwner(id);
+  if (owner && owner !== pid) return 'Sólo el dueño del servidor puede cambiarle el nombre.';
+  const existed = rooms.has(id);
+  const room = getRoom(id);
+  if (!room.ownerId) { room.ownerId = pid; saveRoom(room); }
+  const names = { ...(store.meta('servers') || {}), [id]: name };
+  store.setMeta('servers', names);
+  broadcast(room, { t: 'server-name', id, name });
+  if (!existed) rooms.delete(id); // sólo se abrió para guardar el dueño
+  return null;
 }
 
 function onlineChar(cid) {
@@ -822,7 +854,7 @@ wss.on('connection', (ws) => {
 
     if (!user) {
       // Pantalla de inicio: ver, crear y borrar personajes de la cuenta antes de entrar
-      if (msg.t === 'hello' || msg.t === 'char:new' || msg.t === 'char:del') {
+      if (msg.t === 'hello' || msg.t === 'char:new' || msg.t === 'char:del' || msg.t === 'server:rename') {
         if (!allow(1)) return;
         clearTimeout(joinTimer);
         joinTimer = setTimeout(() => { if (!user) ws.close(4000, 'join timeout'); }, 10 * 60 * 1000);
@@ -838,7 +870,11 @@ wss.on('connection', (ws) => {
           setupProfile(p, MAP.cleanLook(msg.look));
           a.slots[slot] = p;
           store.setPlayer(pid, a);
-          return send(ws, accountInfo(a, { created: slot }));
+          return send(ws, accountInfo(a, pid, { created: slot }));
+        }
+        if (msg.t === 'server:rename') {
+          const why = renameServer(pid, String(msg.id || ''), msg.name);
+          if (why) return err(why);
         }
         if (msg.t === 'char:del' && slot !== null && a.slots[slot]) {
           if (onlineChar(charId(pid, slot))) return err('Ese personaje está jugando ahora mismo.');
@@ -846,7 +882,7 @@ wss.on('connection', (ws) => {
           if (a.last && a.last.slot === slot) a.last = null;
           store.setPlayer(pid, a);
         }
-        return send(ws, accountInfo(a));
+        return send(ws, accountInfo(a, pid));
       }
       if (msg.t !== 'join') return;
       const roomName = serverId(msg.room);
@@ -891,7 +927,7 @@ wss.on('connection', (ws) => {
       user = { id: crypto.randomBytes(6).toString('hex'), pid, cid, slot, account: acc, name, look: lookFrom(profile), profile, x: pos.x, y: pos.y, where: null, ws, trade: null };
       room.users.set(user.id, user);
       send(ws, {
-        t: 'welcome', id: user.id, room: roomName, owner: isOwner(), slot,
+        t: 'welcome', id: user.id, room: roomName, serverName: serverName(roomName), owner: isOwner(), slot,
         items: room.map.items,
         users: [...room.users.values()].map(publicUser),
         history: room.history,

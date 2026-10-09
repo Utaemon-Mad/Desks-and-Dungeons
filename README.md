@@ -5,8 +5,10 @@ Una taberna en 3D low-poly (Three.js, luz de velas y sombras suaves), en plan re
 - **Pantalla de inicio**: «Pulsa cualquier tecla» y un menú con tres opciones:
   - **Nuevo personaje**: tres casillas por navegador. Creas un héroe en una casilla libre, juegas con uno que ya tengas o lo borras. El juego recuerda tus personajes, así que no hay que crearlos cada vez.
   - **Continuar**: vuelves con el último personaje, al último servidor y al sitio donde lo dejaste (la taberna, un punto del mundo abierto o la mazmorra, si sigue abierta).
-  - **Elegir servidor**: hay tres (La Taberna, Putiferricida y Brumaverde), cada uno con su taberna, su mundo y sus partidas. Tus personajes sirven en los tres.
+  - **Elegir servidor**: hay tres (de serie, Lejano, Humbrio y Sangriento), cada uno con su taberna, su mundo y sus partidas. Tus personajes sirven en los tres. El dueño de un servidor (quien entró primero; si aún no tiene, quien le cambie el nombre) ve el botón ✏️ Nombre para renombrarlo.
   Se maneja con el ratón, con el dedo o con las flechas, Intro y Esc. Desde el ☰ Menú del juego puedes volver a la pantalla de inicio.
+- **Zoom del juego**: Ctrl + rueda, la rueda sobre la escena, el pellizco (panel táctil o iPad) y Ctrl + / Ctrl − / Ctrl 0 acercan o alejan la cámara. La interfaz (barra de acciones, ventanas y menús) no cambia de tamaño. Con la cámara cerca, sigue a tu héroe.
+- **Pantalla completa**: botón ⛶ en la pantalla de inicio y en el ☰ Menú. En el iPad, si Safari no la permite, «Compartir → Añadir a pantalla de inicio» instala el juego y se abre a pantalla completa, sin barras del navegador.
 - **Siete clases**: guerrero, mago, explorador, pícaro, paladín, brujo y clérigo. Ya no hay segunda clase: lo que un personaje antiguo solo podía llevar gracias a ella pasa a su mochila.
 - **Siete características**: Fuerza, Destreza, Constitución, Vitalidad, Resistencia, Carisma y Suerte. Al subir de nivel aparece un **icono rojo** bajo tu retrato: púlsalo para repartir los 5 puntos que ganas.
 - **Equipo que se ve**: arma, mano izquierda (escudo u orbe), cabeza, pecho, manos, pies, amuleto y anillo. Lo que llevas cambia el aspecto de tu héroe (yelmos, capuchas, cotas, corazas, espadas, arcos, bastones…). Pestaña 🎒 Equipo con mochila de 36 huecos y comparación con lo que llevas puesto.
@@ -35,7 +37,7 @@ Una taberna en 3D low-poly (Three.js, luz de velas y sombras suaves), en plan re
 - **Efectos**: ciclo de día y noche, clima por región (lluvia y tormentas, niebla en la ciénaga, tormentas de arena, nieve, ceniza), partículas, polvo al andar, enemigos que caen al morir, voltereta para esquivar, golpes críticos con congelación de un instante y temblor de cámara. Ajustes de calidad (⚙️ Menú → Gráficos) para móviles.
 - **Ambiente**: taberna de noche con ventanas góticas, lluvia y relámpagos, iluminada por antorchas, chimenea, candelabros y lámparas; mazmorras con paletas apagadas, muros en perspectiva, decorado por tema, luces de colores, ascuas y niebla de guerra.
 - **Editor de la taberna** para el dueño de la sala, con chimeneas, candelabros, lámparas, cofres, armeros y calderos nuevos.
-- Charla con bocadillos, la Crónica, gestos, dados (`/d20`, `/dado 6`), jarras y rondas. Con `?sala=putiferricida` (o el id de otro servidor) el enlace abre ese servidor.
+- Charla con bocadillos, la Crónica, gestos, dados (`/d20`, `/dado 6`), jarras y rondas. El enlace de invitación (☰ Menú) abre directamente tu servidor (`?sala=taberna`, `putiferricida` o `brumaverde`).
 
 ## Jugar en tu ordenador
 
@@ -107,4 +109,4 @@ El juego es un único servidor Node (HTTP + WebSocket):
 - `test/smoke.js`: prueba automática (`npm test`); `scripts/lint.js`: comprueba la sintaxis (`npm run lint`).
 - `.claude/`: prepara las sesiones de Claude Code en la nube.
 
-Las cuentas (una por navegador, con hasta tres personajes: experiencia, oro, equipo, mochila y dónde se quedó) y los muebles se guardan en `data/`. Los nombres de los tres servidores se cambian en `SERVERS`, en `public/map.js`. Las mazmorras se generan al entrar y desaparecen unos minutos después de quedarse vacías. El chat vive en la memoria del servidor.
+Las cuentas (una por navegador, con hasta tres personajes: experiencia, oro, equipo, mochila y dónde se quedó) y los muebles se guardan en `data/`. Los tres servidores están en `SERVERS` (`public/map.js`): su id no cambia nunca y su nombre de serie se puede cambiar desde el juego (se guarda en `data/meta.json`). Las mazmorras se generan al entrar y desaparecen unos minutos después de quedarse vacías. El chat vive en la memoria del servidor.

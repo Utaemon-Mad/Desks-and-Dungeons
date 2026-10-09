@@ -508,6 +508,24 @@ async function instanceTests() {
   lob.send({ t: 'char:del', token: tokD, slot: 2 });
   ac = await lob.next((m) => m.t === 'account');
   assert.strictEqual(ac.slots[2], null, 'borrar un personaje');
+  // Nombres de los servidores: Lejano, Humbrio y Sangriento de serie; sólo el dueño los cambia
+  assert.deepStrictEqual(ac.servers.map((x) => x.name), ['Lejano', 'Humbrio', 'Sangriento']);
+  const svB = ac.servers.find((x) => x.id === SRV);
+  assert.ok(!svB.canEdit && !svB.mine, 'el servidor de Ana no es de Dani');
+  lob.send({ t: 'server:rename', token: tokD, id: SRV, name: 'Mío' });
+  assert.match((await lob.next((m) => m.t === 'error')).text, /dueño/);
+  const la = await client('AnaLobby');
+  la.send({ t: 'hello', token: tokA });
+  assert.ok((await la.next((m) => m.t === 'account')).servers.find((x) => x.id === SRV).mine, 'Ana es la dueña de su servidor');
+  la.send({ t: 'server:rename', token: tokA, id: SRV, name: '  Sangriento   del Norte ' });
+  const ren = await a.next((m) => m.t === 'server-name');
+  assert.strictEqual(ren.name, 'Sangriento del Norte', 'los que están dentro ven el nombre nuevo');
+  assert.strictEqual((await la.next((m) => m.t === 'account')).servers.find((x) => x.id === SRV).name, 'Sangriento del Norte');
+  la.ws.close();
+  // un servidor sin dueño: quien le cambia el nombre pasa a ser su dueño
+  lob.send({ t: 'server:rename', token: tokD, id: MAP.SERVERS[0].id, name: 'Lejanía' });
+  ac = await lob.next((m) => m.t === 'account');
+  assert.ok(ac.servers[0].name === 'Lejanía' && ac.servers[0].mine, 'renombrar un servidor sin dueño');
   lob.ws.close();
 
   // Jugar con la casilla 1 (Dani) en el segundo servidor: la segunda clase ya no está

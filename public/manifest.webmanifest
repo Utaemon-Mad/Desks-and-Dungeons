@@ -1,0 +1,17 @@
+{
+  "name": "Desks & Dungeons",
+  "short_name": "D&D Taberna",
+  "description": "Una taberna, tus amigos y mazmorras sin fin.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "fullscreen",
+  "display_override": ["fullscreen", "standalone"],
+  "orientation": "landscape",
+  "background_color": "#1a0606",
+  "theme_color": "#1a0606",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

@@ -780,7 +780,7 @@
     const tx = me ? me.rx + 0.5 : map.w / 2, tz = me ? me.ry + 0.5 : map.h / 2;
     if (!game.camInit) { game.cam = { x: tx, y: tz }; game.camInit = !!me; }
     game.cam.x += (tx - game.cam.x) * Math.min(1, dt * 6); game.cam.y += (tz - game.cam.y) * Math.min(1, dt * 6);
-    const zoom = (innerWidth <= 820 ? 1.18 : 1) * (game.zoom || 1);
+    const zoom = (innerWidth <= 820 ? 1.18 : 1) * (game.zoom || 1) * (DD.camZoom || 1);
     stage.offset.set(0, 9.5 * zoom, 7.2 * zoom);
     let shake = 0;
     if (game.shake && game.shake > now) shake = Math.min(1, (game.shake - now) / 260) * 0.16;

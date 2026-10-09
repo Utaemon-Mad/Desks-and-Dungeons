@@ -555,3 +555,8 @@ body.in-dungeon #heroes, body.in-dungeon #log { display: none; }
 .server:hover, .server.sel { box-shadow: 0 0 0 3px var(--gold); }
 /* en la pantalla de inicio no se ve la interfaz de la partida */
 body.at-title #title, body.at-title #heroes, body.at-title #log, body.at-title #bar, body.at-title #myhero, body.at-title .pop, body.at-title #toast-holder { visibility: hidden; }
+.server .rename { padding: 6px 10px; font-size: 14px; flex: none; }
+.fs-btn { position: absolute; top: 14px; right: 14px; padding: 8px 12px; font-size: 15px; }
+/* sin márgenes del navegador: el juego ocupa toda la pantalla (también instalado como app) */
+html, body { overscroll-behavior: none; -webkit-touch-callout: none; }
+#scene, #gl, #dcanvas { touch-action: none; }

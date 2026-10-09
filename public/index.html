@@ -2,7 +2,15 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#1a0606">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Desks &amp; Dungeons">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
   <title>Desks &amp; Dungeons · La Taberna</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -16,7 +24,7 @@
 
     <header id="title">
       <div class="logo">Desks <span>&amp;</span> Dungeons</div>
-      <div class="sub">La Taberna · servidor <b id="room-name">taberna</b></div>
+      <div class="sub">Servidor <b id="room-name">Lejano</b></div>
     </header>
 
     <!-- Panel lateral: héroes en la taberna -->
@@ -64,6 +72,7 @@
       <button data-m="help">📜 Comandos</button>
       <button data-m="sound">🔔 Sonido: <b id="sound-state">sí</b></button>
       <button data-m="gfx">⚙️ Gráficos y rendimiento</button>
+      <button data-m="fs" data-fs>⛶ Pantalla completa</button>
     </div>
 
     <div id="svc-pop" class="pop panel hidden">
@@ -145,7 +154,8 @@
         <button type="button" data-go="server"><span>Elegir servidor</span><small id="mm-srv"></small></button>
       </nav>
     </div>
-    <div class="title-foot">↑ ↓ para elegir · Intro para aceptar · Esc para volver</div>
+    <button type="button" class="btn alt fs-btn" data-fs>⛶ Pantalla completa</button>
+    <div class="title-foot">↑ ↓ para elegir · Intro para aceptar · Esc para volver · Ctrl + rueda: zoom del juego</div>
   </div>
 
   <!-- Casillas de personaje -->
