@@ -16,7 +16,7 @@
 
     <header id="title">
       <div class="logo">Desks <span>&amp;</span> Dungeons</div>
-      <div class="sub">La Taberna · sala <b id="room-name">taberna</b></div>
+      <div class="sub">La Taberna · servidor <b id="room-name">taberna</b></div>
     </header>
 
     <!-- Panel lateral: héroes en la taberna -->
@@ -60,7 +60,7 @@
 
     <div id="menu-pop" class="pop panel hidden">
       <button data-m="invite">🔗 Copiar enlace de invitación</button>
-      <button data-m="hero">🧙 Cambiar de héroe</button>
+      <button data-m="hero">🏠 Volver al menú principal</button>
       <button data-m="help">📜 Comandos</button>
       <button data-m="sound">🔔 Sonido: <b id="sound-state">sí</b></button>
       <button data-m="gfx">⚙️ Gráficos y rendimiento</button>
@@ -133,10 +133,47 @@
   </div>
 
   <!-- Pantalla de entrada -->
-  <div id="login" class="overlay">
+  <!-- Pantalla de inicio: título → menú (nuevo personaje, continuar, elegir servidor) -->
+  <div id="start" class="overlay title-screen">
+    <div class="title-box">
+      <div class="logo huge">Desks <span>&amp;</span> Dungeons</div>
+      <p class="tag">Una taberna, tus amigos y mazmorras sin fin</p>
+      <div id="press" class="press">Pulsa cualquier tecla</div>
+      <nav id="main-menu" class="main-menu hidden">
+        <button type="button" data-go="new"><span>Nuevo personaje</span><small id="mm-new">Tres casillas para tus héroes</small></button>
+        <button type="button" data-go="continue"><span>Continuar</span><small id="mm-cont">Cargando…</small></button>
+        <button type="button" data-go="server"><span>Elegir servidor</span><small id="mm-srv"></small></button>
+      </nav>
+    </div>
+    <div class="title-foot">↑ ↓ para elegir · Intro para aceptar · Esc para volver</div>
+  </div>
+
+  <!-- Casillas de personaje -->
+  <div id="slots" class="overlay title-screen hidden">
+    <div class="panel card wide">
+      <div class="panel-title">NUEVO PERSONAJE</div>
+      <p class="tag">Tienes tres casillas. Crea un héroe en una libre o juega con uno que ya tengas.</p>
+      <div id="slot-list" class="slot-list"></div>
+      <p class="tag small">Servidor: <b id="slots-srv"></b></p>
+      <div class="edit-row"><button class="btn alt" type="button" data-back>VOLVER</button></div>
+    </div>
+  </div>
+
+  <!-- Servidores -->
+  <div id="servers" class="overlay title-screen hidden">
+    <div class="panel card wide">
+      <div class="panel-title">ELEGIR SERVIDOR</div>
+      <p class="tag">Cada servidor tiene su propia taberna, su mundo y sus partidas. Tus personajes sirven en los tres.</p>
+      <div id="server-list" class="server-list"></div>
+      <div class="edit-row"><button class="btn alt" type="button" data-back>VOLVER</button></div>
+    </div>
+  </div>
+
+  <!-- Crear personaje en una casilla -->
+  <div id="login" class="overlay hidden">
     <form id="login-form" class="panel card" autocomplete="off">
       <div class="logo big">Desks <span>&amp;</span> Dungeons</div>
-      <p class="tag">Entra en la taberna y charla con tus amigos</p>
+      <p class="tag">Nuevo héroe · casilla <b id="login-slot">1</b></p>
 
       <label>Nombre del héroe
         <input id="login-name" maxlength="16" required placeholder="Tu nombre">
@@ -144,8 +181,6 @@
 
       <div class="field-title">Clase</div>
       <div id="class-pick" class="class-pick"></div>
-      <div class="field-title">Segunda clase <small>(multiclase, opcional)</small></div>
-      <div id="class2-pick" class="class-pick small"></div>
       <div class="field-title">Raza</div>
       <div id="species-pick" class="class-pick species"></div>
 
@@ -156,11 +191,8 @@
         <canvas id="preview" width="150" height="190"></canvas>
       </div>
 
-      <label>Sala <small>(comparte el mismo nombre con tus amigos)</small>
-        <input id="login-room" maxlength="24" placeholder="taberna">
-      </label>
-
-      <button class="btn big" type="submit">ENTRAR EN LA TABERNA</button>
+      <button class="btn big" type="submit">CREAR Y JUGAR</button>
+      <button id="login-back" class="btn alt big" type="button">VOLVER</button>
     </form>
   </div>
 

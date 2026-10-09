@@ -1445,7 +1445,7 @@
   // Mover con el teclado (WASD / flechas) cuando no se está escribiendo
   window.addEventListener('keydown', (e) => {
     if (document.activeElement && (document.activeElement.tagName === 'INPUT')) return;
-    if (DD.scene !== 'tavern') return;
+    if (DD.scene !== 'tavern' || !DD.me) return;
     if (e.key === 'Enter') { e.preventDefault(); chatInput.focus(); return; }
     const me = users.get(myId);
     if (!me || me.path.length) return;
@@ -1465,22 +1465,25 @@
   // ======================================================================
   const net = {
     ws: null, retry: 0, profile: null,
+    // profile: { slot, server }
     connect(profile) {
       this.profile = profile;
+      this.retry = 0;
       const proto = location.protocol === 'https:' ? 'wss' : 'ws';
       const ws = new WebSocket(`${proto}://${location.host}/ws`);
       this.ws = ws;
       ws.onopen = () => {
         this.retry = 0;
         connEl.classList.add('hidden');
-        ws.send(JSON.stringify({ t: 'join', room: profile.room, name: profile.name, look: profile.look, token: playerToken() }));
+        ws.send(JSON.stringify({ t: 'join', room: profile.server, slot: profile.slot, token: playerToken() }));
       };
       ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; } handle(m); };
       ws.onclose = () => {
         if (this.ws !== ws) return;
         connEl.classList.remove('hidden');
         const delay = Math.min(10000, 800 * 2 ** this.retry++);
-        setTimeout(() => { if (this.ws === ws) this.connect(this.profile); }, delay);
+        const retry = this.retry;
+        setTimeout(() => { if (this.ws === ws) { this.connect(this.profile); this.retry = retry; } }, delay);
       };
     },
     send(m) { if (this.ws && this.ws.readyState === 1) this.ws.send(JSON.stringify(m)); },
@@ -1493,7 +1496,7 @@
       case 'welcome': {
         users.clear();
         myId = m.id; roomName = m.room;
-        roomNameEl.textContent = m.room;
+        roomNameEl.textContent = (MAP.SERVERS.find((x) => x.id === m.room) || { name: m.room }).name;
         history.replaceState(null, '', `?sala=${encodeURIComponent(m.room)}`);
         for (const u of m.users) users.set(u.id, makeUser(u));
         MAP.setItems(m.items);
@@ -1593,6 +1596,7 @@
       }
       case 'system': logLine(m); break;
       case 'error': toast(m.text); break;
+      case 'kicked': net.close(); connEl.classList.add('hidden'); toTitle(); toast(m.text); break;
       case 'title': { const u = users.get(m.id); if (u) { u.title = m.title; renderHeroes(); } break; }
       default: DD.emit(m.t, m);
     }
@@ -1654,8 +1658,8 @@
       row.appendChild(portrait(u.look));
       const stats = document.createElement('div'); stats.className = 'stats';
       stats.innerHTML = '<div class="cls"></div><div class="xp" title="Experiencia"><i></i><span></span></div><div class="gold">🪙 <span></span></div>';
-      const c1 = RULES.CLASSES[u.look.cls], c2 = u.look.cls2 && RULES.CLASSES[u.look.cls2];
-      stats.querySelector('.cls').textContent = `${c1 ? c1.icon + ' ' + c1.name : ''}${c2 ? ' / ' + c2.name : ''} · nv ${lvl}`;
+      const c1 = RULES.CLASSES[u.look.cls];
+      stats.querySelector('.cls').textContent = `${c1 ? c1.icon + ' ' + c1.name : ''} · nv ${lvl}`;
       stats.querySelector('.xp i').style.width = Math.max(0, Math.min(100, Math.round(100 * (u.xp - base) / Math.max(1, next - base)))) + '%';
       stats.querySelector('.xp span').textContent = `${u.xp - base}/${next - base} PX`;
       stats.querySelector('.gold span').textContent = u.gold;
@@ -1751,7 +1755,7 @@
       const url = `${location.origin}${location.pathname}?sala=${encodeURIComponent(roomName)}`;
       try { await navigator.clipboard.writeText(url); toast('¡Enlace copiado! Pásaselo a tus amigos.'); }
       catch { prompt('Copia este enlace y pásaselo a tus amigos:', url); }
-    } else if (m === 'hero') { net.close(); users.clear(); showLogin(); }
+    } else if (m === 'hero') { toTitle(); }
     else if (m === 'help') showHelp();
     else if (m === 'gfx') DD.emit('open-options');
     else if (m === 'sound') { sound = !sound; $('#sound-state').textContent = sound ? 'sí' : 'no'; save('dd-sound', sound ? '1' : '0'); return; }
@@ -1874,22 +1878,205 @@
     net, users, toast, logLine, blip, makeUser, portrait, drawHero: (c, x, y, l, o) => drawHero(c, x, y, l, o), me: null,
     heroImage: (look, w, h, mode) => VIEW3D.snapshot(look, w, h, mode),
     // modelos de verdad (KayKit): se cargan al empezar; mientras, se ven los low poly propios
-    modelsReady: MODELS.loadAssets().then((ok) => { if (!ok) return; renderHeroes(); if (!loginEl.classList.contains('hidden')) buildPickers(); DD.emit('models-ready'); if (DD.me) DD.emit('look', { id: myId, look: (users.get(myId) || {}).look }); }),
+    modelsReady: MODELS.loadAssets().then((ok) => { if (!ok) return; renderHeroes(); if (!loginEl.classList.contains('hidden')) buildPickers(); if (screen === 'slots') renderSlots(); DD.emit('models-ready'); if (DD.me) DD.emit('look', { id: myId, look: (users.get(myId) || {}).look }); }),
     setScene(sc) { DD.scene = sc; document.body.classList.toggle('in-dungeon', sc !== 'tavern'); canvas.classList.toggle('hidden', sc !== 'tavern'); hover = null; if (sc !== 'tavern') setEditing(false); },
   });
 
   // ======================================================================
-  //  Pantalla de entrada
+  //  Pantalla de inicio: «pulsa una tecla» → nuevo personaje (3 casillas), continuar o elegir servidor.
+  //  Los personajes se guardan en el servidor con el token de este navegador.
   // ======================================================================
-  const loginEl = $('#login');
+  const titleEl = $('#start'), slotsEl = $('#slots'), serversEl = $('#servers'), loginEl = $('#login');
+  const SCREENS = [titleEl, slotsEl, serversEl, loginEl];
   const profile = (() => { try { return JSON.parse(load('dd-profile')) || {}; } catch { return {}; } })();
   const look = MAP.cleanLook(Object.assign({ cls: 'guerrero', species: 'human', skin: 0, hair: 0 }, profile.look));
+  const validServer = (id) => (MAP.SERVERS.some((x) => x.id === id) ? id : null);
+  const serverName = (id) => (MAP.SERVERS.find((x) => x.id === id) || MAP.SERVERS[0]).name;
+  let server = validServer(new URLSearchParams(location.search).get('sala')) || validServer(load('dd-server')) || MAP.SERVERS[0].id;
+  let acct = null;      // { slots, last, servers } de la cuenta
+  let screen = 'press'; // press | menu | slots | servers | create
+  let createSlot = 0;
+  let sel = 0;          // opción resaltada con el teclado
 
-  function showLogin() {
-    loginEl.classList.remove('hidden');
-    $('#login-name').value = profile.name || '';
-    const urlRoom = new URLSearchParams(location.search).get('sala');
-    $('#login-room').value = urlRoom || profile.room || 'taberna';
+  // Conexión corta para la pantalla de inicio (ver, crear y borrar personajes antes de entrar)
+  const lobby = {
+    ws: null, wait: [],
+    call(msg) {
+      return new Promise((resolve) => {
+        const go = () => { this.wait.push(resolve); this.ws.send(JSON.stringify({ ...msg, token: playerToken() })); };
+        if (this.ws && this.ws.readyState === 1) return go();
+        if (!this.ws || this.ws.readyState > 1) {
+          const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+          const ws = this.ws = new WebSocket(`${proto}://${location.host}/ws`);
+          ws.onmessage = (ev) => {
+            let m; try { m = JSON.parse(ev.data); } catch { return; }
+            if (m.t === 'error') toast(m.text);
+            if (m.t === 'account' || m.t === 'error') { const r = this.wait.shift(); if (r) r(m); }
+          };
+          ws.onclose = () => { for (const r of this.wait.splice(0)) r({ t: 'error' }); };
+          ws.onerror = () => {};
+        }
+        this.ws.addEventListener('open', go, { once: true });
+      });
+    },
+    close() { if (this.ws) { const ws = this.ws; this.ws = null; ws.onclose = null; ws.close(); } },
+  };
+
+  async function refreshAccount() {
+    const m = await lobby.call({ t: 'hello' });
+    if (m.t === 'account') acct = m;
+    renderMenu();
+    return acct;
+  }
+
+  function show(el) { for (const e of SCREENS) e.classList.toggle('hidden', e !== el); document.body.classList.add('at-title'); }
+
+  function toTitle(atMenu = true) {
+    net.close(); users.clear(); DD.me = null; myId = null;
+    DD.emit('to-title');
+    setEditing(false);
+    for (const o of document.querySelectorAll('.overlay')) if (!SCREENS.includes(o)) o.classList.add('hidden');
+    show(titleEl);
+    screen = atMenu ? 'menu' : 'press';
+    $('#press').classList.toggle('hidden', atMenu);
+    $('#main-menu').classList.toggle('hidden', !atMenu);
+    sel = 0;
+    refreshAccount();
+  }
+
+  function slotLine(sl) {
+    const k = RULES.CLASSES[sl.cls];
+    const where = sl.at === 'world' ? `en ${sl.place || 'el mundo'}` : sl.at === 'dungeon' ? `en «${sl.place || 'una mazmorra'}»` : 'en la taberna';
+    return { title: `${sl.name}${sl.title ? ` «${sl.title}»` : ''}`, sub: `${k ? k.icon + ' ' + k.name : ''} · nivel ${sl.level}`, where: sl.server ? `${serverName(sl.server)} · ${where}` : 'Sin estrenar' };
+  }
+
+  function renderMenu() {
+    const last = acct && acct.last && acct.slots[acct.last.slot];
+    const cont = $('#main-menu [data-go="continue"]');
+    cont.disabled = !last;
+    $('#mm-cont').textContent = last ? `${slotLine(last).title} · nv ${last.level} · ${slotLine(last).where}` : acct ? 'Aún no has jugado con ningún personaje' : 'Conectando…';
+    const used = acct ? acct.slots.filter(Boolean).length : 0;
+    $('#mm-new').textContent = acct ? `${used} de 3 casillas ocupadas` : 'Tres casillas para tus héroes';
+    const sv = acct && acct.servers.find((x) => x.id === server);
+    $('#mm-srv').textContent = `${serverName(server)}${sv ? ` · ${sv.online} ${sv.online === 1 ? 'jugador' : 'jugadores'}` : ''}`;
+    menuSel();
+    if (screen === 'slots') renderSlots();
+    if (screen === 'servers') renderServers();
+  }
+
+  const menuButtons = () => [...$('#main-menu').querySelectorAll('button')].filter((b) => !b.disabled);
+  function menuSel() {
+    const bs = menuButtons();
+    sel = Math.max(0, Math.min(sel, bs.length - 1));
+    for (const b of $('#main-menu').querySelectorAll('button')) b.classList.toggle('sel', b === bs[sel]);
+  }
+
+  function heroCanvas(lk, w, h) {
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    try { c.getContext('2d').drawImage(VIEW3D.snapshot(lk, w, h, 'full'), 0, 0); } catch { drawHero(c.getContext('2d'), w / 2, h - 10, lk, { dir: 'E', t: 0 }); }
+    return c;
+  }
+
+  function renderSlots() {
+    $('#slots-srv').textContent = serverName(server);
+    const box = $('#slot-list'); box.innerHTML = '';
+    (acct ? acct.slots : [null, null, null]).forEach((sl, i) => {
+      const card = document.createElement('div');
+      if (!sl) {
+        card.className = 'slot empty'; card.textContent = `＋ Crear personaje (casilla ${i + 1})`;
+        card.onclick = () => openCreate(i);
+      } else {
+        const L = slotLine(sl);
+        card.className = 'slot';
+        card.appendChild(heroCanvas(sl.look, 72, 88));
+        const info = document.createElement('div'); info.className = 'info';
+        info.innerHTML = '<div class="nm"></div><div class="sub"></div><div class="sub"></div>';
+        info.children[0].textContent = L.title; info.children[1].textContent = L.sub; info.children[2].textContent = L.where;
+        const acts = document.createElement('div'); acts.className = 'acts';
+        const play = document.createElement('button'); play.className = 'btn'; play.type = 'button'; play.textContent = 'JUGAR';
+        play.onclick = () => enterGame(i, server);
+        const del = document.createElement('button'); del.className = 'btn alt'; del.type = 'button'; del.textContent = 'Borrar';
+        del.onclick = async () => {
+          if (!confirm(`¿Borrar a ${sl.name} para siempre? Se pierden su nivel, su oro y su equipo.`)) return;
+          const m = await lobby.call({ t: 'char:del', slot: i });
+          if (m.t === 'account') { acct = m; renderMenu(); }
+        };
+        acts.append(play, del);
+        card.append(info, acts);
+      }
+      box.appendChild(card);
+    });
+  }
+
+  function renderServers() {
+    const box = $('#server-list'); box.innerHTML = '';
+    for (const sv of MAP.SERVERS) {
+      const st = acct && acct.servers.find((x) => x.id === sv.id);
+      const b = document.createElement('button'); b.type = 'button';
+      b.className = 'server' + (sv.id === server ? ' cur' : '');
+      b.innerHTML = '<div class="info"><div class="nm"></div><div class="sub"></div></div><div class="on"></div>';
+      b.querySelector('.nm').textContent = (sv.id === server ? '✔ ' : '') + sv.name;
+      b.querySelector('.sub').textContent = sv.desc;
+      b.querySelector('.on').textContent = st ? `👥 ${st.online}` : '';
+      b.onclick = () => { server = sv.id; save('dd-server', server); toast(`Servidor: ${sv.name}`); goMenu(); };
+      box.appendChild(b);
+    }
+  }
+
+  function goMenu() { show(titleEl); screen = 'menu'; $('#press').classList.add('hidden'); $('#main-menu').classList.remove('hidden'); menuSel(); }
+  function openSlots() { show(slotsEl); screen = 'slots'; renderSlots(); refreshAccount(); }
+  function openServers() { show(serversEl); screen = 'servers'; renderServers(); refreshAccount(); }
+
+  function pick(go) {
+    blip(520, 0.06);
+    if (go === 'new') openSlots();
+    else if (go === 'server') openServers();
+    else if (go === 'continue' && acct && acct.last) enterGame(acct.last.slot, acct.last.server);
+  }
+
+  function enterGame(slot, srv) {
+    lobby.close();
+    for (const e of SCREENS) e.classList.add('hidden');
+    document.body.classList.remove('at-title');
+    blip(440, 0.1);
+    net.connect({ slot, server: srv });
+  }
+
+  function pressAnyKey() {
+    if (screen !== 'press') return;
+    screen = 'menu';
+    $('#press').classList.add('hidden');
+    $('#main-menu').classList.remove('hidden');
+    blip(660, 0.08);
+    sel = 0; menuSel();
+  }
+
+  if (matchMedia('(pointer: coarse)').matches) { $('#press').textContent = 'Toca la pantalla para empezar'; document.querySelector('.title-foot').classList.add('hidden'); }
+  $('#main-menu').addEventListener('click', (e) => { const b = e.target.closest('button'); if (b && !b.disabled) pick(b.dataset.go); });
+  $('#main-menu').addEventListener('mousemove', (e) => { const b = e.target.closest('button'); const i = menuButtons().indexOf(b); if (i >= 0 && i !== sel) { sel = i; menuSel(); } });
+  titleEl.addEventListener('pointerdown', () => pressAnyKey());
+  for (const b of document.querySelectorAll('[data-back]')) b.addEventListener('click', goMenu);
+  $('#login-back').addEventListener('click', openSlots);
+  window.addEventListener('keydown', (e) => {
+    if (titleEl.classList.contains('hidden') && slotsEl.classList.contains('hidden') && serversEl.classList.contains('hidden')) return;
+    if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
+    if (screen === 'press') { if (!e.repeat) { e.preventDefault(); pressAnyKey(); } return; }
+    if (screen === 'menu') {
+      const bs = menuButtons();
+      if (e.key === 'ArrowDown' || e.key === 's') { sel = (sel + 1) % bs.length; menuSel(); e.preventDefault(); }
+      else if (e.key === 'ArrowUp' || e.key === 'w') { sel = (sel - 1 + bs.length) % bs.length; menuSel(); e.preventDefault(); }
+      else if (e.key === 'Enter' || e.key === ' ') { if (bs[sel]) pick(bs[sel].dataset.go); e.preventDefault(); }
+      else if (e.key === 'Escape') { screen = 'press'; $('#press').classList.remove('hidden'); $('#main-menu').classList.add('hidden'); }
+      return;
+    }
+    if (e.key === 'Escape') goMenu();
+  });
+
+  function openCreate(slot) {
+    createSlot = slot;
+    show(loginEl); screen = 'create';
+    $('#login-slot').textContent = slot + 1;
+    $('#login-name').value = '';
     buildPickers();
     setTimeout(() => $('#login-name').focus(), 50);
   }
@@ -1903,17 +2090,8 @@
       b.innerHTML = '<span></span><small></small>';
       b.firstChild.textContent = `${k.icon} ${k.name}`;
       b.lastChild.textContent = RULES.statName(k.main);
-      b.onclick = () => { look.cls = id; if (look.cls2 === id) delete look.cls2; buildPickers(); };
+      b.onclick = () => { look.cls = id; buildPickers(); };
       cp.appendChild(b);
-    }
-    const c2 = $('#class2-pick'); c2.innerHTML = '';
-    for (const id of [null, ...Object.keys(RULES.CLASSES)]) {
-      if (id === look.cls) continue;
-      const b = document.createElement('button'); b.type = 'button';
-      b.className = (look.cls2 || null) === id ? 'on' : '';
-      b.textContent = id ? `${RULES.CLASSES[id].icon} ${RULES.CLASSES[id].name}` : 'Ninguna';
-      b.onclick = () => { if (id) look.cls2 = id; else delete look.cls2; buildPickers(); };
-      c2.appendChild(b);
     }
     const spSel = $('#species-pick'); spSel.innerHTML = '';
     for (const [id, k] of Object.entries(MAP.SPECIES)) {
@@ -1945,20 +2123,19 @@
     const pv = $('#preview'), g = pv.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pv.width, pv.height);
     try { g.drawImage(VIEW3D.snapshot({ ...look, gear }, pv.width, pv.height, 'full'), 0, 0); } catch { drawHero(g, 60, 112, { ...look, gear }, { dir: 'E', t: 0 }); }
-    const k = RULES.CLASSES[look.cls];
-    $('#login-sheet-note').textContent = `${k.desc}${look.cls2 ? ` Multiclase con ${RULES.CLASSES[look.cls2].name.toLowerCase()}: sumas sus armas, armaduras y habilidades (las de la segunda clase llegan más tarde).` : ''}`;
+    $('#login-sheet-note').textContent = RULES.CLASSES[look.cls].desc;
   }
 
-  $('#login-form').addEventListener('submit', (e) => {
+  $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();
     const name = $('#login-name').value.trim().slice(0, 16);
     if (!name) return;
-    const room = $('#login-room').value.trim() || 'taberna';
-    Object.assign(profile, { name, room, look: { ...look } });
+    Object.assign(profile, { look: { ...look } });
     save('dd-profile', JSON.stringify(profile));
-    loginEl.classList.add('hidden');
-    blip(440, 0.1);
-    net.connect({ name, room, look: { ...look } });
+    const m = await lobby.call({ t: 'char:new', slot: createSlot, name, look: { ...look } });
+    if (m.t !== 'account') return;
+    acct = m;
+    enterGame(createSlot, server);
   });
 
   // ======================================================================
@@ -1967,6 +2144,6 @@
   window.addEventListener('resize', resize);
   resize();
   if (document.fonts) document.fonts.ready.then(() => { staticLayer = null; if (!loginEl.classList.contains('hidden')) buildPickers(); });
-  showLogin();
+  toTitle(false);
   requestAnimationFrame(frame);
 })();

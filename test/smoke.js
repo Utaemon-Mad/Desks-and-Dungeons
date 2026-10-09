@@ -10,6 +10,7 @@ const assert = require('assert');
 const WebSocket = require('ws');
 const { server, store } = require('../server.js');
 const RULES = require('../public/rules/engine.js');
+const MAP = require('../public/map.js');
 const PROG = require('../public/rules/progress.js');
 const GEN = require('../server/gen.js');
 const { Instance } = require('../server/dungeon.js');
@@ -55,16 +56,17 @@ function rulesTests() {
   // conjunto de clase con su característica principal
   const set = RULES.makeItem(rng, { ilvl: 8, rarity: 'conjunto', set: 'mago' });
   assert.ok(set.set === 'mago' && set.stats.car > 0 && set.name.includes('Archimago'));
-  // multiclase: habilidades de las dos clases, las de la segunda más tarde
-  const ch = RULES.newChar('guerrero', 'clerigo');
+  // una sola clase: sus cuatro habilidades, la primera lista desde el nivel 1 (ya no hay segunda clase)
+  const ch = RULES.newChar('guerrero');
   const d = RULES.derive({ xp: 0, char: ch, equip: {}, buffs: {} });
-  assert.ok(d.abilities.some((a) => a.id === 'golpe' && a.ready) && d.abilities.some((a) => a.id === 'curar' && !a.ready && a.unlock === 3));
+  assert.ok(d.abilities.length === 4 && d.abilities.some((a) => a.id === 'golpe' && a.ready) && !d.abilities.some((a) => a.id === 'curar'));
+  assert.strictEqual(RULES.cleanChar({ cls: 'mago', cls2: 'paladin' }).cls2, undefined, 'la segunda clase desaparece');
   assert.strictEqual(d.points, RULES.POINTS_START);
   assert.deepStrictEqual(Object.keys(d.stats), ['fue', 'des', 'con', 'vit', 'res', 'car', 'sue']);
   // no se puede llevar placas siendo mago
   const plate = RULES.makeItem(rng, { ilvl: 1, slot: 'pecho', base: 'placas' });
   assert.strictEqual(RULES.canEquip(plate, RULES.newChar('mago'), 1).ok, false);
-  assert.strictEqual(RULES.canEquip(plate, RULES.newChar('mago', 'paladin'), 1).ok, true, 'la multiclase suma armaduras');
+  assert.strictEqual(RULES.canEquip(plate, { ...RULES.newChar('mago'), cls2: 'paladin' }, 1).ok, false, 'una segunda clase guardada ya no cuenta');
   // la mazmorra escala con el nivel
   assert.ok(RULES.monsterAt('orc', 10).hp > RULES.monsterAt('orc', 1).hp * 4);
   // mazmorras aleatorias: siempre jugables
@@ -253,9 +255,10 @@ async function instanceTests() {
   await new Promise((r) => server.listen(process.env.PORT, r));
   const tokA = 'a'.repeat(32), tokB = 'b'.repeat(32);
   const a = await client('Ana');
-  a.send({ t: 'join', room: 'Prueba Sala', name: 'Ana', look: { cls: 'mago', skin: 1, hair: 2 }, token: tokA });
+  const SRV = MAP.SERVERS[2].id;
+  a.send({ t: 'join', room: SRV, name: 'Ana', look: { cls: 'mago', skin: 1, hair: 2 }, token: tokA });
   const wa = await a.next((m) => m.t === 'welcome');
-  assert.strictEqual(wa.room, 'prueba-sala');
+  assert.strictEqual(wa.room, SRV);
   assert.strictEqual(wa.users.length, 1);
   assert.strictEqual(wa.owner, true, 'quien abre la sala es su dueño');
   assert.ok(wa.items.length > 10, 'llegan los muebles');
@@ -265,13 +268,13 @@ async function instanceTests() {
   assert.strictEqual(meA.cons['pocion-vida-p'], 3);
 
   const b = await client('Beto');
-  b.send({ t: 'join', room: 'prueba-sala', name: 'Beto', look: { cls: 'hacker', cls2: 'clerigo', skin: 99 }, token: tokB });
+  b.send({ t: 'join', room: SRV, name: 'Beto', look: { cls: 'hacker', cls2: 'clerigo', skin: 99 }, token: tokB });
   const wb = await b.next((m) => m.t === 'welcome');
   assert.strictEqual(wb.users.length, 2);
   assert.strictEqual(wb.owner, false);
   const beto = wb.users.find((u) => u.id === wb.id);
   assert.strictEqual(beto.look.cls, 'guerrero', 'clase inválida → guerrero');
-  assert.strictEqual(beto.look.cls2, 'clerigo', 'multiclase');
+  assert.strictEqual(beto.look.cls2, undefined, 'sin segunda clase');
   assert.strictEqual(beto.look.gear.w, 'espada', 'el equipo se ve');
   let meB = await b.next((m) => m.t === 'me');
 
@@ -409,7 +412,7 @@ async function instanceTests() {
   const crng = RULES.seeded('cris');
   store.setPlayer(store.hash(tokC), { xp: RULES.XP_TABLE[6], gold: 5000, char: RULES.newChar('guerrero'), equip: Object.fromEntries(RULES.starterItems('guerrero', crng).map((it) => [it.slot, it])), cons: {}, buffs: {}, mats: { hierro: 30, esencia: 10, polvo: 3, trucha: 2, menta: 1 }, bag: [1, 2, 3, 4].map(() => RULES.makeItem(crng, { ilvl: 3, rarity: 'comun', classes: ['guerrero'] })) });
   const c = await client('Cris');
-  c.send({ t: 'join', room: 'prueba-sala', name: 'Cris', look: { cls: 'guerrero' }, token: tokC });
+  c.send({ t: 'join', room: SRV, name: 'Cris', look: { cls: 'guerrero' }, token: tokC });
   const wc = await c.next((m) => m.t === 'welcome');
   let meC = await c.next((m) => m.t === 'me');
   assert.ok(meC.mats.hierro === 30 && meC.board.daily.length === 3 && meC.board.weekly.length === 2, 'materiales y tablón');
@@ -449,7 +452,7 @@ async function instanceTests() {
   // Duelo con apuesta: Ana se rinde y Cris se lleva el bote
   await sleep(300);
   const goldC = c.last((m) => m.t === 'me').gold;
-  const g0 = store.player(store.hash(tokC)).gold;
+  const g0 = store.player(store.hash(tokC)).slots[0].gold;
   c.send({ t: 'duel:req', to: wa.id, bet: 10 });
   const inv = await a.next((m) => m.t === 'duel:invite');
   assert.strictEqual(inv.bet, 10);
@@ -465,7 +468,7 @@ async function instanceTests() {
   assert.ok(await c.next((m) => m.t === 'achievement' && m.id === 'duelista'), 'logro del primer duelo');
   assert.ok(goldC > 0);
   await sleep(200);
-  assert.strictEqual(store.player(store.hash(tokC)).gold, g0 + 10 + 30, 'bote del duelo (+10 netos) y oro del logro (+30)');
+  assert.strictEqual(store.player(store.hash(tokC)).slots[0].gold, g0 + 10 + 30, 'bote del duelo (+10 netos) y oro del logro (+30)');
   void wc;
   c.ws.close();
 
@@ -473,12 +476,97 @@ async function instanceTests() {
   b.ws.close();
   await a.next((m) => m.t === 'leave' && m.id === wb.id);
   const b2 = await client('Beto2');
-  b2.send({ t: 'join', room: 'prueba-sala', name: 'Beto', look: { cls: 'guerrero', cls2: 'clerigo' }, token: tokB });
+  b2.send({ t: 'join', room: SRV, name: 'Beto', look: { cls: 'guerrero', cls2: 'clerigo' }, token: tokB });
   await b2.next((m) => m.t === 'welcome');
   const me2 = await b2.next((m) => m.t === 'me');
   assert.strictEqual(me2.char.alloc.fue, 3, 'conserva sus puntos');
   assert.strictEqual(me2.cons['pocion-vida-p'], 5);
   b2.ws.close();
+
+  // ----- Pantalla de inicio: cuenta con tres casillas, servidores y «continuar» -----
+  const tokD = 'd'.repeat(32);
+  // perfil de la versión anterior con multiclase: pasa a la casilla 1 y la armadura de placas (del paladín) va a la mochila
+  const drng = RULES.seeded('dani');
+  const plateD = RULES.makeItem(drng, { ilvl: 1, slot: 'pecho', base: 'placas' });
+  store.setPlayer(store.hash(tokD), { name: 'Dani', xp: 0, gold: 77, char: { cls: 'mago', cls2: 'paladin', alloc: {}, look: {} }, equip: { pecho: plateD }, bag: [], cons: {}, buffs: {} });
+  const lob = await client('Lobby');
+  lob.send({ t: 'hello', token: tokD });
+  let ac = await lob.next((m) => m.t === 'account');
+  assert.strictEqual(ac.slots.length, 3, 'tres casillas');
+  assert.ok(ac.slots[0] && ac.slots[0].name === 'Dani' && !ac.slots[1] && !ac.slots[2], 'el perfil antiguo va a la casilla 1');
+  assert.deepStrictEqual(ac.servers.map((x) => x.id), MAP.SERVERS.map((x) => x.id), 'tres servidores');
+  lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Eva', look: { cls: 'picaro', cls2: 'mago' } });
+  ac = await lob.next((m) => m.t === 'account');
+  assert.strictEqual(ac.created, 1);
+  assert.ok(ac.slots[1].name === 'Eva' && ac.slots[1].cls === 'picaro' && ac.slots[1].level === 1, 'personaje nuevo en la casilla 2');
+  lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Otra', look: {} });
+  assert.match((await lob.next((m) => m.t === 'error')).text, /ya tiene/, 'no se pisa una casilla ocupada');
+  lob.send({ t: 'char:new', token: tokD, slot: 3, name: 'Cuarta', look: {} });
+  assert.ok(await lob.next((m) => m.t === 'error'), 'sólo hay tres casillas');
+  lob.send({ t: 'char:new', token: tokD, slot: 2, name: 'Borrable', look: {} });
+  await lob.next((m) => m.t === 'account' && m.slots[2]);
+  lob.send({ t: 'char:del', token: tokD, slot: 2 });
+  ac = await lob.next((m) => m.t === 'account');
+  assert.strictEqual(ac.slots[2], null, 'borrar un personaje');
+  lob.ws.close();
+
+  // Jugar con la casilla 1 (Dani) en el segundo servidor: la segunda clase ya no está
+  const SRV2 = MAP.SERVERS[1].id;
+  const d1 = await client('Dani');
+  d1.send({ t: 'join', room: SRV2, slot: 0, token: tokD });
+  const wdani = await d1.next((m) => m.t === 'welcome');
+  assert.ok(wdani.room === SRV2 && wdani.slot === 0);
+  const meD = await d1.next((m) => m.t === 'me');
+  assert.ok(!meD.char.cls2 && !meD.equip.pecho && meD.bag.some((it) => it.id === plateD.id), 'las placas del paladín pasan a la mochila');
+  assert.strictEqual(meD.gold, 77, 'conserva su oro');
+  // se mueve en la taberna y sale al mundo; al salir, se recuerda dónde estaba
+  d1.send({ t: 'wenter' });
+  await d1.next((m) => m.t === 'dstart' && m.dungeon.kind === 'world');
+  d1.send({ t: 'ddir', dx: 1, dy: 0 });
+  await sleep(700);
+  d1.send({ t: 'ddir', dx: 0, dy: 0 });
+  await sleep(300);
+  d1.ws.close();
+  await sleep(200);
+  const rs = store.player(store.hash(tokD)).slots[0].resume;
+  const wx = rs.x, wy = rs.y;
+  ac = await (async () => { const l = await client('Lobby2'); l.send({ t: 'hello', token: tokD }); const r = await l.next((m) => m.t === 'account'); l.ws.close(); return r; })();
+  assert.deepStrictEqual(ac.last, { slot: 0, server: SRV2 }, 'último personaje y servidor');
+  assert.ok(ac.slots[0].at === 'world' && ac.slots[0].server === SRV2, 'se recuerda que estaba en el mundo');
+  // Continuar: vuelve al mundo, en el mismo sitio
+  const d2 = await client('Dani2');
+  d2.send({ t: 'join', room: SRV2, slot: 0, token: tokD });
+  await d2.next((m) => m.t === 'welcome');
+  const back = await d2.next((m) => m.t === 'dstart');
+  assert.strictEqual(back.dungeon.kind, 'world', 'continúa en el mundo');
+  const bp = back.players.find((pl) => pl.name === 'Dani');
+  assert.ok(Math.abs(bp.x - wx) <= 1 && Math.abs(bp.y - wy) <= 1 && back.start && (bp.x !== back.start.x || bp.y !== back.start.y), 'en el mismo sitio, no en la entrada');
+  // El mismo personaje desde otro sitio: la sesión anterior se cierra
+  const d3 = await client('Dani3');
+  d3.send({ t: 'join', room: SRV2, slot: 0, token: tokD });
+  assert.match((await d2.next((m) => m.t === 'kicked')).text, /otro sitio/);
+  await d3.next((m) => m.t === 'welcome');
+  // Otra casilla del mismo navegador puede jugar a la vez; una casilla vacía no
+  const e1 = await client('Eva');
+  e1.send({ t: 'join', room: 'servidor-inventado', slot: 1, token: tokD });
+  const we = await e1.next((m) => m.t === 'welcome');
+  assert.strictEqual(we.room, MAP.SERVERS[0].id, 'un servidor desconocido lleva al primero');
+  const e2 = await client('Vacia');
+  e2.send({ t: 'join', room: SRV2, slot: 2, token: tokD });
+  assert.match((await e2.next((m) => m.t === 'error')).text, /vacía/);
+  // En la taberna: se vuelve a la misma casilla
+  d3.send({ t: 'dleave' });
+  await d3.next((m) => m.t === 'dexit');
+  d3.send({ t: 'move', x: 6, y: 9 });
+  await sleep(150);
+  d3.ws.close(); e1.ws.close(); e2.ws.close();
+  await sleep(200);
+  const d4 = await client('Dani4');
+  d4.send({ t: 'join', room: SRV2, slot: 0, token: tokD });
+  const w4 = await d4.next((m) => m.t === 'welcome');
+  const meIn = w4.users.find((u) => u.id === w4.id);
+  assert.ok(!meIn.where && meIn.x === 6 && meIn.y === 9, 'continúa en la taberna, donde estaba');
+  d4.ws.close();
 
   // Ficheros estáticos y protección de rutas
   const http = require('http');

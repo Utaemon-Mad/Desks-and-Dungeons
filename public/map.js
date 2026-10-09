@@ -205,19 +205,23 @@
     look = look || {};
     let cls = Object.prototype.hasOwnProperty.call(CLASSES, look.cls) ? look.cls : LEGACY_CLASS[look.cls];
     if (!Object.prototype.hasOwnProperty.call(CLASSES, cls)) cls = 'guerrero';
-    let cls2 = Object.prototype.hasOwnProperty.call(CLASSES, look.cls2) ? look.cls2 : null;
-    if (cls2 === cls) cls2 = null;
     const species = Object.prototype.hasOwnProperty.call(SPECIES, look.species) ? look.species : 'human';
     const idx = (v, n) => (Number.isInteger(v) && v >= 0 && v < n ? v : 0);
     const out = { cls, species, skin: idx(look.skin, SKINS.length), hair: idx(look.hair, HAIRS.length) };
-    if (cls2) out.cls2 = cls2;
     if (!skinsFor(species).includes(out.skin)) out.skin = skinsFor(species)[0];
     if (typeof look.sub === 'string' && /^[a-z-]{1,40}$/.test(look.sub)) out.sub = look.sub;
     return out;
   }
 
+  // Los tres servidores (salas) del juego: cada uno con su taberna, su mundo y sus partidas
+  const SERVERS = [
+    { id: 'taberna', name: 'La Taberna', desc: 'El servidor de siempre.' },
+    { id: 'putiferricida', name: 'Putiferricida', desc: 'La sala del grupo.' },
+    { id: 'brumaverde', name: 'Brumaverde', desc: 'Un servidor nuevo, con su propio mundo.' },
+  ];
+
   const MAP = createMap();
-  Object.assign(MAP, { createMap, defaultItems, sanitizeItems, MERCHANTS, merchantAt, CLASSES, LEGACY_CLASS, SPECIES, SKINS, SPECIES_SKINS, skinsFor, DRAGON_COLORS, HAIRS, cleanLook });
+  Object.assign(MAP, { SERVERS, createMap, defaultItems, sanitizeItems, MERCHANTS, merchantAt, CLASSES, LEGACY_CLASS, SPECIES, SKINS, SPECIES_SKINS, skinsFor, DRAGON_COLORS, HAIRS, cleanLook });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = MAP;
   else root.MAP = MAP;

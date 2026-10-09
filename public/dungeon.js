@@ -294,6 +294,13 @@
     else if (m.reason === 'arena') DD.toast('🤺 Fin del duelo. Alfonso os sirve algo para las heridas.');
     else DD.toast('Vuelves a la taberna: vida y energía recuperadas.');
   });
+  // Vuelta a la pantalla de inicio: se cierra la partida sin más
+  DD.on('to-title', () => {
+    game.active = false;
+    viewEl.classList.add('hidden');
+    VIEW3D.show(false);
+    DD.setScene('tavern');
+  });
   DD.on('log', (m) => {
     if (!game.active || m.t !== 'chat') return;
     log(`${m.name}: ${m.text}`, 'chat');

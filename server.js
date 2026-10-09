@@ -123,26 +123,63 @@ function system(room, text) {
   say(room, { t: 'system', text });
 }
 
-// ---------- Perfiles ----------
-// { name, xp, gold, char: { cls, cls2, alloc, look }, equip: { slot: item }, bag: [item], cons: { id: n }, buffs: { id: hasta } }
+// ---------- Cuentas y perfiles ----------
+// Una cuenta por navegador (su token): hasta 3 personajes y cuál se usó la última vez y en qué servidor.
+// { slots: [perfil | null ×3], last: { slot, server } }
+// Perfil (un personaje): { name, xp, gold, char: { cls, alloc, look }, equip: { slot: item }, bag: [item], cons: { id: n },
+//   buffs: { id: hasta }, …, resume: dónde estaba al salir { server, at: 'tavern'|'world'|'dungeon', x, y, inst, from, back, place } }
+const SLOT_COUNT = 3;
+const tokenPid = (t) => (typeof t === 'string' && /^[a-zA-Z0-9_-]{16,64}$/.test(t) ? store.hash(t) : null);
+const slotOf = (v) => (Number.isInteger(v) && v >= 0 && v < SLOT_COUNT ? v : null);
+const charId = (pid, slot) => (slot ? `${pid}:${slot}` : pid);
+const serverId = (s) => { const id = cleanRoomName(s); return MAP.SERVERS.some((x) => x.id === id) ? id : MAP.SERVERS[0].id; };
+
+function account(pid) {
+  let a = store.player(pid);
+  if (a && !Array.isArray(a.slots)) {
+    // perfil de la versión anterior (un solo personaje por navegador): pasa a la primera casilla
+    a = { slots: [a.char ? a : null], last: a.char ? { slot: 0, server: null } : null };
+    store.setPlayer(pid, a);
+  }
+  if (!a) a = { slots: [], last: null };
+  while (a.slots.length < SLOT_COUNT) a.slots.push(null);
+  return a;
+}
+
+function slotInfo(p) {
+  if (!p || !p.char || !RULES.CLASSES[p.char.cls]) return null;
+  const r = p.resume || {};
+  return { name: p.name || 'Aventurero', cls: p.char.cls, level: RULES.levelFromXp(p.xp || 0), title: p.title || null, look: lookFrom(p), server: r.server || null, at: r.at || 'tavern', place: r.place || null };
+}
+
+function accountInfo(a, extra) {
+  return { t: 'account', slots: a.slots.map(slotInfo), last: a.last && a.slots[a.last.slot] ? a.last : null, servers: MAP.SERVERS.map((sv) => ({ ...sv, online: rooms.has(sv.id) ? rooms.get(sv.id).users.size : 0 })), ...extra };
+}
+
+function onlineChar(cid) {
+  for (const r of rooms.values()) for (const u of r.users.values()) if (u.cid === cid) return { u, r };
+  return null;
+}
+
 function lookFrom(profile) {
   const l = profile.char.look || {};
-  return { ...MAP.cleanLook({ cls: profile.char.cls, cls2: profile.char.cls2, species: l.species, skin: l.skin, hair: l.hair }), gear: RULES.gearLook(profile.equip) };
+  return { ...MAP.cleanLook({ cls: profile.char.cls, species: l.species, skin: l.skin, hair: l.hair }), gear: RULES.gearLook(profile.equip) };
 }
 
 function derive(profile) { return RULES.derive(profile); }
 
-// Prepara un perfil (nuevo, de una versión anterior o con otra clase elegida al entrar)
+// Prepara un perfil (nuevo, de una versión anterior o con otra clase elegida al entrar; sin look se queda como está)
 function setupProfile(profile, look) {
   const level = RULES.levelFromXp(profile.xp || 0);
   if (!profile.char || !RULES.CLASSES[profile.char.cls]) {
-    profile.char = RULES.newChar(look.cls, look.cls2, {});
+    look = look || MAP.cleanLook({});
+    profile.char = RULES.newChar(look.cls, {});
     profile.equip = {}; profile.bag = []; profile.cons = { 'pocion-vida-p': 3 }; profile.buffs = {};
     for (const it of RULES.starterItems(profile.char.cls, rnd)) profile.equip[it.slot] = it;
     delete profile.sheet;
   }
   profile.char = RULES.cleanChar(profile.char, level);
-  profile.char.look = { species: look.species, skin: look.skin, hair: look.hair };
+  if (look) profile.char.look = { species: look.species, skin: look.skin, hair: look.hair };
   profile.equip = profile.equip || {}; profile.bag = Array.isArray(profile.bag) ? profile.bag : [];
   profile.cons = profile.cons || {}; profile.buffs = profile.buffs || {};
   profile.quests = profile.quests || {}; profile.questsDone = profile.questsDone || [];
@@ -153,18 +190,21 @@ function setupProfile(profile, look) {
   if (profile.pet && !RULES.PETS[profile.pet.type]) profile.pet = null;
   if (profile.pet) { profile.pet.bag = Array.isArray(profile.pet.bag) ? profile.pet.bag : []; profile.pet.xp = profile.pet.xp || 0; }
   if (profile.mount && !RULES.MOUNTS[profile.mount]) profile.mount = null;
-  changeClasses(profile, look.cls, look.cls2);
+  if (look) changeClasses(profile, look.cls);
+  // Ya no hay segunda clase: lo que sólo se podía llevar gracias a ella pasa a la mochila
+  for (const slot of RULES.SLOT_IDS) {
+    const it = profile.equip[slot];
+    if (it && !RULES.canEquip(it, profile.char, level).ok) { profile.bag.push(it); delete profile.equip[slot]; }
+  }
   for (const [id, until] of Object.entries(profile.buffs)) if (until <= Date.now()) delete profile.buffs[id];
 }
 
 // Cambio de clase: los puntos se devuelven, lo que ya no se puede llevar va a la mochila y se da el equipo inicial que falte
-function changeClasses(profile, cls, cls2) {
+function changeClasses(profile, cls) {
   cls = RULES.classId(cls) || profile.char.cls;
-  cls2 = RULES.classId(cls2);
-  if (cls2 === cls) cls2 = null;
-  if (cls === profile.char.cls && (cls2 || null) === (profile.char.cls2 || null)) return false;
+  if (cls === profile.char.cls) return false;
   const level = RULES.levelFromXp(profile.xp || 0);
-  profile.char.cls = cls; profile.char.cls2 = cls2 || null;
+  profile.char.cls = cls;
   profile.char.alloc = Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0]));
   for (const slot of RULES.SLOT_IDS) {
     const it = profile.equip[slot];
@@ -188,7 +228,33 @@ function freeSpawn(room, except) {
   return { ...room.map.spawn };
 }
 
-function saveUser(user) { store.setPlayer(user.pid, user.profile); }
+function saveUser(user) { store.setPlayer(user.pid, user.account); }
+
+// Dónde está el jugador al salir, para continuar ahí la próxima vez (la arena no cuenta: se vuelve a la taberna)
+function rememberPlace(room, user) {
+  const i = user.where && room.instances.get(user.where.id);
+  const pl = i && i.players.get(user.id);
+  let r = { server: room.name, at: 'tavern', x: user.x, y: user.y };
+  if (pl && i.kind === 'world') r = { server: room.name, at: 'world', x: pl.x, y: pl.y, place: i.def.name };
+  else if (pl && i.kind === 'dungeon') r = { server: room.name, at: 'dungeon', inst: i.id, x: pl.x, y: pl.y, from: user.where.from || null, back: user.where.back || null, place: i.def.name };
+  user.profile.resume = r;
+  saveUser(user);
+}
+
+// Al entrar, vuelve a dejar al jugador donde estaba (si fue en este servidor y el sitio sigue existiendo)
+function resumePlace(room, user) {
+  const r = user.profile.resume;
+  if (!r || r.server !== room.name) return;
+  if (r.at === 'world') return enterWorld(room, user, { x: r.x, y: r.y });
+  if (r.at !== 'dungeon') return;
+  const i = room.instances.get(r.inst);
+  if (i && i.kind === 'dungeon' && !i.bossDead) {
+    joinInstance(room, user, i, { from: r.from, back: r.back, at: { x: r.x, y: r.y } });
+    system(room, `⚔️ ${user.name} vuelve a «${i.def.name}».`);
+  } else if (r.from === 'world') {
+    enterWorld(room, user, r.back); // la cueva ya se cerró: a su entrada en el mundo
+  }
+}
 
 // El jugador recibe su perfil completo; los demás, lo que se ve
 function sendMe(user) {
@@ -485,10 +551,10 @@ function rankAdd(user, cat, v) {
   const key = 'ranks:' + PROG.weekKey();
   const all = store.meta(key) || {};
   const tab = all[cat] || (all[cat] = {});
-  const cur = tab[user.pid] || { name: user.name, v: 0 };
+  const cur = tab[user.cid] || { name: user.name, v: 0 };
   cur.name = user.name;
   cur.v = PROG.BOARDS[cat].max ? Math.max(cur.v, v) : cur.v + v;
-  tab[user.pid] = cur;
+  tab[user.cid] = cur;
   store.setMeta(key, all);
 }
 
@@ -498,8 +564,8 @@ function ranksView(user) {
   const boards = {};
   for (const cat of Object.keys(PROG.BOARDS)) {
     const tab = all[cat] || {};
-    boards[cat] = Object.entries(tab).map(([pid, r]) => ({ name: r.name, v: Math.round(r.v * 10) / 10, me: pid === user.pid })).sort((a, b) => b.v - a.v).slice(0, 10);
-    const mine = tab[user.pid];
+    boards[cat] = Object.entries(tab).map(([pid, r]) => ({ name: r.name, v: Math.round(r.v * 10) / 10, me: pid === user.cid })).sort((a, b) => b.v - a.v).slice(0, 10);
+    const mine = tab[user.cid];
     if (mine && !boards[cat].some((r) => r.me)) boards[cat].push({ name: mine.name, v: mine.v, me: true, pos: Object.values(tab).filter((r) => r.v > mine.v).length + 1 });
   }
   return { t: 'ranks', week, mod: PROG.weekMod(week), boards, ends: (week + 1) * 7 * 86400000 + 4 * 86400000 };
@@ -573,7 +639,7 @@ function worldBossDown(room, users, m, killer) {
   system(room, `🏆 ¡${m.name} ha caído a manos de ${killer.name}! ${users.length > 1 ? users.map((u) => u.name).join(', ') + ' se reparten' : 'Se lleva'} un botín legendario.`);
   for (const u of users) {
     const rarity = rnd() < 0.2 ? 'legendario' : 'epico';
-    const it = RULES.makeItem(rnd, { ilvl: m.level, rarity, classes: [u.profile.char.cls, u.profile.char.cls2].filter(Boolean) });
+    const it = RULES.makeItem(rnd, { ilvl: m.level, rarity, classes: [u.profile.char.cls] });
     if (give(room, u, it)) send(u.ws, { t: 'dgot', item: it });
     else send(u.ws, { t: 'dwhisper', text: 'Tu mochila estaba llena: te quedas sin el objeto del jefe.' });
     giveMats(room, u, { esencia: 3, polvo: 1 }, true);
@@ -609,7 +675,7 @@ function nextFloor(room, user, desc, r) {
   track(room, user, 'floor', { value: floor });
   send(user.ws, { t: 'dwhisper', text: `🌀 Piso ${desc.floor} superado (+${r.xp} PX, +${r.gold} 🪙). Bajas al piso ${floor}…` });
   if (desc.floor % 5 === 0) {
-    const it = RULES.makeItem(rnd, { ilvl: PROG.descentLevel(desc.start, desc.floor), rarity: desc.floor % 10 === 0 ? 'legendario' : 'epico', classes: [user.profile.char.cls, user.profile.char.cls2].filter(Boolean) });
+    const it = RULES.makeItem(rnd, { ilvl: PROG.descentLevel(desc.start, desc.floor), rarity: desc.floor % 10 === 0 ? 'legendario' : 'epico', classes: [user.profile.char.cls] });
     if (give(room, user, it)) send(user.ws, { t: 'dgot', item: it });
     giveMats(room, user, { esencia: 2, polvo: 1 }, true);
     system(room, `🌀 ${user.name} supera el piso ${desc.floor} del Descenso y encuentra «${it.name}».`);
@@ -675,8 +741,8 @@ function shopFor(user, npc) {
   const scale = RULES.priceScale(level);
   if (npc === 'armero') {
     const bucket = Math.floor(Date.now() / SHOP_REFRESH_MS);
-    const seed = RULES.seeded(`shop:${user.pid}:${bucket}:${level}:${user.profile.char.cls}:${user.profile.char.cls2}`);
-    const stock = RULES.armeroStock(seed, level, [user.profile.char.cls, user.profile.char.cls2].filter(Boolean));
+    const seed = RULES.seeded(`shop:${user.cid}:${bucket}:${level}:${user.profile.char.cls}`);
+    const stock = RULES.armeroStock(seed, level, [user.profile.char.cls]);
     const bought = (user.shopBought && user.shopBought.bucket === bucket) ? user.shopBought.set : new Set();
     return { npc, kind: 'items', items: stock.map((it, i) => ({ ...it, price: RULES.itemBuyPrice(it, d.discount), sold: bought.has(i) })), bucket, refresh: (bucket + 1) * SHOP_REFRESH_MS };
   }
@@ -720,7 +786,8 @@ wss.on('connection', (ws) => {
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
 
-  const joinTimer = setTimeout(() => { if (!user) ws.close(4000, 'join timeout'); }, 15000);
+  // Sin entrar se cierra la conexión; en la pantalla de inicio (hello) hay más margen
+  let joinTimer = setTimeout(() => { if (!user) ws.close(4000, 'join timeout'); }, 15000);
 
   function allow(cost = 1) {
     const now = Date.now();
@@ -754,29 +821,77 @@ wss.on('connection', (ws) => {
     if (!msg || typeof msg.t !== 'string') return;
 
     if (!user) {
+      // Pantalla de inicio: ver, crear y borrar personajes de la cuenta antes de entrar
+      if (msg.t === 'hello' || msg.t === 'char:new' || msg.t === 'char:del') {
+        if (!allow(1)) return;
+        clearTimeout(joinTimer);
+        joinTimer = setTimeout(() => { if (!user) ws.close(4000, 'join timeout'); }, 10 * 60 * 1000);
+        const pid = tokenPid(msg.token);
+        if (!pid) return;
+        const a = account(pid);
+        const slot = slotOf(msg.slot);
+        if (msg.t === 'char:new') {
+          if (slot === null || a.slots[slot]) return err('Esa casilla ya tiene un personaje.');
+          const name = cleanText(msg.name, 16);
+          if (!name) return err('Ponle un nombre a tu héroe.');
+          const p = { xp: 0, gold: START_GOLD, name };
+          setupProfile(p, MAP.cleanLook(msg.look));
+          a.slots[slot] = p;
+          store.setPlayer(pid, a);
+          return send(ws, accountInfo(a, { created: slot }));
+        }
+        if (msg.t === 'char:del' && slot !== null && a.slots[slot]) {
+          if (onlineChar(charId(pid, slot))) return err('Ese personaje está jugando ahora mismo.');
+          a.slots[slot] = null;
+          if (a.last && a.last.slot === slot) a.last = null;
+          store.setPlayer(pid, a);
+        }
+        return send(ws, accountInfo(a));
+      }
       if (msg.t !== 'join') return;
-      const roomName = cleanRoomName(msg.room);
+      const roomName = serverId(msg.room);
       room = getRoom(roomName);
       if (room.users.size >= MAX_USERS_PER_ROOM) {
-        send(ws, { t: 'error', text: 'La taberna está llena. Prueba otra sala.' });
+        send(ws, { t: 'error', text: 'Este servidor está lleno. Prueba otro.' });
         return ws.close();
       }
-      clearTimeout(joinTimer);
       const token = typeof msg.token === 'string' && /^[a-zA-Z0-9_-]{16,64}$/.test(msg.token) ? msg.token : crypto.randomBytes(16).toString('hex');
       const pid = store.hash(token);
-      const name = cleanText(msg.name, 16) || 'Aventurero';
-      const profile = store.player(pid) || { xp: 0, gold: START_GOLD };
-      profile.name = name;
-      const look = MAP.cleanLook(msg.look);
-      setupProfile(profile, look);
-      store.setPlayer(pid, profile);
+      const acc = account(pid);
+      let slot = slotOf(msg.slot);
+      // Sin casilla (clientes antiguos): el último personaje usado, o uno nuevo en la primera casilla
+      const legacy = slot === null;
+      if (legacy) slot = acc.last && acc.slots[acc.last.slot] ? acc.last.slot : 0;
+      let profile = acc.slots[slot];
+      if (!profile) {
+        if (!legacy) return err('Esa casilla está vacía.');
+        profile = acc.slots[slot] = { xp: 0, gold: START_GOLD };
+      }
+      clearTimeout(joinTimer);
+      if (legacy && msg.name) profile.name = cleanText(msg.name, 16) || profile.name;
+      profile.name = profile.name || 'Aventurero';
+      setupProfile(profile, legacy && msg.look ? MAP.cleanLook(msg.look) : null);
+      acc.last = { slot, server: roomName };
+      store.setPlayer(pid, acc);
+      // El mismo personaje no puede estar dos veces: la sesión anterior se cierra
+      const cid = charId(pid, slot);
+      const dup = onlineChar(cid);
+      if (dup) {
+        rememberPlace(dup.r, dup.u); // se continúa justo donde estaba la otra sesión
+        dup.u.kicked = true;
+        send(dup.u.ws, { t: 'kicked', text: 'Has entrado con este personaje desde otro sitio.' });
+        dup.u.ws.close(4001, 'otra sesión');
+      }
+      const name = profile.name;
       // Quien entra primero en una sala nueva es su dueño y puede editar los muebles
       if (!room.ownerId) { room.ownerId = pid; saveRoom(room); }
-      const pos = freeSpawn(room);
-      user = { id: crypto.randomBytes(6).toString('hex'), pid, name, look: lookFrom(profile), profile, x: pos.x, y: pos.y, where: null, ws, trade: null };
+      const r = profile.resume;
+      const back = r && r.server === roomName && r.at === 'tavern' && room.map.isStandable(r.x, r.y) && ![...room.users.values()].some((u) => !u.where && u.x === r.x && u.y === r.y);
+      const pos = back ? { x: r.x, y: r.y } : freeSpawn(room);
+      user = { id: crypto.randomBytes(6).toString('hex'), pid, cid, slot, account: acc, name, look: lookFrom(profile), profile, x: pos.x, y: pos.y, where: null, ws, trade: null };
       room.users.set(user.id, user);
       send(ws, {
-        t: 'welcome', id: user.id, room: roomName, owner: isOwner(),
+        t: 'welcome', id: user.id, room: roomName, owner: isOwner(), slot,
         items: room.map.items,
         users: [...room.users.values()].map(publicUser),
         history: room.history,
@@ -784,6 +899,7 @@ wss.on('connection', (ws) => {
       sendMe(user);
       broadcast(room, { t: 'join', user: publicUser(user) }, user.id);
       system(room, `${user.name} entra en la taberna.`);
+      resumePlace(room, user);
       return;
     }
 
@@ -867,12 +983,12 @@ wss.on('connection', (ws) => {
         if (!allow(1)) return;
         if (user.where) return err('Vuelve a la taberna para cambiar de clase o de aspecto.');
         const look = MAP.cleanLook({ ...msg.look });
-        const changed = changeClasses(user.profile, look.cls, look.cls2);
+        const changed = changeClasses(user.profile, look.cls);
         user.profile.char.look = { species: look.species, skin: look.skin, hair: look.hair };
         profileChanged(room, user, { look: true });
         if (changed) {
           const c = user.profile.char;
-          system(room, `📜 ${user.name} es ahora ${RULES.CLASSES[c.cls].name.toLowerCase()}${c.cls2 ? ' y ' + RULES.CLASSES[c.cls2].name.toLowerCase() : ''}.`);
+          system(room, `📜 ${user.name} es ahora ${RULES.CLASSES[c.cls].name.toLowerCase()}.`);
         }
         break;
       }
@@ -1137,7 +1253,7 @@ wss.on('connection', (ws) => {
         let item = null;
         if (Q.item) {
           const ilvl = Math.max(levelOf(user), RULES.ZONES[Q.zone].lv[1]);
-          item = RULES.makeItem(rnd, { ilvl, rarity: Q.item, classes: [user.profile.char.cls, user.profile.char.cls2].filter(Boolean) });
+          item = RULES.makeItem(rnd, { ilvl, rarity: Q.item, classes: [user.profile.char.cls] });
           if (user.profile.bag.length >= RULES.BAG_SIZE) return err('Haz sitio en la mochila para recoger la recompensa.');
           user.profile.bag.push(item);
         }
@@ -1245,7 +1361,7 @@ wss.on('connection', (ws) => {
         if (!takeMats(p, { esencia: c.esencia, polvo: c.polvo })) return err(`Te faltan materiales: ${matsText({ esencia: c.esencia, polvo: c.polvo })}.`);
         p.gold -= c.gold;
         p.bag = p.bag.filter((x) => !ids.includes(x.id));
-        const out = PROG.combine(rnd, items, [p.char.cls, p.char.cls2].filter(Boolean));
+        const out = PROG.combine(rnd, items, [p.char.cls]);
         p.bag.push(out);
         track(room, user, 'forge', { value: 0 });
         if (out.rarity === 'legendario') track(room, user, 'legend', {});
@@ -1300,7 +1416,7 @@ wss.on('connection', (ws) => {
         let item = null;
         if (r.item) {
           if (p.bag.length >= RULES.BAG_SIZE) return err('Haz sitio en la mochila para la recompensa.');
-          item = RULES.makeItem(rnd, { ilvl: levelOf(user), rarity: r.item, classes: [p.char.cls, p.char.cls2].filter(Boolean) });
+          item = RULES.makeItem(rnd, { ilvl: levelOf(user), rarity: r.item, classes: [p.char.cls] });
           p.bag.push(item);
         }
         p.board.claimed.push(id);
@@ -1400,6 +1516,7 @@ wss.on('connection', (ws) => {
   ws.on('close', () => {
     clearTimeout(joinTimer);
     if (!user) return;
+    if (!user.kicked) rememberPlace(room, user);
     if (user.trade) endTrade(user.trade, `${user.name} se ha ido.`);
     if (user.where) {
       const i = room.instances.get(user.where.id);
@@ -1426,7 +1543,13 @@ const heartbeat = setInterval(() => {
 }, 30000);
 wss.on('close', () => clearInterval(heartbeat));
 
-function shutdown() { try { store.flushAll(); } catch { /* nada */ } process.exit(0); }
+function shutdown() {
+  try {
+    for (const r of rooms.values()) for (const u of r.users.values()) rememberPlace(r, u);
+    store.flushAll();
+  } catch { /* nada */ }
+  process.exit(0);
+}
 process.on('SIGINT', shutdown);
 process.on('SIGTERM', shutdown);
 

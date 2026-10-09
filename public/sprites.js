@@ -63,7 +63,7 @@
   // ======================================================================
   //  Héroes (24×34, pies en y=31) con el equipo que llevan a la vista
   // ======================================================================
-  // look: { cls, cls2, species, skin, hair, gear: { w, wr, o, or, casco, cascoR, pecho, pechoR, guantes, botas, set }, npc }
+  // look: { cls, species, skin, hair, gear: { w, wr, o, or, casco, cascoR, pecho, pechoR, guantes, botas, set }, npc }
   // o: { back, frame (0 quieto, 1-2 andando), sit, emote, tick (0/1 para animar gestos), mug, wiping }
   const RARITY_COL = { raro: '#4aa0ff', epico: '#c060ff', legendario: '#ff9a2a', conjunto: '#3ee67a' };
   const SET_COL = {

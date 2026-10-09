@@ -1,4 +1,4 @@
-// Reglas propias de Desks & Dungeons: 7 características, 7 clases (con multiclase de dos), objetos con
+// Reglas propias de Desks & Dungeons: 7 características, 7 clases, objetos con
 // rarezas, conjuntos de clase, botín, monstruos escalados por nivel, habilidades, tiendas y bufos.
 // Lo usan el servidor (que manda) y el navegador (para mostrar fichas, objetos y precios).
 (function (root) {
@@ -108,7 +108,7 @@
   const classId = (c) => (CLASSES[c] ? c : LEGACY_CLASS[c] || null);
 
   // ======================================================================
-  //  Habilidades (4 por clase; las de la segunda clase llegan más tarde)
+  //  Habilidades (4 por clase)
   // ======================================================================
   // kind: strike (golpe con el arma), bolt (hechizo a un objetivo), blast (área en un punto), nova (área alrededor),
   // cone, line, heal, healAll, buff (grupo), dash, blink, aura, mark (debilita al objetivo)
@@ -156,7 +156,6 @@
       { id: 'espiritus', lvl: 10, name: 'Espíritus guardianes', icon: '👼', cost: 35, cd: 20000, kind: 'aura', radius: 2, mult: 0.6, dur: 8000, fx: 'holy', desc: 'Espíritus que dañan cada segundo a los enemigos cercanos (60%) durante 8 s.' },
     ],
   };
-  const SECOND_CLASS_LEVEL = { 1: 3, 3: 6, 6: 10, 10: 15 }; // nivel al que llega cada habilidad de la segunda clase
   const ABILITY_BY_ID = {};
   for (const [cls, list] of Object.entries(ABILITIES)) for (const a of list) ABILITY_BY_ID[a.id] = { ...a, cls };
 
@@ -174,12 +173,10 @@
   const pointsSpent = (char) => STAT_IDS.reduce((t, k) => t + (char.alloc[k] || 0), 0);
   const pointsFree = (char, level) => Math.max(0, pointsTotal(level) - pointsSpent(char));
 
-  // Características base: 5 en todo + las de la clase principal + la mitad de las de la segunda
+  // Características base: 5 en todo + las de la clase
   function baseStats(char) {
     const s = Object.fromEntries(STAT_IDS.map((k) => [k, 5]));
-    const c1 = CLASSES[char.cls], c2 = char.cls2 && CLASSES[char.cls2];
-    for (const [k, v] of Object.entries(c1.base)) s[k] += v;
-    if (c2) for (const [k, v] of Object.entries(c2.base)) s[k] += Math.floor(v / 2);
+    for (const [k, v] of Object.entries(CLASSES[char.cls].base)) s[k] += v;
     return s;
   }
 
@@ -457,7 +454,7 @@
   function canEquip(it, char, level) {
     if (!it || !SLOTS[it.slot]) return { ok: false, reason: 'Eso no se puede equipar.' };
     if (level < (it.req || 1)) return { ok: false, reason: `Necesitas nivel ${it.req}.` };
-    const classes = [char.cls, char.cls2].filter(Boolean);
+    const classes = [char.cls];
     const { weapons, armor } = allowedBases(classes);
     if (it.slot === 'arma' || it.slot === 'mano') {
       if (!weapons.includes(it.base)) return { ok: false, reason: `${classes.map((c) => CLASSES[c].name).join(' / ')} no sabe usar ${it.slot === 'arma' ? WEAPONS[it.base].name.toLowerCase() : OFFHANDS[it.base].name.toLowerCase()}.` };
@@ -551,16 +548,14 @@
   // ======================================================================
   //  Personaje: ficha calculada
   // ======================================================================
-  function newChar(cls, cls2, look) {
+  function newChar(cls, look) {
     cls = classId(cls) || 'guerrero';
-    cls2 = classId(cls2);
-    if (cls2 === cls) cls2 = null;
-    return { cls, cls2: cls2 || null, alloc: Object.fromEntries(STAT_IDS.map((k) => [k, 0])), look: look || {} };
+    return { cls, alloc: Object.fromEntries(STAT_IDS.map((k) => [k, 0])), look: look || {} };
   }
 
   // Limpia una ficha guardada (o enviada por un cliente)
   function cleanChar(c, level) {
-    const out = newChar(c && c.cls, c && c.cls2, c && c.look);
+    const out = newChar(c && c.cls, c && c.look);
     if (c && c.alloc) {
       let budget = pointsTotal(level || 1);
       for (const k of STAT_IDS) {
@@ -610,8 +605,7 @@
     const stats = {};
     for (const k of STAT_IDS) stats[k] = Math.round(base[k] + (char.alloc[k] || 0) + (g.t[k] || 0));
     const x = (k) => g.t[k] || 0;
-    const c1 = CLASSES[char.cls], c2 = char.cls2 ? CLASSES[char.cls2] : null;
-    const hpMult = c2 ? (c1.hp * 2 + c2.hp) / 3 : c1.hp;
+    const hpMult = CLASSES[char.cls].hp;
 
     const w = profile.equip && profile.equip.arma;
     const W = w ? WEAPONS[w.base] : FISTS;
@@ -629,7 +623,7 @@
     const capacity = 40 + stats.fue * 2;
     const overloaded = weight > capacity;
     const d = {
-      level, cls: char.cls, cls2: char.cls2, stats, base, alloc: char.alloc, weight, capacity, overloaded,
+      level, cls: char.cls, stats, base, alloc: char.alloc, weight, capacity, overloaded,
       points: pointsFree(char, level),
       hp: Math.round(((30 + stats.vit * 6 + stats.con + level * 8) * hpMult + x('hp')) * (1 + x('hpPct') / 100)),
       en: Math.round(40 + stats.res * 4 + level * 2 + x('en')),
@@ -661,7 +655,6 @@
   function abilitiesFor(char, level) {
     const out = [];
     for (const a of ABILITIES[char.cls]) out.push({ ...a, cls: char.cls, unlock: a.lvl, ready: level >= a.lvl });
-    if (char.cls2) for (const a of ABILITIES[char.cls2]) { const u = SECOND_CLASS_LEVEL[a.lvl]; out.push({ ...a, cls: char.cls2, unlock: u, ready: level >= u }); }
     return out;
   }
 
@@ -860,7 +853,7 @@
 
   const RULES = {
     MAX_LEVEL, BAG_SIZE, POINTS_START, POINTS_PER_LEVEL, STATS, STAT_IDS, EXTRA, CLASSES, CLASS_IDS, LEGACY_CLASS, ARMOR_TYPES,
-    ABILITIES, ABILITY_BY_ID, SECOND_CLASS_LEVEL, XP_TABLE, SLOTS, SLOT_IDS, WEAPONS, FISTS, OFFHANDS, ARMOR_NAMES, JEWELS,
+    ABILITIES, ABILITY_BY_ID, XP_TABLE, SLOTS, SLOT_IDS, WEAPONS, FISTS, OFFHANDS, ARMOR_NAMES, JEWELS,
     RARITIES, RARITY_ORDER, AFFIXES, SLOT_AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES,
     statName, fmtStat, classId, levelFromXp, pointsTotal, pointsSpent, pointsFree, baseStats, newChar, cleanChar,
     rollRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, allowedBases,

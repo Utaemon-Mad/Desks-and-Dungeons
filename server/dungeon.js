@@ -997,7 +997,7 @@ class Instance {
     const list = [...this.players.values()];
     if (!list.length) return [];
     const p = list[Math.floor(rnd() * list.length)];
-    return [p.d.cls, p.d.cls2].filter(Boolean);
+    return [p.d.cls];
   }
 
   killEnemy(p, e) {

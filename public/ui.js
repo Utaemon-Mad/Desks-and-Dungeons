@@ -166,8 +166,7 @@
       pc.appendChild(DD.portrait(look, 40));
     }
     $('#mh-name').textContent = u ? u.name : '';
-    const c1 = RULES.CLASSES[p.char.cls], c2 = p.char.cls2 && RULES.CLASSES[p.char.cls2];
-    $('#mh-class').textContent = `${c1.name}${c2 ? ' / ' + c2.name : ''} · nivel ${d.level}`;
+    $('#mh-class').textContent = `${RULES.CLASSES[p.char.cls].name} · nivel ${d.level}`;
     const hp = combat ? combat.hp : d.hp, maxHp = combat ? combat.maxHp : d.hp;
     const en = combat ? combat.en : d.en, maxEn = combat ? combat.maxEn : d.en;
     $('#mh-hp').style.width = Math.max(0, 100 * hp / maxHp) + '%';
@@ -244,7 +243,7 @@
     const box = $('#lu-stats');
     box.innerHTML = '';
     const preview = RULES.derive({ ...p, char: { ...p.char, alloc: Object.fromEntries(RULES.STAT_IDS.map((k) => [k, (p.char.alloc[k] || 0) + (pending[k] || 0)])) } });
-    const main = new Set([RULES.CLASSES[p.char.cls].main, p.char.cls2 ? RULES.CLASSES[p.char.cls2].main : null]);
+    const main = new Set([RULES.CLASSES[p.char.cls].main]);
     for (const S of RULES.STATS) {
       const row = el('div', 'lu-row' + (main.has(S.id) ? ' main' : ''));
       const nm = el('div', 'lu-name');
@@ -306,25 +305,23 @@
     if (u) pv.getContext('2d').drawImage(DD.heroImage(u.look, 180, 230, 'full'), 0, 0);
     left.appendChild(pv);
     left.appendChild(el('div', 'ficha-name', u ? u.name : ''));
-    const c1 = RULES.CLASSES[p.char.cls], c2 = p.char.cls2 && RULES.CLASSES[p.char.cls2];
-    left.appendChild(el('div', 'ficha-cls', `${c1.icon} ${c1.name}${c2 ? ` / ${c2.icon} ${c2.name}` : ''}`));
+    const c1 = RULES.CLASSES[p.char.cls];
+    left.appendChild(el('div', 'ficha-cls', `${c1.icon} ${c1.name}`));
     left.appendChild(el('div', 'ficha-lvl', `Nivel ${d.level} · ${p.xp} PX`));
     if (d.points > 0) { const b = el('button', 'btn red', `⭐ Repartir ${d.points} puntos`); b.onclick = openLevelUp; left.appendChild(b); }
     // cambio de clase (sólo en la taberna)
     const cc = el('div', 'class-change');
-    cc.appendChild(el('div', 'field-title', 'Clase y multiclase'));
-    const s1 = document.createElement('select'), s2 = document.createElement('select');
+    cc.appendChild(el('div', 'field-title', 'Clase'));
+    const s1 = document.createElement('select');
     for (const [id, k] of Object.entries(RULES.CLASSES)) s1.appendChild(new Option(`${k.icon} ${k.name}`, id, false, id === p.char.cls));
-    s2.appendChild(new Option('Sin segunda clase', '', false, !p.char.cls2));
-    for (const [id, k] of Object.entries(RULES.CLASSES)) s2.appendChild(new Option(`${k.icon} ${k.name}`, id, false, id === p.char.cls2));
     const apply = el('button', 'btn alt', 'Cambiar');
     apply.onclick = () => {
       if (!inTavern()) { DD.toast('Vuelve a la taberna para cambiar de clase.'); return; }
-      if (s1.value === p.char.cls && (s2.value || null) === (p.char.cls2 || null)) return;
+      if (s1.value === p.char.cls) return;
       if (!confirm('Al cambiar de clase se te devuelven los puntos repartidos para que los vuelvas a asignar. ¿Seguro?')) return;
-      DD.net.send({ t: 'char:save', look: { ...u.look, gear: undefined, cls: s1.value, cls2: s2.value || undefined } });
+      DD.net.send({ t: 'char:save', look: { ...u.look, gear: undefined, cls: s1.value } });
     };
-    cc.append(s1, s2, apply);
+    cc.append(s1, apply);
     left.appendChild(cc);
     const respec = el('button', 'btn alt small', `Reiniciar puntos (${10 * d.level} 🪙)`);
     respec.onclick = () => { if (!inTavern()) { DD.toast('Sólo en la taberna.'); return; } if (confirm(`¿Reiniciar todos tus puntos por ${10 * d.level} de oro?`)) DD.net.send({ t: 'char:respec' }); };
@@ -447,7 +444,7 @@
       r.appendChild(t);
       wrap.appendChild(r);
     }
-    wrap.appendChild(el('p', 'muted small', 'En las mazmorras usa las teclas 1-8 (o los botones de abajo). Apuntan al enemigo bajo el ratón o al más cercano. Las habilidades de la segunda clase se aprenden más tarde.'));
+    wrap.appendChild(el('p', 'muted small', 'En las mazmorras usa las teclas 1-8 (o los botones de abajo). Apuntan al enemigo bajo el ratón o al más cercano.'));
     return wrap;
   }
 
@@ -802,8 +799,8 @@
         p(`${k.desc} Característica principal: ${RULES.statName(k.main)}. Armaduras: ${k.armor.map((a) => RULES.ARMOR_TYPES[a]).join(', ')}. Armas: ${k.weapons.map((w) => (RULES.WEAPONS[w] || RULES.OFFHANDS[w]).name).join(', ')}.`);
         p('Habilidades: ' + RULES.ABILITIES[id].map((a) => `${a.icon} ${a.name} (nv ${a.lvl})`).join(' · '));
       }
-      h('Multiclase');
-      p('Puedes sumar una segunda clase: usas sus armas y armaduras y aprendes sus habilidades, aunque más tarde (niveles 3, 6, 10 y 15). Sus características suman la mitad.');
+      h('Tus personajes');
+      p('Cada navegador guarda hasta tres personajes. En la pantalla de inicio puedes crear uno nuevo en una casilla libre, jugar con cualquiera de ellos o borrarlo. «Continuar» te devuelve al último personaje, en el último servidor y en el sitio donde lo dejaste.');
     } else if (guideTab === 'stats') {
       for (const S of RULES.STATS) { h(S.name); p(S.desc); }
     } else if (guideTab === 'botin') {
