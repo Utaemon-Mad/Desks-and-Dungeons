@@ -1,0 +1,10 @@
+Ultimate Animated Animals - Quaternius (https://quaternius.com)
+
+License: CC0 1.0 Universal (public domain)
+http://creativecommons.org/publicdomain/zero/1.0/
+
+Free for personal, educational and commercial use. No attribution required
+(credit appreciated).
+
+Models used: Wolf, Fox, ShibaInu, Horse, Stag (lightweight .glb versions with
+six animations each: Idle, Walk, Gallop, Attack, Hit, Death).

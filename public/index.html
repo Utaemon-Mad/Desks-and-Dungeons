@@ -1,0 +1,394 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#1a0606">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Desks &amp; Dungeons">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <title>Desks &amp; Dungeons · La Taberna</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jacquard+12&family=Pixelify+Sans:wght@400;600;700&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <canvas id="gl" class="hidden"></canvas>
+    <canvas id="scene"></canvas>
+
+    <header id="title">
+      <div class="logo">Desks <span>&amp;</span> Dungeons</div>
+      <div class="sub">Servidor <b id="room-name">Lejano</b></div>
+    </header>
+
+    <!-- Panel lateral: héroes en la taberna -->
+    <aside id="heroes" class="panel">
+      <div class="panel-title">EN LA TABERNA <span id="count">0</span></div>
+      <div id="hero-list"></div>
+    </aside>
+
+    <!-- Registro del chat -->
+    <section id="log" class="panel">
+      <div class="panel-title small">CRÓNICA <button id="log-toggle" class="mini" title="Plegar">–</button></div>
+      <div id="log-lines"></div>
+    </section>
+
+    <!-- Barra inferior -->
+    <nav id="bar">
+      <button class="tool" data-act="heroes" title="Héroes"><span class="ico">🛡️</span><span>Héroes</span></button>
+      <button class="tool" data-act="emotes" title="Gestos"><span class="ico">😄</span><span>Gestos</span></button>
+      <button class="tool" data-act="dice" title="Tirar d20"><span class="ico">🎲</span><span>Dado</span></button>
+      <button class="tool" data-act="char" title="Tu personaje (C)"><span class="ico">🧙</span><span>Personaje</span></button>
+      <button class="tool" data-act="bag" title="Equipo y mochila (I)"><span class="ico">🎒</span><span>Equipo</span></button>
+      <button class="tool" data-act="guide" title="Guía del juego"><span class="ico">📖</span><span>Guía</span></button>
+      <button class="tool tavern-only" data-act="world" title="Salir al mundo abierto"><span class="ico">🗺️</span><span>Mundo</span></button>
+      <button class="tool tavern-only" data-act="stable" title="Establo: mascotas y monturas"><span class="ico">🐾</span><span>Establo</span></button>
+      <button class="tool tavern-only" data-act="svc" title="Forja, cocina, tablón, fama y arena"><span class="ico">🏛️</span><span>Pueblo</span></button>
+      <button class="tool tavern-only" data-act="dungeons" title="Mazmorras"><span class="ico">🗝️</span><span>Mazmorras</span></button>
+      <form id="chat-form" autocomplete="off">
+        <input id="chat-input" maxlength="200" placeholder="Di algo a la taberna… (Enter)" enterkeyhint="send">
+        <button class="btn" type="submit">HABLAR</button>
+      </form>
+      <button class="tool tavern-only" data-act="drink" title="Pedir una jarra"><span class="ico">🍺</span><span>Jarra</span></button>
+      <button class="tool tavern-only hidden" data-act="edit" title="Editar la taberna"><span class="ico">🔨</span><span>Editar</span></button>
+      <button class="tool" data-act="menu" title="Menú"><span class="ico">☰</span><span>Menú</span></button>
+    </nav>
+
+    <div id="emote-pop" class="pop panel hidden">
+      <button data-e="wave">👋</button><button data-e="dance">💃</button><button data-e="cheers">🍻</button>
+      <button data-e="laugh">😂</button><button data-e="heart">❤️</button><button data-e="fight">⚔️</button>
+      <button data-e="think">🤔</button><button data-e="sleep">💤</button>
+    </div>
+
+    <div id="menu-pop" class="pop panel hidden">
+      <button data-m="invite">🔗 Copiar enlace de invitación</button>
+      <button data-m="hero">🏠 Volver al menú principal</button>
+      <button data-m="help">📜 Comandos</button>
+      <button data-m="sound">🔔 Sonido: <b id="sound-state">sí</b></button>
+      <button data-m="gfx">⚙️ Gráficos y rendimiento</button>
+      <button data-m="fs" data-fs>⛶ Pantalla completa</button>
+    </div>
+
+    <div id="svc-pop" class="pop panel hidden">
+      <button data-s="forge">⚒️ Forja de Brunilda</button>
+      <button data-s="cook">🍲 Cocina de Alfonso</button>
+      <button data-s="board">📋 Tablón de misiones</button>
+      <button data-s="fame">🏅 Logros, títulos y clasificación</button>
+      <button data-s="room">🏠 Mi habitación</button>
+      <button data-s="descent">🌀 Descenso infinito</button>
+    </div>
+
+    <!-- Editor de la taberna -->
+    <aside id="editor" class="panel hidden">
+      <div class="panel-title small">EDITAR TABERNA</div>
+      <div id="edit-tools" class="edit-tools"></div>
+      <div class="edit-row">
+        <button id="edit-rot" class="btn" type="button">Orientación <b id="edit-dir">↙</b> (R)</button>
+      </div>
+      <div class="edit-row">
+        <button id="edit-reset" class="btn alt" type="button">Restaurar</button>
+        <button id="edit-clear" class="btn alt" type="button">Vaciar</button>
+      </div>
+      <button id="edit-done" class="btn big" type="button">LISTO</button>
+    </aside>
+
+    <!-- Mazmorra o mundo abierto en juego -->
+    <div id="dview" class="hidden">
+      <canvas id="dcanvas"></canvas>
+      <div id="dtop" class="panel">
+        <div class="dname" id="dname">Mazmorra</div>
+        <div class="dtop-row"><span class="kills" id="dleft"></span><button id="dexit" class="btn alt" type="button">SALIR</button></div>
+      </div>
+      <div id="qtrack" class="hidden"></div>
+      <button id="dmount" class="btn alt hidden" type="button" title="Montar o desmontar (F)">🐎 MONTAR</button>
+      <div id="dboss" class="hidden"><div id="dboss-name"></div><div class="meter boss"><i id="dboss-bar"></i></div></div>
+      <div id="dlog" class="dlog"></div>
+      <div id="dactions" class="dactions"></div>
+      <div id="joy" title="Joystick"><i></i></div>
+      <div id="dextra">
+        <button id="droll" class="btn alt" type="button" title="Esquivar (Espacio)">🤸</button>
+        <button id="dfish" class="btn alt hidden" type="button" title="Pescar (G)">🎣</button>
+      </div>
+      <div id="dbite" class="hidden">¡PICA! <small>pulsa 🎣 o G</small></div>
+      <div id="dbanner" class="hidden"></div>
+      <div id="dcount" class="hidden"></div>
+    </div>
+
+    <!-- Tu héroe: retrato, nivel, vida, energía, experiencia y oro -->
+    <div id="myhero" class="panel hidden">
+      <div class="mh-left">
+        <div id="mh-portrait" title="Tu personaje"></div>
+        <button id="mh-badge" class="hidden" type="button" title="¡Has subido de nivel! Reparte tus puntos">+5</button>
+      </div>
+      <div class="mh-right">
+        <div class="mh-name"><b id="mh-name"></b> <span id="mh-class"></span></div>
+        <div class="meter hp"><i id="mh-hp"></i><span id="mh-hp-t"></span></div>
+        <div class="meter en"><i id="mh-en"></i><span id="mh-en-t"></span></div>
+        <div class="meter xp"><i id="mh-xp"></i></div>
+        <div class="mh-foot"><span>🪙 <b id="mh-gold">0</b></span><span id="mh-buffs"></span></div>
+      </div>
+    </div>
+    <div id="tip" class="hidden"></div>
+    <div id="lootcard" class="panel hidden" title="Abrir el equipo"></div>
+
+    <div id="toast" class="hidden"></div>
+    <div id="conn" class="hidden">Reconectando con la taberna…</div>
+  </div>
+
+  <!-- Pantalla de entrada -->
+  <!-- Pantalla de inicio: título → menú (nuevo personaje, continuar, elegir servidor) -->
+  <div id="start" class="overlay title-screen">
+    <div class="title-box">
+      <div class="logo huge">Desks <span>&amp;</span> Dungeons</div>
+      <p class="tag">Una taberna, tus amigos y mazmorras sin fin</p>
+      <div id="press" class="press">Pulsa cualquier tecla</div>
+      <nav id="main-menu" class="main-menu hidden">
+        <button type="button" data-go="new"><span>Nuevo personaje</span><small id="mm-new">Tres casillas para tus héroes</small></button>
+        <button type="button" data-go="continue"><span>Continuar</span><small id="mm-cont">Cargando…</small></button>
+        <button type="button" data-go="server"><span>Elegir servidor</span><small id="mm-srv"></small></button>
+      </nav>
+    </div>
+    <button type="button" class="btn alt fs-btn" data-fs>⛶ Pantalla completa</button>
+    <div class="title-foot">↑ ↓ para elegir · Intro para aceptar · Esc para volver · Ctrl + rueda: zoom del juego</div>
+  </div>
+
+  <!-- Casillas de personaje -->
+  <div id="slots" class="overlay title-screen hidden">
+    <div class="panel card wide">
+      <div class="panel-title">NUEVO PERSONAJE</div>
+      <p class="tag">Tienes tres casillas. Crea un héroe en una libre o juega con uno que ya tengas.</p>
+      <div id="slot-list" class="slot-list"></div>
+      <p class="tag small">Servidor: <b id="slots-srv"></b></p>
+      <div class="edit-row"><button class="btn alt" type="button" data-back>VOLVER</button></div>
+    </div>
+  </div>
+
+  <!-- Servidores -->
+  <div id="servers" class="overlay title-screen hidden">
+    <div class="panel card wide">
+      <div class="panel-title">ELEGIR SERVIDOR</div>
+      <p class="tag">Cada servidor tiene su propia taberna, su mundo y sus partidas. Tus personajes sirven en los tres.</p>
+      <div id="server-list" class="server-list"></div>
+      <div class="edit-row"><button class="btn alt" type="button" data-back>VOLVER</button></div>
+    </div>
+  </div>
+
+  <!-- Crear personaje en una casilla -->
+  <div id="login" class="overlay hidden">
+    <form id="login-form" class="panel card" autocomplete="off">
+      <div class="logo big">Desks <span>&amp;</span> Dungeons</div>
+      <p class="tag">Nuevo héroe · casilla <b id="login-slot">1</b></p>
+
+      <label>Nombre del héroe
+        <input id="login-name" maxlength="16" required placeholder="Tu nombre">
+      </label>
+
+      <div class="field-title">Clase</div>
+      <div id="class-pick" class="class-pick"></div>
+      <div class="field-title">Raza</div>
+      <div id="species-pick" class="class-pick species"></div>
+
+      <p id="login-sheet-note" class="tag small"></p>
+      <div class="looks">
+        <div><div class="field-title">Piel</div><div id="skin-pick" class="swatches"></div></div>
+        <div><div class="field-title">Pelo</div><div id="hair-pick" class="swatches"></div></div>
+        <canvas id="preview" width="150" height="190"></canvas>
+      </div>
+
+      <button class="btn big" type="submit">CREAR Y JUGAR</button>
+      <button id="login-back" class="btn alt big" type="button">VOLVER</button>
+    </form>
+  </div>
+
+  <!-- Mazmorras: crear una aleatoria con nivel o unirse a una partida -->
+  <div id="dmenu" class="overlay hidden">
+    <div class="panel card wide">
+      <div class="panel-title">MAZMORRAS</div>
+      <p class="tag">Cada mazmorra se genera al azar: salas, enemigos, cofres y un jefe con botín de conjunto al final.</p>
+      <div class="field-title">Tema</div>
+      <div id="dthemes" class="themes"></div>
+      <div class="field-title">Nivel <b id="dlevel-val">1</b></div>
+      <input id="dlevel" type="range" min="1" max="4" value="1">
+      <p id="dlevel-hint" class="tag small"></p>
+      <button id="dgo" class="btn big" type="button">⚔️ GENERAR Y ENTRAR</button>
+      <div class="field-title">Partidas abiertas (únete a tus amigos)</div>
+      <div id="dlist" class="dlist"></div>
+      <div class="edit-row"><button id="dclose" class="btn alt" type="button">CERRAR</button></div>
+    </div>
+  </div>
+
+  <!-- Subida de nivel: repartir puntos -->
+  <div id="levelup" class="overlay win hidden">
+    <div class="panel card">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">⭐ PUNTOS DE CARACTERÍSTICA <span class="lu-left">Te quedan <b id="lu-points">0</b></span></div>
+      <div id="lu-stats" class="lu-stats"></div>
+      <div id="lu-preview" class="lu-preview"></div>
+      <div class="edit-row"><button id="lu-reset" class="btn alt" type="button">DESHACER</button><button id="lu-ok" class="btn big" type="button">CONFIRMAR</button></div>
+    </div>
+  </div>
+
+  <!-- Personaje: ficha, equipo y habilidades -->
+  <div id="charwin" class="overlay win hidden">
+    <div class="panel sheet-panel">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div id="char-tabs" class="manual-tabs">
+        <button type="button" data-tab="ficha">🧙 Ficha</button>
+        <button type="button" data-tab="equipo">🎒 Equipo</button>
+        <button type="button" data-tab="habilidades">✨ Habilidades</button>
+        <button type="button" data-tab="misiones">📜 Misiones</button>
+      </div>
+      <div id="char-body" class="char-body"></div>
+    </div>
+  </div>
+
+  <!-- Tienda de un comerciante -->
+  <div id="shopwin" class="overlay win hidden">
+    <div class="panel sheet-panel">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div id="shop-head" class="shop-head"></div>
+      <div id="shop-body" class="shop-body"></div>
+    </div>
+  </div>
+
+  <!-- Comercio entre jugadores -->
+  <div id="tradewin" class="overlay win hidden">
+    <div class="panel sheet-panel">
+      <button class="mini close-x" type="button" title="Cancelar">✕</button>
+      <div class="panel-title">🤝 COMERCIO</div>
+      <div id="trade-body" class="trade-body"></div>
+      <div class="edit-row"><button id="trade-cancel" class="btn alt" type="button">CANCELAR</button><button id="trade-ok" class="btn big" type="button">ACEPTAR TRATO</button></div>
+    </div>
+  </div>
+
+  <!-- Conversación con un personaje del mundo -->
+  <div id="npcwin" class="overlay win hidden">
+    <div class="panel card wide">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div id="npc-head" class="shop-head"></div>
+      <div id="npc-body" class="npc-body"></div>
+    </div>
+  </div>
+
+  <!-- Piedras de viaje -->
+  <div id="waywin" class="overlay win hidden">
+    <div class="panel card">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">🗿 PIEDRAS DE VIAJE</div>
+      <div id="way-body"></div>
+    </div>
+  </div>
+
+  <!-- Establo: mascotas y monturas -->
+  <div id="stablewin" class="overlay win hidden">
+    <div class="panel card wide">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">🐾 ESTABLO DE LA TABERNA</div>
+      <div id="stable-body"></div>
+    </div>
+  </div>
+
+  <!-- Forja de Brunilda -->
+  <div id="forgewin" class="overlay win hidden">
+    <div class="panel sheet-panel">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">⚒️ FORJA DE BRUNILDA</div>
+      <div id="forge-tabs" class="manual-tabs">
+        <button type="button" data-tab="up">Mejorar</button>
+        <button type="button" data-tab="enchant">Encantar</button>
+        <button type="button" data-tab="combine">Combinar 3 → 1</button>
+        <button type="button" data-tab="salvage">Desguazar</button>
+      </div>
+      <div id="forge-mats" class="mats-row"></div>
+      <div id="forge-body" class="forge-body"></div>
+    </div>
+  </div>
+
+  <!-- Cocina de Alfonso -->
+  <div id="cookwin" class="overlay win hidden">
+    <div class="panel card wide">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">🍲 LA COCINA DE ALFONSO</div>
+      <div id="cook-body"></div>
+    </div>
+  </div>
+
+  <!-- Tablón de misiones -->
+  <div id="boardwin" class="overlay win hidden">
+    <div class="panel card wide">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">📋 TABLÓN DE LA TABERNA</div>
+      <div id="board-body"></div>
+    </div>
+  </div>
+
+  <!-- Fama: logros, títulos y clasificación -->
+  <div id="famewin" class="overlay win hidden">
+    <div class="panel sheet-panel">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">🏅 FAMA</div>
+      <div id="fame-tabs" class="manual-tabs">
+        <button type="button" data-tab="logros">Logros y títulos</button>
+        <button type="button" data-tab="ranks">Clasificación semanal</button>
+        <button type="button" data-tab="stats">Estadísticas</button>
+      </div>
+      <div id="fame-body" class="manual-body"></div>
+    </div>
+  </div>
+
+  <!-- Habitación con trofeos -->
+  <div id="roomwin" class="overlay win hidden">
+    <div class="panel sheet-panel room-panel">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title" id="room-title">🏠 HABITACIÓN</div>
+      <canvas id="room-cv" width="720" height="420"></canvas>
+      <div id="room-info"></div>
+    </div>
+  </div>
+
+  <!-- Ajustes de gráficos -->
+  <div id="optwin" class="overlay win hidden">
+    <div class="panel card">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">⚙️ GRÁFICOS Y RENDIMIENTO</div>
+      <div id="opt-body"></div>
+    </div>
+  </div>
+
+  <!-- Guía -->
+  <div id="guide" class="overlay win hidden">
+    <div class="panel sheet-panel">
+      <button class="mini close-x" type="button" title="Cerrar">✕</button>
+      <div class="panel-title">📖 GUÍA DE DESKS &amp; DUNGEONS</div>
+      <div id="guide-tabs" class="manual-tabs">
+        <button type="button" data-tab="jugar">Cómo jugar</button>
+        <button type="button" data-tab="clases">Clases</button>
+        <button type="button" data-tab="stats">Características</button>
+        <button type="button" data-tab="botin">Botín y jefes</button>
+        <button type="button" data-tab="monstruos">Monstruos</button>
+      </div>
+      <div id="guide-body" class="manual-body guide-body"></div>
+    </div>
+  </div>
+
+  <script src="map.js"></script>
+  <script src="dungeon-data.js"></script>
+  <script src="rules/engine.js"></script>
+  <script src="rules/progress.js"></script>
+  <script src="vendor/three.bundle.min.js"></script>
+  <script src="sprites.js"></script>
+  <script src="models.js"></script>
+  <script src="view3d.js"></script>
+  <script src="dsprites.js"></script>
+  <script src="game.js"></script>
+  <script src="ui.js"></script>
+  <script src="ui2.js"></script>
+  <script src="dungeon.js"></script>
+</body>
+</html>
