@@ -25,7 +25,12 @@ public/goblin.js        cabeza goblin hecha a mano con sus opciones
 public/armor3d.js       aspecto de las 96 armaduras en el personaje
 public/weapons3d.js     aspecto de las 39 armas y escudos
 public/view3d.js        render, mapa 3D, partículas, clima, retratos y dibujos de objetos
-public/game.js          taberna, red, zoom, pantalla de inicio, editor de personaje
+public/game.js          núcleo de la taberna: estado, red, interfaz (crónica, héroes, avisos), puente DD.core
+public/tavern/start.js  pantalla de inicio, casillas, servidores y editor de personaje
+public/tavern/editor.js editor de muebles de la taberna (dueño)
+public/tavern/screen.js zoom del juego y pantalla completa
+public/tavern/tavern3d.js taberna en 3D, bucle de dibujo y clics en la sala
+public/tavern/boot.js   arranque (se carga el último de la taberna)
 public/dungeon.js       mazmorra en el navegador: escena, controles, interfaz de combate
 public/ui.js, ui2.js    ventanas: ficha, inventario, tiendas, forja, guía
 public/sprites.js, dsprites.js  sprites 2D: iconos de objetos y reserva sin 3D
@@ -44,6 +49,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Antes de subir: `npm run lint && npm test`.
 - Rama de trabajo: `claude/social-room-game-ypkkqo`; a la web llega al fusionar con `main`.
 - Commits en español, descriptivos.
+- Los archivos de `public/tavern/` comparten nombres a través de `DD.core` (`const C = DD.core`): cada archivo publica al final lo que usan los demás; las variables que cambian de valor se leen como `C.nombre`.
 
 ## Decisiones
 - Objetos estilo Diablo 2: niveles normal/excepcional/élite, calidades (inferior…único, conjunto), prefijos y sufijos.
