@@ -54,6 +54,11 @@ function rulesTests() {
   const c2 = {};
   for (let i = 0; i < 40000; i++) { const r = RULES.rollRarity(rng, 300); c2[r] = (c2[r] || 0) + 1; }
   assert.ok(c2.magico / count.magico > c2.unico / count.unico, 'hallazgo mágico con rendimientos decrecientes');
+  // botín: los enemigos normales sueltan poco y básico; élites y jefes, mejor
+  const lootStats = (o, n = 6000) => { let items = 0, good = 0; for (let i = 0; i < n; i++) for (const it of RULES.rollLoot(rng, o)) { items++; if (['raro', 'unico', 'conjunto'].includes(it.rarity)) good++; } return { per: items / n, good: good / n }; };
+  const ln = lootStats({ ilvl: 3 }), le = lootStats({ ilvl: 3, elite: true }), lb = lootStats({ ilvl: 3, boss: true }, 2000);
+  assert.ok(ln.per < 0.15 && ln.good < 0.005, `un enemigo normal suelta poco (${ln.per.toFixed(3)} objetos, ${ln.good.toFixed(4)} raros)`);
+  assert.ok(le.per > ln.per * 4 && lb.good > le.good, 'los élites y los jefes sueltan más y mejor');
   // armas: tres niveles (normal, excepcional, élite) que pegan más y piden más
   const t = [0, 1, 2].map((tier) => RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'arma', base: 'espada', tier, sk: 0 }));
   assert.ok(t[0].dmg[1] < t[1].dmg[1] && t[1].dmg[1] < t[2].dmg[1], 'el élite pega más');

@@ -621,16 +621,44 @@
     return Math.max(1, Math.round((4 + it.ilvl * 3) * R.value * (1 + (it.tier || 0) * 0.3)));
   }
 
-  // Botín de un enemigo. o: { ilvl, mf, classes, elite, boss, sets }
+  // Botín de un enemigo. o: { ilvl, mf, classes, elite, boss, chest, sets }
+  // Los enemigos normales sueltan poco y casi siempre básico; la calidad sube con el nivel del enemigo,
+  // y los élites, cofres y jefes son los que dan lo bueno.
+  const DROP = {
+    // probabilidad de soltar un objeto en cada tirada y pesos de cada calidad
+    normal: { chance: 0.10, w: { inferior: 30, normal: 55, superior: 11, magico: 4, raro: 0.25, unico: 0.02 } },
+    elite: { chance: 0.4, w: { inferior: 8, normal: 45, superior: 25, magico: 18, raro: 2.5, unico: 0.2 } },
+    chest: { chance: 1, w: { inferior: 12, normal: 50, superior: 20, magico: 15, raro: 1.5, unico: 0.12 } },
+    boss: { chance: 1, w: { magico: 78, raro: 20, unico: 1.5 } },
+  };
+  function rollDropRarity(rng, kind, lvl, mf) {
+    const w = { ...DROP[kind].w };
+    // con el nivel del enemigo sube la calidad (en el nivel 1 casi nada mágico; hacia el 30 bastante más)
+    const up = Math.max(0, lvl - 1);
+    if (w.magico) w.magico *= 1 + up / 12;
+    if (w.raro) w.raro *= 1 + up / 8;
+    if (w.unico) w.unico *= 1 + up / 6;
+    // hallazgo mágico con rendimientos decrecientes (el de antes)
+    const m = Math.max(0, mf || 0);
+    if (w.magico) w.magico *= 1 + m / 100;
+    if (w.raro) w.raro *= 1 + (m * 600) / (m + 600) / 100;
+    if (w.unico) w.unico *= 1 + (m * 250) / (m + 250) / 100;
+    const total = Object.values(w).reduce((a, b) => a + b, 0);
+    let r = rng() * total;
+    for (const [id, v] of Object.entries(w)) { r -= v; if (r < 0) return id; }
+    return 'normal';
+  }
   function rollLoot(rng, o) {
     const out = [];
-    const rolls = o.boss ? 3 : o.elite ? 2 : 1;
-    const mf = (o.mf || 0) + (o.boss ? 150 : o.elite ? 80 : o.chest ? 60 : 0);
+    const kind = o.boss ? 'boss' : o.chest ? 'chest' : o.elite ? 'elite' : 'normal';
+    const rolls = o.boss ? 2 : o.elite ? 2 : 1;
+    const lvl = Math.max(1, o.ilvl | 0);
     for (let i = 0; i < rolls; i++) {
-      let rarity = rollRarity(rng, mf);
-      if ((o.boss || o.chest) && (!rarity || RARITY_ORDER.indexOf(rarity) < RARITY_ORDER.indexOf('magico'))) rarity = 'magico';
-      if (!rarity) continue;
-      out.push(makeItem(rng, { ilvl: o.ilvl, rarity, classes: o.classes }));
+      if (rng() >= DROP[kind].chance * (kind === 'normal' ? 1 + Math.min(0.5, (o.mf || 0) / 400) : 1)) continue;
+      const rarity = rollDropRarity(rng, kind, lvl, o.mf);
+      // los enemigos normales sueltan objetos de su nivel o algo por debajo
+      const ilvl = kind === 'normal' ? Math.max(1, lvl - Math.floor(rng() * 3)) : lvl;
+      out.push(makeItem(rng, { ilvl, rarity, classes: o.classes }));
     }
     if (o.boss && o.sets && o.sets.length) {
       // Pieza de conjunto: mejor si es de la clase de alguien del grupo
@@ -1130,7 +1158,7 @@
     ABILITIES, ABILITY_BY_ID, XP_TABLE, SLOTS, SLOT_IDS, TIERS, WEAPONS, FISTS, OFFHANDS, ARMOR_REQ, JEWELS,
     RARITIES, RARITY_ORDER, LEGACY_RARITY, AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES,
     statName, fmtStat, classId, raceId, levelFromXp, pointsTotal, pointsSpent, pointsFree, baseStats, statRoom, newChar, cleanChar,
-    rollRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, describeRich, baseInfo, speedName, allowedBases, affixPool, affixTier, rollAffixValue,
+    rollRarity, rollDropRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, describeRich, baseInfo, speedName, allowedBases, affixPool, affixTier, rollAffixValue,
     migrateItem, migrateProfile, adj,
     PETS, PET_LEVEL, MOUNT_LEVEL, MOUNTS, petStats, PET_MAX, petXpFor, petLevelFromXp, petEvo, petTitle, PET_SKILLS, PET_SKILL_LEVEL, petBagWeight, ZONES, QUESTS, itemWeight, classesFor,
     priceScale, buyPrice, itemBuyPrice, armeroStock, seeded, gearTotals, derive, abilitiesFor, gearLook, monsterAt, reduction, xpPenalty,
