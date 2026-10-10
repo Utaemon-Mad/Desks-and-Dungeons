@@ -11,6 +11,9 @@ RPG de taberna multijugador en el navegador, todo en español. En producción en
 ## Estructura
 ```
 server.js               servidor HTTP/WebSocket, cuentas, inventario, tiendas, comercio, forja y reparto de mensajes
+server/web.js           archivos estáticos (gzip, ETag), panel /admin y errores de los navegadores
+server/accounts.js      copias de seguridad firmadas y usuario/contraseña
+server/social.js        hazañas, mejoras de la taberna, mercado, temporadas, recompensa diaria y Asalto semanal
 server/dungeon.js       instancia de mazmorra/mundo/arena: combate, IA, botín, mascotas, puertas
 server/gen.js           generador de mazmorras (salas, puertas, decorado, antorchas)
 server/world.js         mundo abierto y NPC
@@ -58,6 +61,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Antes de subir: `npm run lint && npm test`.
 - Rama de trabajo: `claude/social-room-game-ypkkqo`; a la web llega al fusionar con `main`.
 - Commits en español, descriptivos.
+- Los módulos de `server/` (web, accounts, social) reciben en `CTX` lo que necesitan de server.js y devuelven sus funciones.
 - Los archivos de `public/tavern/` comparten nombres a través de `DD.core` (`const C = DD.core`): cada archivo publica al final lo que usan los demás; las variables que cambian de valor se leen como `C.nombre`.
 
 ## Decisiones
