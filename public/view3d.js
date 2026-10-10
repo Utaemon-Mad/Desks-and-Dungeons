@@ -698,16 +698,16 @@
   const GEM = { inferior: '#8a8a8a', normal: '#c83a3a', superior: '#e8e4d8', magico: '#4a7aff', raro: '#ffd23a', unico: '#ff8a20', conjunto: '#3ac86a' };
   function itemArt(it, w, h) {
     if (!it || !M().GL || !M().GL.ready) return null;
-    const key = ['art', it.slot, it.base, it.type, it.tier || 0, it.sk ? 1 : 0, it.rarity, it.set || '', w, h, M().GL.version].join('|');
+    const key = ['art', it.slot, it.base, it.type, it.tier || 0, it.sk || 0, it.rarity, it.set || '', w, h, M().GL.version].join('|');
     if (artCache.has(key)) return artCache.get(key);
     ensureSnap();
     const slot = it.slot, grp = new THREE.Group();
     let obj = null;
     if ((slot === 'arma' || slot === 'mano') && window.WEAPON3D) {
-      obj = WEAPON3D.build(it.base, it.tier || 0, it.rarity, { set: it.set });
+      obj = WEAPON3D.build(it.base, it.tier || 0, it.rarity, { sk: it.sk, set: it.set });
       if (obj) { obj.rotation.set(0.25, 0.5, slot === 'arma' && it.base !== 'arco' ? -0.78 : slot === 'mano' ? 0 : 0.2); grp.add(obj); }
     } else if (['casco', 'pecho', 'guantes', 'botas'].includes(slot)) {
-      const gear = { [slot]: it.type, [slot + 'T']: it.tier || 0, [slot + 'S']: it.sk ? 1 : 0, [slot + 'R']: it.rarity };
+      const gear = { [slot]: it.type, [slot + 'T']: it.tier || 0, [slot + 'S']: it.sk || 0, [slot + 'R']: it.rarity };
       const model = M().buildHero({ cls: 'guerrero', species: 'human', sex: 'm', hs: 'corto', skin: 0, hair: 0, gear });
       const P = model.userData.parts || {};
       const keep = new Set(P.armor || []);

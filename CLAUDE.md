@@ -18,12 +18,13 @@ server/store.js         guardado en data/*.json
 public/index.html       página única y orden de carga de los scripts
 public/rules/engine.js  reglas: stats, razas, clases, habilidades, objetos estilo Diablo 2, afijos, botín, monstruos
 public/rules/progress.js forja, misiones, logros, descenso semanal
+public/rules/items-data.js tabla de nombre y aspecto de las 192 armaduras y 156 armas/escudos (4 variantes por nivel)
 public/map.js           taberna, servidores, razas y aspecto, rasgos goblin (cleanLook)
 public/dungeon-data.js  tipos de casilla de las mazmorras
 public/models.js        personajes 3D (KayKit), enemigos, animales, muebles
 public/goblin.js        cabeza goblin hecha a mano con sus opciones
-public/armor3d.js       aspecto de las 96 armaduras en el personaje
-public/weapons3d.js     aspecto de las 39 armas y escudos
+public/armor3d.js       dibuja las armaduras en el personaje (piezas pegadas a los huesos)
+public/weapons3d.js     dibuja armas y escudos (un modelo por tipo y nivel, colores por variante)
 public/view3d.js        render, mapa 3D, partículas, clima, retratos y dibujos de objetos
 public/game.js          núcleo de la taberna: estado, red, interfaz (crónica, héroes, avisos), puente DD.core
 public/tavern/start.js  pantalla de inicio, casillas, servidores y editor de personaje
@@ -53,6 +54,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 
 ## Decisiones
 - Objetos estilo Diablo 2: niveles normal/excepcional/élite, calidades (inferior…único, conjunto), prefijos y sufijos.
+- Para añadir armaduras o armas basta una fila en `items-data.js` (nombre, género, aspecto); la variante se guarda en `it.sk` y no cambia las estadísticas.
 - Stats: Fuerza, Destreza, Vigor, Inteligencia, Carisma, Suerte; máximo natural 20; nivel máximo 50.
 - 5 razas y 7 clases. Los goblins llevan cabeza propia (`goblin.js`) con rasgos en `look.gob`.
 - Todos los personajes KayKit comparten esqueleto: cabezas, armaduras y armas se pegan a los huesos.
