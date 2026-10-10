@@ -84,6 +84,7 @@
     const used = acct ? acct.slots.filter(Boolean).length : 0;
     $('#mm-new').textContent = acct ? `${used} de 3 casillas ocupadas` : 'Tres casillas para tus héroes';
     const sv = acct && acct.servers.find((x) => x.id === server);
+    $('#mm-acct').textContent = acct && acct.login ? `Guardada como «${acct.login}»` : 'Guárdala con usuario y contraseña';
     $('#mm-srv').textContent = `${serverName(server)}${sv ? ` · ${sv.online} ${sv.online === 1 ? 'jugador' : 'jugadores'}` : ''}`;
     menuSel();
     if (screen === 'slots') renderSlots();
@@ -172,6 +173,7 @@
     if (go === 'new') openSlots();
     else if (go === 'server') openServers();
     else if (go === 'continue' && acct && acct.last) enterGame(acct.last.slot, acct.last.server);
+    else if (go === 'account') openAccount();
   }
 
   function enterGame(slot, srv) {
@@ -199,6 +201,7 @@
   $('#login-back').addEventListener('click', () => { if (edMode === 'edit') loginEl.classList.add('hidden'); else openSlots(); });
   window.addEventListener('keydown', (e) => {
     if (titleEl.classList.contains('hidden') && slotsEl.classList.contains('hidden') && serversEl.classList.contains('hidden')) return;
+    if (!acctWin.classList.contains('hidden')) { if (e.key === 'Escape') acctWin.classList.add('hidden'); return; }
     if (document.activeElement && document.activeElement.tagName === 'INPUT') return;
     if (screen === 'press') { if (!e.repeat) { e.preventDefault(); pressAnyKey(); } return; }
     if (screen === 'menu') {
@@ -370,6 +373,63 @@
     acct = m;
     enterGame(createSlot, server);
   });
+
+  // ---------- Mi cuenta: usuario y contraseña ----------
+  const acctWin = $('#acctwin');
+  $('#acct-close').onclick = () => acctWin.classList.add('hidden');
+  function field(label, type, ph) {
+    const w = document.createElement('label'); w.className = 'acct-field';
+    const s = document.createElement('span'); s.textContent = label;
+    const i = document.createElement('input'); i.type = type; i.placeholder = ph || ''; i.maxLength = type === 'password' ? 100 : 20; i.autocomplete = type === 'password' ? 'current-password' : 'username';
+    w.append(s, i); return [w, i];
+  }
+  function btn(text, cls, fn) { const b = document.createElement('button'); b.type = 'button'; b.className = 'btn ' + (cls || ''); b.textContent = text; b.onclick = fn; return b; }
+  function para(text, cls) { const p = document.createElement('p'); p.className = cls || 'tag small'; p.textContent = text; return p; }
+  function openAccount(tab) {
+    acctWin.classList.remove('hidden');
+    const body = $('#acct-body'); body.innerHTML = '';
+    const user = acct && acct.login;
+    if (user && tab !== 'login') {
+      body.append(para(`Tu cuenta está guardada como «${user}». Para jugar desde otro ordenador o desde el móvil, pulsa «Mi cuenta → Entrar con mi cuenta» allí y escribe tu usuario y contraseña.`, 'tag'));
+      body.append(btn('Cambiar la contraseña', 'alt', () => openAccount('register')), btn('Entrar con otra cuenta', 'alt', () => openAccount('login')));
+      return;
+    }
+    const tabs = document.createElement('div'); tabs.className = 'title-row';
+    const mode = tab || (user ? 'login' : 'register');
+    tabs.append(btn(user ? 'Cambiar contraseña' : 'Guardar mi cuenta', mode === 'register' ? '' : 'alt', () => openAccount('register')), btn('Entrar con mi cuenta', mode === 'login' ? '' : 'alt', () => openAccount('login')));
+    body.append(tabs);
+    const [fu, iu] = field('Usuario', 'text', 'p. ej. dani87');
+    const [fp, ip] = field('Contraseña', 'password', 'mínimo 6 caracteres');
+    if (user) { iu.value = user; }
+    if (mode === 'register') {
+      body.append(para('Ponle usuario y contraseña a esta cuenta (tus personajes de este navegador) para no perderla y entrar desde cualquier dispositivo.'));
+      const [fp2, ip2] = field('Repite la contraseña', 'password', '');
+      ip.autocomplete = ip2.autocomplete = 'new-password';
+      body.append(fu, fp, fp2, btn('💾 GUARDAR', 'big', async () => {
+        if (ip.value !== ip2.value) return toast('Las contraseñas no coinciden.');
+        const m = await lobby.call({ t: 'acct:register', user: iu.value, pass: ip.value });
+        if (m.t !== 'account') return;
+        acct = m; renderMenu();
+        toast(`🔑 Cuenta guardada como «${m.registered}».`);
+        openAccount();
+      }));
+    } else {
+      body.append(para('Escribe el usuario y la contraseña que pusiste en tu otro dispositivo. Este navegador pasará a usar esa cuenta (los personajes que tuviera aquí sin guardar dejarán de verse).'));
+      body.append(fu, fp, btn('🚪 ENTRAR', 'big', async () => {
+        const m = await lobby.call({ t: 'acct:login', user: iu.value, pass: ip.value });
+        if (m.t !== 'account' || !m.token) return;
+        save('dd-token', m.token);
+        if (m.backup) C.saveBackup(m.backup);
+        lobby.close();
+        await refreshAccount();
+        toast(`¡Hola de nuevo, ${m.login}! Ya tienes aquí tus personajes.`);
+        acctWin.classList.add('hidden');
+      }));
+    }
+    // Intro en cualquier casilla = pulsar el botón grande
+    for (const i of body.querySelectorAll('input')) i.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); const b = body.querySelector('.btn.big'); if (b) b.click(); } });
+    setTimeout(() => iu.focus(), 50);
+  }
 
   // ---------- Carga: barra de progreso y consejos mientras llegan los modelos 3D ----------
   const TIPS = [

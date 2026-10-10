@@ -756,3 +756,30 @@ body.cb .dlog-line.loot-conjunto { color: #cc79a7; }
 .tut-glow { animation: tut-glow 1s infinite alternate !important; position: relative; z-index: 61; }
 @keyframes tut-glow { from { box-shadow: 0 0 0 2px #ffd24a, 0 0 10px rgba(255, 210, 74, .6); } to { box-shadow: 0 0 0 4px #ffd24a, 0 0 24px rgba(255, 210, 74, 1); } }
 @media (max-width: 820px) { .tut { bottom: 160px; } .tut-text { font-size: 13px; } }
+
+/* Novedades y mensaje del día */
+.news-body { max-height: 60vh; overflow-y: auto; text-align: left; }
+.news-sec { margin-bottom: 12px; }
+.news-sec h3 { margin: 0; font: 700 17px "Pixelify Sans", sans-serif; color: #ffd77a; }
+.news-sec small { color: #b99a72; }
+.news-sec ul { margin: 6px 0 0; padding-left: 20px; }
+.news-sec li { margin-bottom: 4px; }
+.motd { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 30; max-width: min(560px, calc(100% - 340px)); padding: 6px 14px; background: rgba(28, 18, 12, .88); color: #ffe39a; border: 1px solid #e0a93a; border-radius: 8px; font-size: 14px; cursor: pointer; text-align: center; }
+.motd.hidden, body.in-dungeon .motd { display: none; }
+@media (max-width: 820px) { .motd { top: auto; bottom: 150px; max-width: calc(100% - 24px); } }
+
+/* Mi cuenta */
+#acctwin { z-index: 70; }
+#acctwin .panel { width: min(440px, calc(100% - 24px)); }
+.acct-field { display: block; margin: 8px 0; text-align: left; }
+.acct-field span { display: block; font: 600 13px "Pixelify Sans", sans-serif; color: #e8d3a8; margin-bottom: 3px; }
+.acct-field input { width: 100%; padding: 8px 10px; font-size: 16px; border-radius: 6px; border: 2px solid #5a3418; background: #fbf4e2; color: #2b1d14; }
+#acct-body .btn.big { width: 100%; margin-top: 6px; }
+#acct-body .title-row { margin-bottom: 6px; }
+
+/* Iconos propios */
+.gi { display: block; }
+.tool .ico .gi { filter: drop-shadow(0 2px 0 #000) drop-shadow(0 0 6px rgba(240, 192, 96, .25)); transition: transform .12s, filter .12s; }
+.tool:hover .ico .gi { transform: translateY(-2px) scale(1.06); filter: drop-shadow(0 2px 0 #000) drop-shadow(0 0 10px rgba(240, 192, 96, .7)); }
+@media (max-width: 820px) { .tool .ico .gi { width: 24px; height: 24px; } }
+.act-btn .ic .gi { margin: 0 auto; filter: drop-shadow(0 1px 0 #000); }

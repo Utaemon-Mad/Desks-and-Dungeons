@@ -8,7 +8,7 @@ process.env.DATA_DIR = fs.mkdtempSync(path.join(os.tmpdir(), 'dd-test-'));
 process.env.DD_TEST_FAST = '1';
 const assert = require('assert');
 const WebSocket = require('ws');
-const { server, store } = require('../server.js');
+const { server, store, rooms } = require('../server.js');
 const RULES = require('../public/rules/engine.js');
 const MAP = require('../public/map.js');
 const PROG = require('../public/rules/progress.js');
@@ -54,6 +54,11 @@ function rulesTests() {
   const c2 = {};
   for (let i = 0; i < 40000; i++) { const r = RULES.rollRarity(rng, 300); c2[r] = (c2[r] || 0) + 1; }
   assert.ok(c2.magico / count.magico > c2.unico / count.unico, 'hallazgo mágico con rendimientos decrecientes');
+  // botín: los enemigos normales sueltan poco y básico; élites y jefes, mejor
+  const lootStats = (o, n = 6000) => { let items = 0, good = 0; for (let i = 0; i < n; i++) for (const it of RULES.rollLoot(rng, o)) { items++; if (['raro', 'unico', 'conjunto'].includes(it.rarity)) good++; } return { per: items / n, good: good / n }; };
+  const ln = lootStats({ ilvl: 3 }), le = lootStats({ ilvl: 3, elite: true }), lb = lootStats({ ilvl: 3, boss: true }, 2000);
+  assert.ok(ln.per < 0.15 && ln.good < 0.005, `un enemigo normal suelta poco (${ln.per.toFixed(3)} objetos, ${ln.good.toFixed(4)} raros)`);
+  assert.ok(le.per > ln.per * 4 && lb.good > le.good, 'los élites y los jefes sueltan más y mejor');
   // armas: tres niveles (normal, excepcional, élite) que pegan más y piden más
   const t = [0, 1, 2].map((tier) => RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'arma', base: 'espada', tier, sk: 0 }));
   assert.ok(t[0].dmg[1] < t[1].dmg[1] && t[1].dmg[1] < t[2].dmg[1], 'el élite pega más');
@@ -671,6 +676,67 @@ async function instanceTests() {
   assert.ok(!meIn.where && meIn.x === 6 && meIn.y === 9, 'continúa en la taberna, donde estaba');
   d4.ws.close();
 
+  const mkAccU = (tok, name) => store.setPlayer(store.hash(tok), { slots: [{ name, xp: 0, gold: 10, rv: RULES.RULES_VERSION, char: RULES.newChar('mago', { species: 'elf', sex: 'f' }), equip: {}, bag: [], cons: {}, buffs: {} }, null, null], last: null });
+  // Usuario y contraseña: se guarda la cuenta y otro dispositivo entra en ella
+  const tokU = 'ab'.repeat(16), tokOther = 'cd'.repeat(16);
+  mkAccU(tokU, 'Viajera');
+  const lu = await client('Login1');
+  lu.send({ t: 'acct:register', token: tokU, user: 'x', pass: '123456' });
+  assert.match((await lu.next((m) => m.t === 'error')).text, /usuario/, 'usuario demasiado corto');
+  await sleep(1000);
+  lu.send({ t: 'acct:register', token: tokU, user: 'Viajera87', pass: 'secreta1' });
+  const reg = await lu.next((m) => m.t === 'account');
+  assert.ok(reg.registered === 'viajera87' && reg.login === 'viajera87', 'cuenta guardada (usuario en minúsculas)');
+  assert.ok(!JSON.stringify(reg).includes('secreta1'), 'la contraseña no viaja de vuelta');
+  const lu2 = await client('Login2');
+  lu2.send({ t: 'acct:login', token: tokOther, user: 'viajera87', pass: 'mala' });
+  assert.match((await lu2.next((m) => m.t === 'error')).text, /incorrectos/, 'contraseña mala');
+  await sleep(1000);
+  lu2.send({ t: 'acct:register', token: tokOther, user: 'viajera87', pass: 'otra123' });
+  assert.match((await lu2.next((m) => m.t === 'error')).text, /ya existe/, 'no se puede quitar el usuario a otro');
+  await sleep(1000);
+  lu2.send({ t: 'acct:login', token: tokOther, user: 'VIAJERA87', pass: 'secreta1' });
+  const lg = await lu2.next((m) => m.t === 'account');
+  assert.strictEqual(lg.token, tokU, 'el otro dispositivo recibe la llave de la cuenta');
+  assert.strictEqual(lg.slots[0].name, 'Viajera', 'y ve sus personajes');
+  lu.ws.close(); lu2.ws.close();
+
+  // Dueño de la taberna: mensaje del día, silenciar y expulsar (el primero en entrar en un servidor nuevo es el dueño)
+  const SRV3 = MAP.SERVERS[2].id;
+  const mkAcc = (tok, name) => store.setPlayer(store.hash(tok), { slots: [{ name, xp: 0, gold: 10, rv: RULES.RULES_VERSION, char: RULES.newChar('guerrero', { species: 'human', sex: 'm' }), equip: {}, bag: [], cons: {}, buffs: {} }, null, null], last: null });
+  const tokO = 'e1'.repeat(16), tokG = 'f2'.repeat(16);
+  mkAcc(tokO, 'Dueña'); mkAcc(tokG, 'Gamberro');
+  const own = await client('Dueña'), gam = await client('Gamberro');
+  if (rooms.has(SRV3)) rooms.get(SRV3).ownerId = null;
+  store.setRoom(SRV3, { ownerId: null, items: (store.room(SRV3) || {}).items });
+  own.send({ t: 'join', room: SRV3, slot: 0, token: tokO });
+  assert.ok((await own.next((m) => m.t === 'welcome')).owner, 'la primera en entrar en un servidor sin dueño es la dueña');
+  gam.send({ t: 'join', room: SRV3, slot: 0, token: tokG });
+  await gam.next((m) => m.t === 'welcome');
+  gam.send({ t: 'chat', text: '/aviso me lo invento' });
+  assert.match((await gam.next((m) => m.t === 'system' && /dueño/.test(m.text))).text, /Solo el dueño/, 'solo el dueño cambia el aviso');
+  own.send({ t: 'chat', text: '/aviso Esta noche jugamos a las 22:00' });
+  assert.strictEqual((await gam.next((m) => m.t === 'motd')).text, 'Esta noche jugamos a las 22:00', 'el mensaje del día llega a todos');
+  assert.strictEqual(store.room(SRV3).motd, 'Esta noche jugamos a las 22:00', 'y se guarda');
+  await sleep(1100);
+  own.send({ t: 'chat', text: '/silenciar gamberro 5' });
+  await gam.next((m) => m.t === 'system' && /silenciado 5 min/.test(m.text));
+  await sleep(1100);
+  gam.send({ t: 'chat', text: 'hola' });
+  assert.match((await gam.next((m) => m.t === 'system' && /Estás silenciado/.test(m.text))).text, /silenciado/, 'silenciado no puede hablar');
+  await sleep(1100);
+  own.send({ t: 'chat', text: '/expulsar Gamberro 3' });
+  assert.match((await gam.next((m) => m.t === 'kicked')).text, /3 min/, 'expulsado');
+  await sleep(300);
+  const gam2 = await client('Gamberro2');
+  gam2.send({ t: 'join', room: SRV3, slot: 0, token: tokG });
+  assert.match((await gam2.next((m) => m.t === 'error')).text, /te ha echado/, 'no puede volver hasta que pase el tiempo');
+  // errores del navegador
+  gam2.send({ t: 'clienterr', msg: 'TypeError: algo raro', src: 'ui.js', line: 42 });
+  await sleep(100);
+  assert.ok((store.meta('clientErrors') || []).some((e) => e.msg === 'TypeError: algo raro' && e.line === 42), 'los errores del navegador se guardan');
+  own.ws.close(); gam2.ws.close();
+
   // Ficheros estáticos y protección de rutas
   const http = require('http');
   const get = (p) => new Promise((res) => http.get(`http://localhost:${process.env.PORT}${p}`, (rs) => { rs.resume(); res(rs.statusCode); }));
@@ -678,6 +744,10 @@ async function instanceTests() {
   assert.strictEqual(await get('/rules/engine.js'), 200);
   assert.notStrictEqual(await get('/../server.js'), 200);
   assert.notStrictEqual(await get('/%2e%2e/server.js'), 200);
+  assert.strictEqual(await get('/admin'), 404, 'sin ADMIN_KEY no hay panel');
+  assert.strictEqual(await get('/portada'), 200, 'portada');
+  assert.strictEqual(await get('/guia.pdf'), 200, 'guía en PDF');
+  assert.strictEqual(await get('/sw.js'), 200, 'service worker');
 
   console.log('✔ Todas las pruebas pasan');
   a.ws.close();

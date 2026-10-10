@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1a0606">
+  <meta name="description" content="Desks & Dungeons: un juego de rol en el navegador para jugar con tus amigos. Una taberna, mazmorras sin fin y botín al estilo Diablo 2.">
+  <meta property="og:title" content="Desks & Dungeons">
+  <meta property="og:description" content="Una taberna, tus amigos y mazmorras sin fin. Gratis y en el navegador.">
+  <meta property="og:image" content="img/taberna.jpg">
+  <link rel="icon" href="icon-192.png">
+  <link rel="manifest" href="manifest.webmanifest">
+  <title>Desks &amp; Dungeons · Rol con amigos en el navegador</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Jacquard+12&family=Pixelify+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root { --oro: #e0a93a; --rojo: #e2493a; --pergamino: #f3e6c8; --madera: #2a1a12; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #140a06; color: var(--pergamino); font: 17px/1.55 system-ui, -apple-system, "Segoe UI", sans-serif; }
+    a { color: inherit; }
+    .hero { position: relative; min-height: 92vh; display: flex; align-items: center; justify-content: center; text-align: center; padding: 40px 16px; overflow: hidden; }
+    .hero::before { content: ""; position: absolute; inset: 0; background: url(img/taberna.jpg) center/cover; filter: blur(2px) brightness(.45); transform: scale(1.05); }
+    .hero::after { content: ""; position: absolute; inset: 0; background: radial-gradient(ellipse at 50% 40%, transparent, #140a06 85%); }
+    .hero > div { position: relative; z-index: 1; max-width: 860px; }
+    h1 { font: 400 clamp(56px, 12vw, 130px)/0.95 "Jacquard 12", serif; margin: 0; color: var(--rojo); text-shadow: 0 5px 0 #5b130c, 0 0 30px rgba(226, 73, 58, .5); }
+    h1 span { color: var(--oro); }
+    .sub { font-size: clamp(18px, 3vw, 24px); margin: 14px 0 28px; color: #f0d9a8; }
+    .play { display: inline-block; font: 700 22px "Pixelify Sans", sans-serif; letter-spacing: 1px; text-decoration: none; padding: 16px 40px; border-radius: 10px; background: linear-gradient(#f0c04a, #c98a1e); color: #2a1206; border: 3px solid #5a3418; box-shadow: 0 6px 0 #5a3418, 0 0 30px rgba(240, 192, 74, .45); transition: transform .1s; }
+    .play:hover { transform: translateY(-2px); }
+    .small-links { margin-top: 18px; font-size: 15px; color: #cdb894; }
+    .small-links a { margin: 0 8px; }
+    section { max-width: 1080px; margin: 0 auto; padding: 56px 16px; }
+    h2 { font: 700 30px "Pixelify Sans", sans-serif; color: var(--oro); text-align: center; margin: 0 0 30px; }
+    .feats { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 18px; }
+    .feat { background: linear-gradient(#2e1c12, #1e120b); border: 1px solid #5a3a22; border-radius: 12px; padding: 18px 20px; }
+    .feat b { display: block; font: 700 19px "Pixelify Sans", sans-serif; color: #ffd77a; margin: 6px 0 4px; }
+    .feat .ic { font-size: 30px; }
+    .shot { display: grid; grid-template-columns: 1.3fr 1fr; gap: 28px; align-items: center; margin-bottom: 44px; }
+    .shot:nth-child(even) { grid-template-columns: 1fr 1.3fr; }
+    .shot:nth-child(even) img { order: 2; }
+    .shot img { width: 100%; border-radius: 12px; border: 3px solid #5a3418; box-shadow: 0 10px 30px rgba(0, 0, 0, .6); }
+    .shot h3 { font: 700 24px "Pixelify Sans", sans-serif; color: #ffd77a; margin: 0 0 8px; }
+    .steps { counter-reset: s; display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; list-style: none; padding: 0; }
+    .steps li { counter-increment: s; background: #22150d; border-radius: 12px; padding: 18px; border-left: 4px solid var(--oro); }
+    .steps li::before { content: counter(s); display: inline-flex; width: 30px; height: 30px; border-radius: 50%; background: var(--oro); color: #2a1206; font-weight: 700; align-items: center; justify-content: center; margin-bottom: 8px; }
+    .cta { text-align: center; padding-bottom: 80px; }
+    footer { text-align: center; color: #8a7058; font-size: 13px; padding: 24px 16px 40px; border-top: 1px solid #3a2416; }
+    @media (max-width: 760px) { .shot, .shot:nth-child(even) { grid-template-columns: 1fr; } .shot:nth-child(even) img { order: 0; } }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div>
+      <h1>Desks <span>&amp;</span> Dungeons</h1>
+      <p class="sub">Una taberna, tus amigos y mazmorras sin fin.<br>Rol cooperativo gratis, en el navegador y en español.</p>
+      <a class="play" href="./">⚔️ JUGAR AHORA</a>
+      <div class="small-links"><a href="guia.pdf" target="_blank" rel="noopener">📘 Guía en PDF</a> · <span>Sin descargas ni registros</span></div>
+    </div>
+  </header>
+
+  <section>
+    <h2>Qué te espera</h2>
+    <div class="feats">
+      <div class="feat"><span class="ic">🍺</span><b>Una taberna viva</b>Quedad en la taberna de Alfonso, charlad, brindad, tirad dados y preparad la próxima incursión.</div>
+      <div class="feat"><span class="ic">🗝️</span><b>Mazmorras infinitas</b>Cada mazmorra se genera al azar: salas, puertas, trampas, cofres y un jefe al final.</div>
+      <div class="feat"><span class="ic">💎</span><b>Botín estilo Diablo 2</b>Objetos mágicos, raros, únicos y de conjunto. Cientos de armaduras y armas que cambian tu aspecto.</div>
+      <div class="feat"><span class="ic">👥</span><b>Hecho para jugar en grupo</b>Ves la vida de tus amigos, marcas sitios en el suelo y puedes volver con ellos si caes.</div>
+      <div class="feat"><span class="ic">🧙</span><b>5 razas y 7 clases</b>Guerrero, mago, explorador, pícaro, paladín, sacerdote o druida. Y goblins con montones de rasgos.</div>
+      <div class="feat"><span class="ic">🌋</span><b>Mucho más</b>Mundo abierto, mascotas y monturas, forja, cocina, duelos, logros y un descenso infinito semanal.</div>
+    </div>
+  </section>
+
+  <section>
+    <div class="shot"><img src="img/taberna.jpg" alt="La taberna" loading="lazy"><div><h3>El punto de encuentro</h3><p>Todo empieza en la taberna. Aquí os juntáis, compráis pociones a Madre Zarza, armas al Maestro Takeshi y salís a la aventura.</p></div></div>
+    <div class="shot"><img src="img/ed-gob2.jpg" alt="Editor de personaje" loading="lazy"><div><h3>Crea a tu héroe</h3><p>Elige raza, clase y aspecto. Los goblins tienen su propia cabeza con orejas, narices, ojos, dientes, pendientes y pinturas a elegir.</p></div></div>
+    <div class="shot"><img src="img/mazmorra.jpg" alt="Mazmorra" loading="lazy"><div><h3>Baja a las mazmorras</h3><p>Combate en tiempo real con habilidades, volteretas y jefes que avisan antes de sus golpes. Las puertas cerradas esconden lo que hay detrás.</p></div></div>
+    <div class="shot"><img src="img/inv3.jpg" alt="Inventario" loading="lazy"><div><h3>Equípate</h3><p>Arrastra el botín a tu héroe y compara cada objeto con lo que llevas. Lo que te pones se ve en el personaje.</p></div></div>
+  </section>
+
+  <section>
+    <h2>Empieza en un minuto</h2>
+    <ol class="steps">
+      <li><b>Entra en la web</b><br>Funciona en ordenador, tablet y móvil. La primera carga puede tardar un poco.</li>
+      <li><b>Crea tu héroe</b><br>Alfonso te enseña lo básico en un par de minutos.</li>
+      <li><b>Invita a tus amigos</b><br>☰ Menú → Copiar enlace de invitación, y a la taberna.</li>
+      <li><b>¡A la mazmorra!</b><br>🗝️ Mazmorras → nivel 1 → tus amigos se unen desde la lista.</li>
+    </ol>
+  </section>
+
+  <section class="cta">
+    <a class="play" href="./">⚔️ ENTRAR EN LA TABERNA</a>
+  </section>
+
+  <footer>Desks &amp; Dungeons · Modelos 3D de KayKit y Quaternius (CC0) · Hecho con cariño para jugar entre amigos</footer>
+</body>
+</html>

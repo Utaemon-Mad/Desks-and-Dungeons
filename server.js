@@ -37,6 +37,8 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.pdf': 'application/pdf',
   '.ico': 'image/x-icon',
   '.glb': 'model/gltf-binary',
   '.txt': 'text/plain; charset=utf-8',
@@ -51,11 +53,39 @@ const server = http.createServer((req, res) => {
     res.writeHead(400); return res.end();
   }
   if (urlPath === '/healthz') { res.writeHead(200); return res.end('ok'); }
+  if (urlPath === '/admin') return adminPage(req, res);
   if (urlPath === '/') urlPath = '/index.html';
+  if (urlPath === '/portada') urlPath = '/portada.html';
+  if (urlPath === '/guia') urlPath = '/guia.pdf';
   const file = path.normalize(path.join(PUBLIC_DIR, urlPath));
   if (!file.startsWith(PUBLIC_DIR + path.sep)) { res.writeHead(403); return res.end(); }
   sendStatic(req, res, file);
 });
+
+// Panel de administración (solo con ADMIN_KEY en el entorno): gente conectada y errores de los navegadores
+const ADMIN_KEY = process.env.ADMIN_KEY || '';
+const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+function adminPage(req, res) {
+  const key = new URL(req.url, 'http://x').searchParams.get('key') || '';
+  const ok = ADMIN_KEY && key.length === ADMIN_KEY.length && crypto.timingSafeEqual(Buffer.from(key), Buffer.from(ADMIN_KEY));
+  if (!ok) { res.writeHead(404); return res.end(); }
+  const errors = (store.meta('clientErrors') || []).slice().reverse();
+  const online = [...rooms.values()].map((r) => `<li><b>${esc(serverName(r.name))}</b>: ${[...r.users.values()].map((u) => esc(u.name) + (u.where ? ` <i>(${esc(u.where.name)})</i>` : '')).join(', ') || 'nadie'}${r.motd ? ` · 📌 ${esc(r.motd)}` : ''}</li>`).join('');
+  const rows = errors.map((e) => `<tr><td>${new Date(e.ts).toLocaleString('es-ES')}</td><td>${esc(e.who)}</td><td>${esc(e.msg)}</td><td>${esc(e.src)}:${e.line || ''}</td><td><small>${esc(e.ua)}</small></td></tr>`).join('');
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Administración · Desks & Dungeons</title>
+<style>body{font:14px system-ui,sans-serif;background:#1c120c;color:#f3e6c8;margin:20px}h1{color:#e2493a}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #4a3020;padding:4px 6px;text-align:left;vertical-align:top}th{color:#e0a93a}i{color:#b99a72}</style>
+<h1>Desks & Dungeons · administración</h1><p>Arrancado: ${new Date(Date.now() - process.uptime() * 1000).toLocaleString('es-ES')} · memoria ${Math.round(process.memoryUsage().rss / 1048576)} MB</p>
+<h2>Conectados</h2><ul>${online || '<li>Nadie conectado</li>'}</ul>
+<h2>Errores en los navegadores (${errors.length})</h2><table><tr><th>Cuándo</th><th>Quién</th><th>Error</th><th>Dónde</th><th>Navegador</th></tr>${rows || '<tr><td colspan=5>Sin errores 🎉</td></tr>'}</table>`);
+}
+function logClientError(user, msg) {
+  const list = store.meta('clientErrors') || [];
+  list.push({ ts: Date.now(), who: user ? user.name : '?', msg: cleanText(String(msg.msg || ''), 300), src: cleanText(String(msg.src || ''), 120), line: Number(msg.line) || 0, ua: cleanText(String(msg.ua || ''), 120) });
+  while (list.length > 200) list.shift();
+  store.setMeta('clientErrors', list);
+  console.warn('[navegador]', user ? user.name : '?', msg.msg, msg.src, msg.line);
+}
 
 // Archivos estáticos comprimidos (gzip) y con ETag: la primera visita baja todo comprimido y las siguientes
 // sólo preguntan si ha cambiado (304). Los modelos 3D y Three.js casi nunca cambian: se guardan un día.
@@ -104,6 +134,9 @@ function getRoom(name) {
       history: [],
       map: MAP.createMap(saved ? saved.items : undefined),
       ownerId: saved ? saved.ownerId : null,
+      motd: (saved && saved.motd) || '',
+      banned: new Map(), // pid -> hasta cuándo no puede entrar
+      muted: new Map(),  // pid -> hasta cuándo no puede hablar
       instances: new Map(),
     });
   }
@@ -111,7 +144,7 @@ function getRoom(name) {
 }
 
 function saveRoom(room) {
-  store.setRoom(room.name, { ownerId: room.ownerId, items: room.map.items.map(({ type, x, y, dir }) => (dir ? { type, x, y, dir } : { type, x, y })) });
+  store.setRoom(room.name, { ownerId: room.ownerId, motd: room.motd || undefined, items: room.map.items.map(({ type, x, y, dir }) => (dir ? { type, x, y, dir } : { type, x, y })) });
 }
 
 function cleanRoomName(s) {
@@ -200,7 +233,7 @@ function serversView(pid) {
 }
 
 function accountInfo(a, pid, extra) {
-  return { t: 'account', slots: a.slots.map(slotInfo), last: a.last && a.slots[a.last.slot] ? a.last : null, servers: serversView(pid), backup: makeBackup(pid), ...extra };
+  return { t: 'account', login: a.login ? a.login.user : null, slots: a.slots.map(slotInfo), last: a.last && a.slots[a.last.slot] ? a.last : null, servers: serversView(pid), backup: makeBackup(pid), ...extra };
 }
 
 // Copia de seguridad firmada de la cuenta, que guarda el navegador del jugador. Si el servidor se reinicia y pierde
@@ -223,9 +256,37 @@ function restoreBackup(pid, b) {
   try { a = JSON.parse(zlib.gunzipSync(Buffer.from(b.d, 'base64')).toString()); } catch { return false; }
   if (!a || !Array.isArray(a.slots)) return false;
   store.setPlayer(pid, a);
+  if (a.login && a.login.user) indexLogin(a.login.user, pid);
   console.log('Cuenta restaurada desde la copia del navegador');
   return true;
 }
+
+// ---------- Usuario y contraseña ----------
+// La cuenta sigue siendo la «llave» (token) del navegador. Al poner usuario y contraseña, la llave se guarda
+// cifrada en la propia cuenta; al entrar desde otro dispositivo con la contraseña, el servidor se la devuelve.
+const AUTH_KEY = crypto.createHash('sha256').update('dd-auth:' + SAVE_SECRET).digest();
+function sealToken(t) {
+  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', AUTH_KEY, iv);
+  const enc = Buffer.concat([c.update(t, 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), enc]).toString('base64');
+}
+function openToken(s) {
+  try {
+    const b = Buffer.from(s, 'base64'), d = crypto.createDecipheriv('aes-256-gcm', AUTH_KEY, b.subarray(0, 12));
+    d.setAuthTag(b.subarray(12, 28));
+    return Buffer.concat([d.update(b.subarray(28)), d.final()]).toString('utf8');
+  } catch { return null; }
+}
+const passHash = (pass, salt) => crypto.scryptSync(pass, salt, 32, { N: 16384, r: 8, p: 1 }).toString('hex');
+const cleanUser = (u) => (typeof u === 'string' ? u.trim().toLowerCase() : '');
+const USER_RE = /^[a-z0-9ñ_.-]{3,20}$/;
+const loginFails = new Map(); // usuario -> { n, until }
+function indexLogin(user, pid) {
+  const ix = store.meta('logins') || {};
+  if (ix[user] !== pid) { ix[user] = pid; store.setMeta('logins', ix); }
+}
+// al arrancar, el índice se rehace con las cuentas guardadas
+for (const [pid, a] of Object.entries(store.players())) if (a && a.login && a.login.user) indexLogin(a.login.user, pid);
 
 // Cambia el nombre de un servidor: sólo su dueño (si aún no tiene, quien lo renombra pasa a serlo)
 function renameServer(pid, id, name) {
@@ -912,6 +973,7 @@ wss.on('connection', (ws) => {
   const isOwner = () => room.ownerId === user.pid;
   const inst = () => (user.where ? room.instances.get(user.where.id) : null);
   const err = (text) => send(ws, { t: 'error', text });
+  let errCount = 0;
   const nearShopNpc = () => {
     const i = inst();
     const p = i && i.players.get(user.id);
@@ -922,18 +984,48 @@ wss.on('connection', (ws) => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
     if (!msg || typeof msg.t !== 'string') return;
+    if (msg.t === 'clienterr') { errCount = (errCount || 0) + 1; if (errCount <= 10) logClientError(user, msg); return; }
 
     if (!user) {
       // Pantalla de inicio: ver, crear y borrar personajes de la cuenta antes de entrar
-      if (msg.t === 'hello' || msg.t === 'char:new' || msg.t === 'char:del' || msg.t === 'server:rename') {
+      if (msg.t === 'hello' || msg.t === 'char:new' || msg.t === 'char:del' || msg.t === 'server:rename' || msg.t === 'acct:register' || msg.t === 'acct:login') {
         if (!allow(1)) return;
         clearTimeout(joinTimer);
         joinTimer = setTimeout(() => { if (!user) ws.close(4000, 'join timeout'); }, 10 * 60 * 1000);
         const pid = tokenPid(msg.token);
         if (!pid) return;
         if (msg.t === 'hello') restoreBackup(pid, msg.backup);
+        if (msg.t === 'acct:login') {
+          const u = cleanUser(msg.user), pass = String(msg.pass || '').slice(0, 100);
+          const f = loginFails.get(u);
+          if (f && f.until > Date.now()) return err('Demasiados intentos fallidos. Espera unos minutos.');
+          const lp = (store.meta('logins') || {})[u], la = lp && store.player(lp);
+          const ok = la && la.login && la.login.user === u && crypto.timingSafeEqual(Buffer.from(passHash(pass, la.login.salt), 'hex'), Buffer.from(la.login.hash, 'hex'));
+          if (!ok) {
+            const n = ((f && f.n) || 0) + 1;
+            loginFails.set(u, { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 });
+            return err('Usuario o contraseña incorrectos.');
+          }
+          loginFails.delete(u);
+          const tok = openToken(la.login.tok);
+          if (!tok) return err('No se pudo abrir la cuenta. Avisa al dueño del juego.');
+          return send(ws, accountInfo(la, lp, { token: tok }));
+        }
         const a = account(pid);
         const slot = slotOf(msg.slot);
+        if (msg.t === 'acct:register') {
+          const u = cleanUser(msg.user), pass = String(msg.pass || '');
+          if (!USER_RE.test(u)) return err('El usuario debe tener de 3 a 20 letras o números, sin espacios.');
+          if (pass.length < 6 || pass.length > 100) return err('La contraseña debe tener al menos 6 caracteres.');
+          const ix = store.meta('logins') || {};
+          if (ix[u] && ix[u] !== pid) return err('Ese usuario ya existe. Elige otro.');
+          if (a.login && a.login.user !== u && ix[a.login.user] === pid) { delete ix[a.login.user]; store.setMeta('logins', ix); }
+          const salt = crypto.randomBytes(16).toString('hex');
+          a.login = { user: u, salt, hash: passHash(pass, salt), tok: sealToken(msg.token) };
+          store.setPlayer(pid, a);
+          indexLogin(u, pid);
+          return send(ws, accountInfo(a, pid, { registered: u }));
+        }
         if (msg.t === 'char:new') {
           if (slot === null || a.slots[slot]) return err('Esa casilla ya tiene un personaje.');
           const name = cleanText(msg.name, 16);
@@ -993,6 +1085,8 @@ wss.on('connection', (ws) => {
         send(dup.u.ws, { t: 'kicked', text: 'Has entrado con este personaje desde otro sitio.' });
         dup.u.ws.close(4001, 'otra sesión');
       }
+      const banUntil = room.banned.get(pid);
+      if (banUntil && banUntil > Date.now()) return send(ws, { t: 'error', text: `El dueño de esta taberna te ha echado. Podrás volver en ${Math.ceil((banUntil - Date.now()) / 60000)} min.` });
       const name = profile.name;
       // Quien entra primero en una sala nueva es su dueño y puede editar los muebles
       if (!room.ownerId) { room.ownerId = pid; saveRoom(room); }
@@ -1002,7 +1096,7 @@ wss.on('connection', (ws) => {
       user = { id: crypto.randomBytes(6).toString('hex'), pid, cid, slot, account: acc, name, look: lookFrom(profile), profile, x: pos.x, y: pos.y, where: null, ws, trade: null };
       room.users.set(user.id, user);
       send(ws, {
-        t: 'welcome', id: user.id, room: roomName, serverName: serverName(roomName), owner: isOwner(), slot,
+        t: 'welcome', id: user.id, room: roomName, serverName: serverName(roomName), owner: isOwner(), slot, motd: room.motd || '',
         items: room.map.items,
         users: [...room.users.values()].map(publicUser),
         history: room.history,
@@ -1036,6 +1130,8 @@ wss.on('connection', (ws) => {
         const text = cleanText(msg.text, MAX_TEXT);
         if (!text) return;
         if (text[0] === '/') return command(text);
+        const mutedUntil = room.muted.get(user.pid);
+        if (mutedUntil && mutedUntil > Date.now()) return send(ws, { t: 'system', text: `🔇 Estás silenciado ${Math.ceil((mutedUntil - Date.now()) / 60000)} min más.`, ts: Date.now() });
         say(room, { t: 'chat', id: user.id, name: user.name, cls: user.look.cls, text });
         break;
       }
@@ -1653,7 +1749,27 @@ wss.on('connection', (ws) => {
       broadcast(room, { t: 'rename', id: user.id, name: user.name });
       return system(room, `${old} ahora se llama ${user.name}.`);
     }
-    send(ws, { t: 'system', text: 'Comandos: /dado [6|20…], /d20, /me acción, /nombre NUEVO', ts: Date.now() });
+    // Herramientas del dueño de la taberna
+    if (['expulsar', 'silenciar', 'hablar', 'aviso'].includes(c)) {
+      if (!isOwner()) return send(ws, { t: 'system', text: 'Solo el dueño de la taberna puede hacer eso.', ts: Date.now() });
+      if (c === 'aviso') {
+        room.motd = cleanText(arg, 160);
+        saveRoom(room);
+        broadcast(room, { t: 'motd', text: room.motd });
+        return system(room, room.motd ? `📌 Nuevo mensaje del día: ${room.motd}` : '📌 Mensaje del día borrado.');
+      }
+      const [who, mins] = (() => { const m = /^(.*?)(?:\s+(\d+))?$/.exec(arg); return [m[1].trim().toLowerCase(), Math.max(1, Math.min(1440, Number(m[2]) || 10))]; })();
+      const target = [...room.users.values()].find((u) => u.name.toLowerCase() === who);
+      if (!target) return send(ws, { t: 'system', text: `No hay nadie llamado «${arg}» en la taberna.`, ts: Date.now() });
+      if (target.pid === user.pid) return send(ws, { t: 'system', text: 'No puedes hacerte eso a ti mismo.', ts: Date.now() });
+      if (c === 'hablar') { room.muted.delete(target.pid); return system(room, `🔊 ${target.name} puede volver a hablar.`); }
+      if (c === 'silenciar') { room.muted.set(target.pid, Date.now() + mins * 60000); return system(room, `🔇 ${target.name} queda silenciado ${mins} min.`); }
+      room.banned.set(target.pid, Date.now() + mins * 60000);
+      system(room, `🚪 ${user.name} echa a ${target.name} de la taberna (${mins} min).`);
+      send(target.ws, { t: 'kicked', text: `El dueño de la taberna te ha echado durante ${mins} min.` });
+      return target.ws.close(4002, 'expulsado');
+    }
+    send(ws, { t: 'system', text: 'Comandos: /dado [6|20…], /d20, /me acción, /nombre NUEVO, /tutorial' + (isOwner() ? '. Dueño: /aviso TEXTO (mensaje del día), /silenciar NOMBRE [min], /hablar NOMBRE, /expulsar NOMBRE [min]' : ''), ts: Date.now() });
   }
 
   ws.on('close', () => {
@@ -1701,4 +1817,4 @@ if (require.main === module) {
   server.listen(PORT, () => console.log(`🍺 La taberna está abierta en http://localhost:${PORT}`));
 }
 
-module.exports = { server, store };
+module.exports = { server, store, rooms };

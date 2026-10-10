@@ -621,16 +621,44 @@
     return Math.max(1, Math.round((4 + it.ilvl * 3) * R.value * (1 + (it.tier || 0) * 0.3)));
   }
 
-  // Botín de un enemigo. o: { ilvl, mf, classes, elite, boss, sets }
+  // Botín de un enemigo. o: { ilvl, mf, classes, elite, boss, chest, sets }
+  // Los enemigos normales sueltan poco y casi siempre básico; la calidad sube con el nivel del enemigo,
+  // y los élites, cofres y jefes son los que dan lo bueno.
+  const DROP = {
+    // probabilidad de soltar un objeto en cada tirada y pesos de cada calidad
+    normal: { chance: 0.10, w: { inferior: 30, normal: 55, superior: 11, magico: 4, raro: 0.25, unico: 0.02 } },
+    elite: { chance: 0.4, w: { inferior: 8, normal: 45, superior: 25, magico: 18, raro: 2.5, unico: 0.2 } },
+    chest: { chance: 1, w: { inferior: 12, normal: 50, superior: 20, magico: 15, raro: 1.5, unico: 0.12 } },
+    boss: { chance: 1, w: { magico: 78, raro: 20, unico: 1.5 } },
+  };
+  function rollDropRarity(rng, kind, lvl, mf) {
+    const w = { ...DROP[kind].w };
+    // con el nivel del enemigo sube la calidad (en el nivel 1 casi nada mágico; hacia el 30 bastante más)
+    const up = Math.max(0, lvl - 1);
+    if (w.magico) w.magico *= 1 + up / 12;
+    if (w.raro) w.raro *= 1 + up / 8;
+    if (w.unico) w.unico *= 1 + up / 6;
+    // hallazgo mágico con rendimientos decrecientes (el de antes)
+    const m = Math.max(0, mf || 0);
+    if (w.magico) w.magico *= 1 + m / 100;
+    if (w.raro) w.raro *= 1 + (m * 600) / (m + 600) / 100;
+    if (w.unico) w.unico *= 1 + (m * 250) / (m + 250) / 100;
+    const total = Object.values(w).reduce((a, b) => a + b, 0);
+    let r = rng() * total;
+    for (const [id, v] of Object.entries(w)) { r -= v; if (r < 0) return id; }
+    return 'normal';
+  }
   function rollLoot(rng, o) {
     const out = [];
-    const rolls = o.boss ? 3 : o.elite ? 2 : 1;
-    const mf = (o.mf || 0) + (o.boss ? 150 : o.elite ? 80 : o.chest ? 60 : 0);
+    const kind = o.boss ? 'boss' : o.chest ? 'chest' : o.elite ? 'elite' : 'normal';
+    const rolls = o.boss ? 2 : o.elite ? 2 : 1;
+    const lvl = Math.max(1, o.ilvl | 0);
     for (let i = 0; i < rolls; i++) {
-      let rarity = rollRarity(rng, mf);
-      if ((o.boss || o.chest) && (!rarity || RARITY_ORDER.indexOf(rarity) < RARITY_ORDER.indexOf('magico'))) rarity = 'magico';
-      if (!rarity) continue;
-      out.push(makeItem(rng, { ilvl: o.ilvl, rarity, classes: o.classes }));
+      if (rng() >= DROP[kind].chance * (kind === 'normal' ? 1 + Math.min(0.5, (o.mf || 0) / 400) : 1)) continue;
+      const rarity = rollDropRarity(rng, kind, lvl, o.mf);
+      // los enemigos normales sueltan objetos de su nivel o algo por debajo
+      const ilvl = kind === 'normal' ? Math.max(1, lvl - Math.floor(rng() * 3)) : lvl;
+      out.push(makeItem(rng, { ilvl, rarity, classes: o.classes }));
     }
     if (o.boss && o.sets && o.sets.length) {
       // Pieza de conjunto: mejor si es de la clase de alguien del grupo
@@ -966,6 +994,7 @@
     'troll':           { name: 'Trol', fam: 'orco', sprite: 'troll', hp: 95, dmg: [5, 10], armor: 3, ms: 360, atk: 1500, regen: 2, xp: 45, gold: [6, 14], minLevel: 6 },
     'skeleton':        { name: 'Esqueleto', fam: 'muerto', sprite: 'skeleton', hp: 22, dmg: [2, 5], armor: 3, ms: 340, atk: 1400, xp: 8, gold: [1, 4], undead: true },
     'skeleton-archer': { name: 'Esqueleto arquero', fam: 'muerto', sprite: 'skeleton', weapon: 'bow', tint: '#5a5040', hp: 16, dmg: [2, 4], armor: 2, ms: 340, atk: 2100, range: 6, proj: 'arrow', ai: 'ranged', xp: 9, gold: [1, 4], undead: true },
+    'zombi-hinchado':  { name: 'Zombi hinchado', fam: 'muerto', sprite: 'zombie', bloated: true, scale: 1.1, hp: 52, dmg: [3, 6], armor: 1, ms: 560, atk: 1700, xp: 14, gold: [2, 5], undead: true, explode: true, minLevel: 2 },
     'zombie':          { name: 'Zombi', fam: 'muerto', sprite: 'zombie', hp: 38, dmg: [3, 5], armor: 1, ms: 500, atk: 1600, xp: 9, gold: [1, 4], undead: true },
     'ghoul':           { name: 'Necrófago', fam: 'muerto', sprite: 'ghoul', hp: 30, dmg: [3, 6], armor: 2, ms: 270, atk: 1300, xp: 12, gold: [2, 5], undead: true, minLevel: 2 },
     'specter':         { name: 'Espectro', fam: 'muerto', sprite: 'specter', hp: 26, dmg: [3, 6], armor: 0, ms: 290, atk: 1500, magic: true, xp: 14, gold: [2, 6], undead: true, minLevel: 2 },
@@ -991,7 +1020,12 @@
     'yeti':            { name: 'Yeti', fam: 'bestia', sprite: 'owlbear', tint: '#e8eef4', hp: 90, dmg: [6, 10], armor: 4, ms: 340, atk: 1600, xp: 32, gold: [4, 10] },
     'troll-hielo':     { name: 'Trol de hielo', fam: 'orco', sprite: 'troll', tint: '#8ab0d8', hp: 100, dmg: [5, 10], armor: 5, ms: 360, atk: 1500, regen: 2, xp: 40, gold: [5, 12] },
     'elemental-fuego': { name: 'Elemental de fuego', fam: 'dragon', sprite: 'specter', tint: '#ff6a1a', hp: 40, dmg: [4, 8], armor: 2, ms: 300, atk: 2000, range: 5, proj: 'fire', magic: true, ai: 'ranged', xp: 18, gold: [2, 6] },
-    'demonio':         { name: 'Demonio menor', fam: 'dragon', sprite: 'hobgoblin', tint: '#8a1a1a', hp: 55, dmg: [5, 9], armor: 5, ms: 290, atk: 1300, xp: 22, gold: [4, 10] },
+    // Abismo infernal: diablillos, canes del infierno, gárgolas y demonios
+    'diablillo':       { name: 'Diablillo', fam: 'demonio', sprite: 'imp', scale: 0.62, hp: 15, dmg: [2, 4], armor: 1, ms: 240, atk: 1800, range: 5, proj: 'fire', magic: true, ai: 'ranged', xp: 8, gold: [1, 4] },
+    'can-infernal':    { name: 'Can infernal', fam: 'demonio', sprite: 'hellhound', tint: '#3a1410', eyes: '#ff5a1a', scale: 1.15, hp: 30, dmg: [3, 6], armor: 2, ms: 210, atk: 1200, xp: 12, gold: [1, 3], minLevel: 2 },
+    'gargola':         { name: 'Gárgola', fam: 'demonio', sprite: 'gargoyle', scale: 1.05, hp: 52, dmg: [4, 7], armor: 9, ms: 360, atk: 1500, xp: 20, gold: [3, 8], minLevel: 3 },
+    'brujo-infernal':  { name: 'Brujo del abismo', fam: 'demonio', sprite: 'hero:mago', tint: '#3a0808', hp: 40, dmg: [4, 7], armor: 2, ms: 360, atk: 2300, range: 6, proj: 'fire', magic: true, ai: 'summoner', summons: 'diablillo', xp: 34, gold: [6, 14], minLevel: 3 },
+    'demonio':         { name: 'Demonio', fam: 'demonio', sprite: 'demon', scale: 1.3, hp: 80, dmg: [6, 10], armor: 5, ms: 320, atk: 1500, xp: 32, gold: [5, 12], minLevel: 4 },
     'rufo':            { name: 'Rufo, el jefe bandido', fam: 'humano', sprite: 'hero:guerrero', scale: 1.3, boss: true, hp: 180, dmg: [4, 7], armor: 4, ms: 320, atk: 1400, xp: 70, gold: [30, 50], specials: ['charge', 'summon'], summons: 'bandit', sets: ['picaro', 'explorador'] },
     'huargo-alfa':     { name: 'El Huargo Alfa', fam: 'bestia', sprite: 'wolf', tint: '#3a3a42', scale: 1.7, boss: true, hp: 260, dmg: [5, 9], armor: 4, ms: 230, atk: 1300, xp: 110, gold: [40, 70], specials: ['slam', 'summon'], summons: 'wolf', sets: ['explorador', 'guerrero'] },
     'bruja-pantano':   { name: 'Ortiga, la Bruja del Pantano', fam: 'muerto', sprite: 'necromancer', tint: '#3a8a3a', scale: 1.35, boss: true, hp: 280, dmg: [5, 9], armor: 3, ms: 360, atk: 1900, range: 6, proj: 'bolt', magic: true, xp: 140, gold: [50, 90], specials: ['nova', 'summon', 'volley'], summons: 'ahogado', sets: ['druida', 'mago', 'sacerdote'] },
@@ -1007,6 +1041,7 @@
     'nyxara':          { name: 'Nyxara, Dragona de las Sombras', fam: 'dragon', sprite: 'dragon', tint: '#3a2a7a', scale: 1.7, boss: true, world: true, hp: 820, dmg: [7, 12], armor: 8, ms: 360, atk: 1600, xp: 520, gold: [160, 280], specials: ['breath', 'nova', 'summon'], summons: 'specter', sets: CLASS_IDS },
     'rey-espectral':   { name: 'El Rey Espectral', fam: 'muerto', sprite: 'lich', tint: '#2a6aff', scale: 2, boss: true, world: true, hp: 760, dmg: [6, 11], armor: 6, ms: 380, atk: 1800, range: 6, proj: 'necro', magic: true, undead: true, xp: 500, gold: [150, 260], specials: ['nova', 'volley', 'summon'], summons: 'wight', sets: CLASS_IDS },
     'behemot':         { name: 'Behemot del Bosque Viejo', fam: 'bestia', sprite: 'bear', tint: '#2e4a1e', scale: 2.4, boss: true, world: true, hp: 950, dmg: [7, 13], armor: 9, ms: 300, atk: 1500, xp: 520, gold: [150, 260], specials: ['slam', 'charge', 'summon'], summons: 'dire-wolf', sets: CLASS_IDS },
+    'azaroth':         { name: 'Azaroth, Señor del Abismo', fam: 'demonio', sprite: 'demon', scale: 1.85, boss: true, hp: 360, dmg: [6, 11], armor: 7, ms: 330, atk: 1500, xp: 150, gold: [60, 110], specials: ['slam', 'nova', 'summon'], summons: 'diablillo', sets: ['mago', 'picaro', 'paladin'] },
     'young-red-dragon': { name: 'Ignaroth, el Dragón Rojo', fam: 'dragon', sprite: 'dragon', scale: 1.3, boss: true, hp: 400, dmg: [7, 12], armor: 8, ms: 360, atk: 1600, xp: 160, gold: [80, 140], specials: ['breath', 'slam', 'summon'], summons: 'kobold', sets: CLASS_IDS },
   };
   // Claves de versiones anteriores
@@ -1027,17 +1062,18 @@
       gold: [Math.round(M.gold[0] * (1 + 0.4 * (L - 1)) * (e ? 2 : 1)), Math.round(M.gold[1] * (1 + 0.4 * (L - 1)) * (e ? 2 : 1))],
       ms: M.ms, atk: M.atk, range: M.range || 1, proj: M.proj || null, ai: M.ai || (M.boss ? 'boss' : 'melee'),
       magic: !!M.magic, undead: !!M.undead, regen: M.regen ? M.regen * (1 + 0.5 * (L - 1)) : 0, poison: !!M.poison,
-      summons: M.summons || null, specials: M.specials || [], sets: M.sets || [],
+      summons: M.summons || null, specials: M.specials || [], sets: M.sets || [], explode: !!M.explode,
     };
   }
 
   // Temas de las mazmorras aleatorias
   const THEMES = {
     cuevas:    { name: 'Cuevas goblin', icon: '🪓', mobs: ['goblin-warrior', 'goblin-warrior', 'goblin-minion', 'goblin-archer', 'goblin-archer', 'goblin-shaman', 'hobgoblin-warrior', 'bugbear-warrior', 'wolf'], boss: 'rey-goblin', names: ['Madriguera', 'Cuevas', 'Túneles', 'Guarida'], of: ['de los Dientes Rotos', 'del Rey Goblin', 'de la Oreja Cortada', 'del Hongo Negro'] },
-    cripta:    { name: 'Cripta de los no muertos', icon: '💀', mobs: ['skeleton', 'skeleton', 'skeleton-archer', 'zombie', 'zombie', 'ghoul', 'specter', 'wight', 'mummy', 'necromancer'], boss: 'lich', names: ['Cripta', 'Catacumbas', 'Osario', 'Mausoleo'], of: ['del Liche', 'de los Olvidados', 'de la Plaga', 'del Último Rezo'] },
+    cripta:    { name: 'Cripta de los no muertos', icon: '💀', mobs: ['skeleton', 'skeleton', 'skeleton-archer', 'zombie', 'zombie', 'zombie', 'zombi-hinchado', 'ghoul', 'specter', 'wight', 'mummy', 'necromancer'], boss: 'lich', names: ['Cripta', 'Catacumbas', 'Osario', 'Mausoleo'], of: ['del Liche', 'de los Olvidados', 'de la Plaga', 'del Último Rezo'] },
     fortaleza: { name: 'Fortaleza orca', icon: '🏰', mobs: ['orc', 'orc', 'orc-archer', 'orc-shaman', 'hobgoblin-warrior', 'ogre', 'troll'], boss: 'gorthak', names: ['Fortaleza', 'Bastión', 'Fuerte', 'Ciudadela'], of: ['de la Mano Roja', 'de Gorthak', 'del Cráneo Partido', 'de Hierro Negro'] },
     nido:      { name: 'Nido de bestias', icon: '🕷️', mobs: ['giant-spider', 'giant-spider', 'wolf', 'wolf', 'dire-wolf', 'brown-bear', 'owlbear'], boss: 'reina-arana', names: ['Nido', 'Cubil', 'Madriguera', 'Bosque Hueco'], of: ['de la Reina Araña', 'de las Mil Patas', 'de la Seda Negra'] },
     volcan:    { name: 'Guarida del dragón', icon: '🐉', mobs: ['kobold', 'kobold', 'cultist', 'cultist', 'bandit', 'bandit-archer', 'ogre'], boss: 'young-red-dragon', names: ['Guarida', 'Forja', 'Caldera', 'Templo'], of: ['de Ignaroth', 'de Ceniza', 'de la Llama Eterna'] },
+    abismo:    { name: 'Abismo infernal', icon: '😈', mobs: ['diablillo', 'diablillo', 'diablillo', 'can-infernal', 'can-infernal', 'gargola', 'brujo-infernal', 'demonio', 'zombie'], boss: 'azaroth', names: ['Abismo', 'Sima', 'Fosa', 'Puerta'], of: ['de Azaroth', 'del Fuego Negro', 'de los Condenados', 'del Averno'] },
   };
 
   // ======================================================================
@@ -1130,7 +1166,7 @@
     ABILITIES, ABILITY_BY_ID, XP_TABLE, SLOTS, SLOT_IDS, TIERS, WEAPONS, FISTS, OFFHANDS, ARMOR_REQ, JEWELS,
     RARITIES, RARITY_ORDER, LEGACY_RARITY, AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES,
     statName, fmtStat, classId, raceId, levelFromXp, pointsTotal, pointsSpent, pointsFree, baseStats, statRoom, newChar, cleanChar,
-    rollRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, describeRich, baseInfo, speedName, allowedBases, affixPool, affixTier, rollAffixValue,
+    rollRarity, rollDropRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, describeRich, baseInfo, speedName, allowedBases, affixPool, affixTier, rollAffixValue,
     migrateItem, migrateProfile, adj,
     PETS, PET_LEVEL, MOUNT_LEVEL, MOUNTS, petStats, PET_MAX, petXpFor, petLevelFromXp, petEvo, petTitle, PET_SKILLS, PET_SKILL_LEVEL, petBagWeight, ZONES, QUESTS, itemWeight, classesFor,
     priceScale, buyPrice, itemBuyPrice, armeroStock, seeded, gearTotals, derive, abilitiesFor, gearLook, monsterAt, reduction, xpPenalty,

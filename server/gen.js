@@ -21,6 +21,7 @@ const THEME_PROPS = {
   fortaleza: { block: ['pillar', 'barrel', 'crate', 'rack', 'table', 'brazier', 'cage'], floor: ['rug', 'bones', 'blood', 'rubble', 'skull'], wall: ['torch', 'banner', 'banner', 'shield', 'chains'] },
   nido:      { block: ['eggs', 'stalagmite', 'eggs', 'cage'], floor: ['web', 'web', 'bones', 'skull', 'mushrooms', 'puddle'], wall: ['torch', 'crack', 'chains'] },
   volcan:    { block: ['pillar', 'brazier', 'statue', 'altar', 'crystal', 'stalagmite'], floor: ['lavarock', 'bones', 'rubble', 'skull', 'candles'], wall: ['torch', 'banner', 'crack'] },
+  abismo:    { block: ['pillar', 'brazier', 'statue', 'altar', 'crystal', 'stalagmite'], floor: ['lavarock', 'bones', 'skull', 'candles', 'rubble'], wall: ['torch', 'banner', 'crack'] },
 };
 
 function generate(o) {
@@ -115,9 +116,9 @@ function generate(o) {
     start.start = true;
 
     // ---------- Agua o lava y trampas ----------
-    const liquid = theme === 'volcan' ? '%' : '~';
+    const liquid = theme === 'volcan' || theme === 'abismo' ? '%' : '~';
     for (const r of rooms) {
-      if (r.start || r.boss || r.w < 7 || r.h < 5 || rand() > (theme === 'volcan' ? 0.6 : 0.3)) continue;
+      if (r.start || r.boss || r.w < 7 || r.h < 5 || rand() > (theme === 'volcan' || theme === 'abismo' ? 0.6 : 0.3)) continue;
       const pw = ri(2, Math.min(4, r.w - 4)), ph = ri(1, Math.min(3, r.h - 3));
       const px = ri(r.x + 2, r.x + r.w - pw - 2), py = ri(r.y + 1, r.y + r.h - ph - 1);
       for (let y = py; y < py + ph; y++) for (let x = px; x < px + pw; x++) set(x, y, liquid);
@@ -139,7 +140,7 @@ function generate(o) {
     const nearDoor = (x, y) => [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]].some(([dx, dy]) => get(x + dx, y + dy) === '+' || (!inRoom(x + dx, y + dy) && walk(get(x + dx, y + dy))));
     for (const r of rooms) {
       // pilares simétricos en salas grandes
-      if (r.w >= 8 && r.h >= 6 && (theme === 'cripta' || theme === 'fortaleza' || theme === 'volcan' || r.boss)) {
+      if (r.w >= 8 && r.h >= 6 && (theme === 'cripta' || theme === 'fortaleza' || theme === 'volcan' || theme === 'abismo' || r.boss)) {
         for (const [x, y] of [[r.x + 1, r.y + 1], [r.x + r.w - 2, r.y + 1], [r.x + 1, r.y + r.h - 2], [r.x + r.w - 2, r.y + r.h - 2]]) if (get(x, y) === '.' && !nearDoor(x, y)) addProp(r.boss && theme !== 'nido' ? 'pillar' : 'pillar', x, y);
       }
       const nb = r.start ? 1 : ri(1, 3);

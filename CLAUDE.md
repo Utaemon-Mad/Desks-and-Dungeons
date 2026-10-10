@@ -17,6 +17,9 @@ server/world.js         mundo abierto y NPC
 server/store.js         guardado en data/*.json
 public/index.html       página única y orden de carga de los scripts
 public/audio.js         sonido y música hechos con WebAudio (SFX.play, SFX.music)
+public/icons.js         iconos SVG propios (ICONS.svg, ICONS.skill) para la barra y las habilidades
+public/admin.js         novedades, mensaje del día, instalar como app y envío de errores del navegador
+public/portada.html     portada de presentación (/portada); guia.pdf es la guía para imprimir
 public/rules/engine.js  reglas: stats, razas, clases, habilidades, objetos estilo Diablo 2, afijos, botín, monstruos
 public/rules/progress.js forja, misiones, logros, descenso semanal
 public/rules/items-data.js tabla de nombre y aspecto de las 192 armaduras y 156 armas/escudos (4 variantes por nivel)
@@ -64,4 +67,6 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Cuentas por token del navegador: 3 personajes y 3 servidores (Lejano, Humbrio, Sangriento).
 - `RULES_VERSION` + `migrateProfile` adaptan las partidas guardadas cuando cambian las reglas.
 - Render gratis no guarda el disco: el servidor manda a cada navegador una copia firmada de su cuenta (`dd-backup`, HMAC con `SAVE_SECRET`) y la restaura al entrar si la ha perdido.
+- Usuario y contraseña: la llave (token) de la cuenta se guarda cifrada en `a.login` (AES con SAVE_SECRET, contraseña con scrypt) y se devuelve al entrar desde otro dispositivo.
+- El dueño de cada servidor tiene /aviso, /silenciar, /hablar y /expulsar. Con ADMIN_KEY en el entorno, /admin?key=… enseña los conectados y los errores de los navegadores.
 - Los archivos estáticos se sirven con gzip y ETag; `assets/` y `vendor/` se guardan un día en el navegador.

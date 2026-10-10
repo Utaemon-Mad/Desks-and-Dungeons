@@ -70,6 +70,9 @@
       <button data-m="invite">🔗 Copiar enlace de invitación</button>
       <button data-m="hero">🏠 Volver al menú principal</button>
       <button data-m="help">📜 Comandos</button>
+      <button data-m="news">📰 Novedades</button>
+      <button data-m="pdf">📘 Guía en PDF</button>
+      <button data-m="install" id="install-btn">📱 Instalar como aplicación</button>
       <button data-m="sound">🔔 Sonido: <b id="sound-state">sí</b></button>
       <button data-m="gfx">⚙️ Ajustes (sonido, gráficos, teclas…)</button>
       <button data-m="fs" data-fs>⛶ Pantalla completa</button>
@@ -153,6 +156,7 @@
         <button type="button" data-go="new"><span>Nuevo personaje</span><small id="mm-new">Tres casillas para tus héroes</small></button>
         <button type="button" data-go="continue"><span>Continuar</span><small id="mm-cont">Cargando…</small></button>
         <button type="button" data-go="server"><span>Elegir servidor</span><small id="mm-srv"></small></button>
+        <button type="button" data-go="account"><span>Mi cuenta</span><small id="mm-acct">Guárdala con usuario y contraseña</small></button>
       </nav>
     </div>
     <button type="button" class="btn alt fs-btn" data-fs>⛶ Pantalla completa</button>
@@ -214,6 +218,15 @@
         <button id="ed-submit" class="btn" type="submit">CREAR Y JUGAR</button>
       </div>
     </form>
+  </div>
+
+  <!-- Cuenta: usuario y contraseña para jugar desde cualquier dispositivo -->
+  <div id="acctwin" class="overlay hidden">
+    <div class="panel card">
+      <div class="panel-title">🔑 MI CUENTA</div>
+      <div id="acct-body"></div>
+      <div class="edit-row"><button id="acct-close" class="btn alt" type="button">VOLVER</button></div>
+    </div>
   </div>
 
   <!-- Mazmorras: crear una aleatoria con nivel o unirse a una partida -->
@@ -390,7 +403,14 @@
   <!-- tooltip de objetos: fuera de #app para quedar por encima de las ventanas -->
   <div id="tip" class="hidden"></div>
 
+  <script>
+    // errores del navegador: se guardan y se mandan al servidor en cuanto hay conexión (Menú → panel /admin)
+    window.__errs = [];
+    window.addEventListener('error', (e) => { if (e.message) window.__errs.push({ msg: e.message, src: (e.filename || '').split('/').pop(), line: e.lineno }); });
+    window.addEventListener('unhandledrejection', (e) => { const r = e.reason; window.__errs.push({ msg: 'Promesa: ' + (r && r.message || r), src: '', line: 0 }); });
+  </script>
   <script src="audio.js"></script>
+  <script src="icons.js"></script>
   <script src="map.js"></script>
   <script src="dungeon-data.js"></script>
   <script src="rules/items-data.js"></script>
@@ -415,5 +435,6 @@
   <script src="dungeon.js"></script>
   <script src="polish.js"></script>
   <script src="tutorial.js"></script>
+  <script src="admin.js"></script>
 </body>
 </html>

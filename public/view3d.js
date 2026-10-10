@@ -238,6 +238,7 @@
     fortaleza: { floor: ['#504640', '#5a4a36'], seam: '#2e2622', wall: '#625852', top: '#151212', fog: '#080606', liquid: '#1e3a5a', sky: '#8a6a5a' },
     nido: { floor: ['#36402e', '#3c4632'], seam: '#222a1c', wall: '#44523a', top: '#0e120c', fog: '#040604', liquid: '#2a3a1a', sky: '#5a7a4a' },
     volcan: { floor: ['#2e2628', '#342a2c'], seam: '#1a1214', wall: '#463434', top: '#100a0a', fog: '#0a0404', liquid: '#c8400a', sky: '#a04a2a' },
+    abismo: { floor: ['#2a1a1c', '#30181a'], seam: '#120808', wall: '#4a2a2a', top: '#0e0606', fog: '#0a0202', liquid: '#e0400a', sky: '#802010' },
   };
   // Color de cada casilla del mundo (la textura del suelo se pinta con estos colores y algo de ruido)
   const WORLD_COLORS = {
@@ -318,6 +319,7 @@
     return im;
   }
 
+  const LOW_WALL = 0.3; // altura de los muros bajos (los del lado de la cámara)
   // Construye todo lo fijo del mapa. Devuelve { group, lights, walls (actualizable con lo explorado) }
   function buildMap(map) {
     const mm = M();
@@ -358,7 +360,7 @@
         if (map.tiles[y * map.w + x] !== '#') continue;
         let near = false;
         for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) if (walk(x + dx, y + dy)) { near = true; break; }
-        if (near) walls.push({ x: x + 0.5, z: y + 0.5, y: WALL_H / 2, sy: WALL_H, tile: y * map.w + x, r: 0 });
+        if (near) walls.push({ x: x + 0.5, z: y + 0.5, y: WALL_H / 2, sy: WALL_H, tile: y * map.w + x, r: 0, low: walk(x, y - 1) });
       }
       const wallGeo = new THREE.BoxGeometry(1, 1, 1);
       const wallMat = new THREE.MeshStandardMaterial({ color: T.wall, roughness: 0.92, flatShading: true });
@@ -377,14 +379,13 @@
       wallMesh.castShadow = true; wallMesh.receiveShadow = true;
       group.add(wallMesh);
       out.walls = { mesh: wallMesh, list: walls, shown: -1 };
-      // los muros entre la cámara y el héroe se bajan para no taparlo
-      out.updateWalls = (seen, hx, hz) => {
+      // los muros con sala al norte, siempre bajos (como en la versión con modelos)
+      out.updateWalls = (seen) => {
         let n = 0;
         const m4 = new THREE.Matrix4();
         for (const w of walls) {
           if (!seen[w.tile] && !seenNear(seen, map, w.tile)) continue;
-          const cut = hx !== undefined && w.z > hz && w.z - hz < 7 && Math.abs(w.x - hx) < 7;
-          const h = cut ? 0.35 : WALL_H;
+          const h = w.low ? Math.max(0.35, WALL_H * LOW_WALL) : WALL_H;
           m4.makeScale(1, h, 1); m4.setPosition(w.x, h / 2, w.z);
           wallMesh.setMatrixAt(n++, m4);
         }
@@ -544,9 +545,9 @@
     floor.position.y = -0.03;
     const HS = 0.25, VS = GL_WALL_H / 4;
     const many = (a, n, b) => Array(n).fill(a).concat(b ? [b] : []);
-    const floorNames = theme === 'cuevas' || theme === 'nido' ? many('floor_dirt_large', 9, 'floor_dirt_large_rocky') : theme === 'volcan' ? many('floor_tile_large', 7, 'floor_tile_large_rocks') : many('floor_tile_large', 1);
+    const floorNames = theme === 'cuevas' || theme === 'nido' ? many('floor_dirt_large', 9, 'floor_dirt_large_rocky') : theme === 'volcan' || theme === 'abismo' ? many('floor_tile_large', 7, 'floor_tile_large_rocks') : many('floor_tile_large', 1);
     // las piezas KayKit son claras: se oscurecen y tiñen según el tema
-    const TINT = { cripta: ['#727a8c', '#8e95a6'], cuevas: ['#8e785c', '#9c8a72'], fortaleza: ['#8a7c70', '#9a8e84'], nido: ['#6e7c5e', '#86947a'], volcan: ['#7a5e58', '#8a7470'] }[theme] || ['#80808a', '#90909a'];
+    const TINT = { cripta: ['#727a8c', '#8e95a6'], cuevas: ['#8e785c', '#9c8a72'], fortaleza: ['#8a7c70', '#9a8e84'], nido: ['#6e7c5e', '#86947a'], volcan: ['#7a5e58', '#8a7470'], abismo: ['#7a4a46', '#8a5650'] }[theme] || ['#80808a', '#90909a'];
     const tinted = (mat, hex) => [].concat(mat).map((m) => { const c = m.clone(); c.color = new THREE.Color(hex); return c; });
     const one = (a) => (a.length === 1 ? a[0] : a);
     const floors = {};
@@ -563,10 +564,10 @@
           near = true;
           const k = rand(x * 7.1 + y * 3.3 + dx * 5 + dy * 11);
           const name = k < 0.1 ? 'wall_cracked' : k < 0.14 ? 'wall_broken' : 'wall';
-          (segs[name] = segs[name] || []).push({ x: x + 0.5 + dx * 0.375, z: y + 0.5 + dy * 0.375, r, tile, cz: y + 0.5, cx: x + 0.5 });
+          (segs[name] = segs[name] || []).push({ x: x + 0.5 + dx * 0.375, z: y + 0.5 + dy * 0.375, r, tile, low: !isWall(x, y - 1) });
         }
         if (!near) for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) if (!isWall(x + dx, y + dy)) { near = true; break; }
-        if (near) caps.push({ x: x + 0.5, z: y + 0.5, tile });
+        if (near) caps.push({ x: x + 0.5, z: y + 0.5, tile, low: !isWall(x, y - 1) });
         continue;
       }
       if (WATER.has(ch)) continue;
@@ -598,15 +599,14 @@
     capMesh.count = 0; capMesh.receiveShadow = true;
     group.add(capMesh);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-    // los muros entre la cámara y el héroe se bajan para no taparlo
-    const cutAt = (z, x, hx, hz) => hx !== undefined && z > hz + 0.4 && z - hz < 7 && Math.abs(x - hx) < 7;
-    out.updateWalls = (seen, hx, hz) => {
+    // Los muros que tienen sala justo al norte (la cámara los ve por detrás) son siempre bajos, para que no tapen
+    // la sala; el resto, siempre altos. Así nada aparece ni desaparece al moverse.
+    out.updateWalls = (seen) => {
       for (const W of wallMeshes) {
         let n = 0;
         for (const w of W.list) {
           if (!seen[w.tile] && !seenNear(seen, map, w.tile)) continue;
-          const cut = cutAt(w.cz, w.cx, hx, hz);
-          q.setFromAxisAngle(up, w.r); sc.set(HS, cut ? VS * 0.25 : VS, HS); ps.set(w.x, 0, w.z);
+          q.setFromAxisAngle(up, w.r); sc.set(HS, w.low ? VS * LOW_WALL : VS, HS); ps.set(w.x, 0, w.z);
           m4.compose(ps, q, sc);
           W.im.setMatrixAt(n++, m4);
         }
@@ -615,8 +615,7 @@
       let n = 0;
       for (const c of caps) {
         if (!seen[c.tile] && !seenNear(seen, map, c.tile)) continue;
-        const cut = cutAt(c.z, c.x, hx, hz);
-        m4.makeTranslation(c.x, cut ? GL_WALL_H * 0.25 : GL_WALL_H, c.z);
+        m4.makeTranslation(c.x, c.low ? GL_WALL_H * LOW_WALL : GL_WALL_H, c.z);
         capMesh.setMatrixAt(n++, m4);
       }
       capMesh.count = n; capMesh.instanceMatrix.needsUpdate = true;
