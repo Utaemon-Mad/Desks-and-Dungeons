@@ -828,3 +828,25 @@ body.cb .dlog-line.loot-conjunto { color: #cc79a7; }
 .tal.can:hover { border-color: #ffe39a; transform: translateY(-1px); }
 .tal.locked { opacity: .42; filter: grayscale(.7); cursor: default; }
 @media (max-width: 820px) { .tal-trees { grid-template-columns: 1fr; } }
+
+/* Temporada */
+.season-rank { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.season-row { display: grid; grid-template-columns: 36px 1fr auto 96px; gap: 8px; align-items: center; padding: 5px 8px; border-radius: 6px; background: rgba(0, 0, 0, .2); }
+.season-row.me { outline: 2px solid #ffd24a; }
+.season-row.top1 em { color: #ffd24a; } .season-row.top2 em { color: #d8e4f0; } .season-row.top3 em { color: #e0904a; }
+.season-row em { font-style: normal; font-weight: 700; }
+.season-row small { text-align: right; }
+
+/* Taberna del grupo, hazañas y mercado */
+#tavwin .panel, #mkwin .panel { width: min(640px, calc(100% - 24px)); max-height: 88vh; overflow-y: auto; }
+.tav-lvl { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 7px 10px; margin: 5px 0; border-radius: 8px; background: rgba(0, 0, 0, .22); border: 1px solid #5a3a22; }
+.tav-lvl.got { border-color: #7dff8a; opacity: .85; }
+.tav-lvl.cur { border-color: #ffd24a; }
+.tav-lvl .meter { grid-column: 1 / -1; height: 8px; }
+.feats { display: flex; flex-direction: column; gap: 3px; }
+.feat-row { font-size: 13px; padding: 3px 6px; border-left: 3px solid #e0a93a; background: rgba(0, 0, 0, .15); }
+.mk-grid { display: flex; flex-direction: column; gap: 6px; }
+.mk-row { display: flex; align-items: center; gap: 10px; padding: 5px 8px; background: rgba(0, 0, 0, .2); border-radius: 8px; }
+.mk-info { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.mk-info small { color: #b99a72; font-size: 12px; }
+.mk-price { width: 90px; padding: 5px; border-radius: 5px; border: 2px solid #5a3418; background: #fbf4e2; color: #2b1d14; }

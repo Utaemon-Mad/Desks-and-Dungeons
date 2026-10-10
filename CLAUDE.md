@@ -69,4 +69,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Render gratis no guarda el disco: el servidor manda a cada navegador una copia firmada de su cuenta (`dd-backup`, HMAC con `SAVE_SECRET`) y la restaura al entrar si la ha perdido.
 - Usuario y contraseña: la llave (token) de la cuenta se guarda cifrada en `a.login` (AES con SAVE_SECRET, contraseña con scrypt) y se devuelve al entrar desde otro dispositivo.
 - El dueño de cada servidor tiene /aviso, /silenciar, /hablar y /expulsar. Con ADMIN_KEY en el entorno, /admin?key=… enseña los conectados y los errores de los navegadores.
+- Botín: los enemigos normales sueltan poco y básico (`DROP` en engine.js); los legendarios son únicos con `it.leg` (poderes en `LEGENDARY`, aplicados en server/dungeon.js con `p.d.leg`).
+- Talentos en `char.talents` (`TALENTS` en engine.js); `derive` los suma como el equipo y da `d.abBoost` por habilidad.
+- progress.js: recompensa diaria (`LOGIN_REWARDS`, `acct.daily`), Asalto semanal (`RAID`, mapa con semilla de la semana), temporadas (`season:<n>` en meta), mejoras de la taberna (`room.fund`) y mercado (`market` en meta).
 - Los archivos estáticos se sirven con gzip y ETag; `assets/` y `vendor/` se guardan un día en el navegador.

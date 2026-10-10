@@ -792,6 +792,47 @@ async function instanceTests() {
   assert.ok(!RULES.talentSpent(store.player(store.hash(tokT)).slots[0].char.talents), 'se pueden reiniciar');
   tc.ws.close();
 
+  // Mercado: vender, comprar y cobrar aunque el vendedor no esté; mejoras de la taberna; temporada
+  const tokMS = 'e5f6'.repeat(8), tokMB = 'a7b8'.repeat(8);
+  const mkRng = RULES.seeded('mercado');
+  const mkSword = RULES.makeItem(mkRng, { ilvl: 10, rarity: 'raro', slot: 'arma', base: 'espada' });
+  store.setPlayer(store.hash(tokMS), { slots: [{ name: 'Vendedora', xp: RULES.XP_TABLE[10], gold: 10, rv: RULES.RULES_VERSION, char: RULES.newChar('guerrero', {}), equip: {}, bag: [mkSword], cons: {}, buffs: {} }, null, null], last: null });
+  store.setPlayer(store.hash(tokMB), { slots: [{ name: 'Compradora', xp: RULES.XP_TABLE[10], gold: 9000, rv: RULES.RULES_VERSION, char: RULES.newChar('paladin', {}), equip: {}, bag: [], cons: {}, buffs: {} }, null, null], last: null });
+  // temporada anterior: la compradora quedó primera
+  const mkCsB = store.hash(tokMB);
+  store.setMeta('season:' + (PROG.seasonKey() - 1), { [mkCsB]: { name: 'Compradora', pts: 120, cls: 'paladin' } });
+  const mkSrv = MAP.SERVERS[2].id;
+  const mkSv = await client('Vendedora');
+  mkSv.send({ t: 'join', room: mkSrv, slot: 0, token: tokMS });
+  await mkSv.next((m) => m.t === 'welcome');
+  mkSv.send({ t: 'market:sell', id: mkSword.id, price: 400 });
+  const mkL1 = await mkSv.next((m) => m.t === 'market');
+  const mkLst = mkL1.list.find((l) => l.item.id === mkSword.id);
+  assert.ok(mkLst && mkLst.mine && mkLst.price === 400, 'objeto a la venta');
+  mkSv.ws.close();
+  await sleep(300);
+  const mkBu = await client('Compradora');
+  mkBu.send({ t: 'join', room: mkSrv, slot: 0, token: tokMB });
+  await mkBu.next((m) => m.t === 'welcome');
+  mkBu.send({ t: 'market:buy', id: mkLst.id });
+  await mkBu.next((m) => m.t === 'market');
+  await sleep(200);
+  assert.ok(store.player(store.hash(tokMB)).slots[0].bag.some((x) => x.id === mkSword.id), 'la compradora tiene la espada');
+  assert.strictEqual(store.player(store.hash(tokMS)).slots[0].gold, 10 + Math.floor(400 * (1 - PROG.MARKET.fee)), 'la vendedora cobra aunque no esté');
+  // mejoras de la taberna
+  await sleep(1000);
+  mkBu.send({ t: 'tavern:donate', gold: 2500 });
+  const mkTv = await mkBu.next((m) => m.t === 'tavern:info');
+  assert.ok(mkTv.level >= 1 && mkTv.bonus.xp >= 5, 'la donación sube la taberna de nivel');
+  // premio de la temporada anterior al entrar
+  await sleep(3000);
+  const mkAccB = store.player(store.hash(tokMB)).slots[0];
+  assert.ok((mkAccB.extraTitles || []).some((t) => /Campeón de la temporada/.test(t)) && mkAccB.aura === 'oro', 'título y aura de campeona');
+  mkBu.send({ t: 'season:get' });
+  const mkSsn = await mkBu.next((m) => m.t === 'season');
+  assert.ok(mkSsn.last.length && mkSsn.last[0].name === 'Compradora', 'la temporada anterior se ve en la clasificación');
+  mkBu.ws.close();
+
   // Dueño de la taberna: mensaje del día, silenciar y expulsar (el primero en entrar en un servidor nuevo es el dueño)
   const SRV3 = MAP.SERVERS[2].id;
   const mkAcc = (tok, name) => store.setPlayer(store.hash(tok), { slots: [{ name, xp: 0, gold: 10, rv: RULES.RULES_VERSION, char: RULES.newChar('guerrero', { species: 'human', sex: 'm' }), equip: {}, bag: [], cons: {}, buffs: {} }, null, null], last: null });

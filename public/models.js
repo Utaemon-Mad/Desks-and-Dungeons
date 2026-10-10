@@ -1109,6 +1109,22 @@
     // armaduras que se ven: petos, hombreras, yelmos, guanteletes, grebas… (armor3d.js)
     if (A3) A3.build(root, gear, { setTrim: set ? set[1] : null });
     if (gob) { const b = globalThis.GOBLIN3D.BUILD[gob.build] || 1; body.scale.x *= b; body.scale.z *= b; }
+    // aura de temporada (premio de los mejores): anillo que brilla a los pies y chispas que suben
+    const auraCol = look.aura && globalThis.PROG && PROG.AURAS[look.aura];
+    if (auraCol) {
+      const A = new THREE.Group(); A.name = 'aura';
+      const ringM = new THREE.MeshBasicMaterial({ color: auraCol, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.32, 0.4, 32), ringM); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.02; A.add(ring);
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(0.32, 32), new THREE.MeshBasicMaterial({ color: auraCol, transparent: true, opacity: 0.18, depthWrite: false, blending: THREE.AdditiveBlending })); disc.rotation.x = -Math.PI / 2; disc.position.y = 0.015; A.add(disc);
+      const motes = [];
+      for (let i = 0; i < 8; i++) { const m = new THREE.Mesh(new THREE.SphereGeometry(0.018, 6, 4), ringM); m.userData.a = (i / 8) * Math.PI * 2; m.userData.o = i * 0.13; A.add(m); motes.push(m); }
+      ring.onBeforeRender = () => {
+        const t = performance.now() / 1000;
+        ring.scale.setScalar(1 + 0.06 * Math.sin(t * 3));
+        for (const m of motes) { const k = (t * 0.5 + m.userData.o) % 1; m.position.set(Math.cos(m.userData.a + t) * 0.3, k * 1.1, Math.sin(m.userData.a + t) * 0.3); m.scale.setScalar(1 - k); }
+      };
+      root.add(A);
+    }
     return root;
   }
 

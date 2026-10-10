@@ -38,6 +38,8 @@
     else if (s === 'board') { openOverlay('boardwin'); renderBoard(); }
     else if (s === 'fame') { openOverlay('famewin'); renderFame(); }
     else if (s === 'room') DD.net.send({ t: 'room:get' });
+    else if (s === 'tavern') DD.net.send({ t: 'tavern:get' });
+    else if (s === 'market') { mkTab = 'buy'; DD.net.send({ t: 'market:get' }); }
     else if (s === 'descent') askDescent();
   });
   DD.on('me', () => {
@@ -241,7 +243,9 @@
   //  Fama: logros, títulos, clasificación y estadísticas
   // ======================================================================
   let fameTab = 'logros', ranks = null;
-  document.querySelectorAll('#fame-tabs button').forEach((b) => { b.onclick = () => { fameTab = b.dataset.tab; if (fameTab === 'ranks') DD.net.send({ t: 'ranks:get' }); renderFame(); }; });
+  document.querySelectorAll('#fame-tabs button').forEach((b) => { b.onclick = () => { fameTab = b.dataset.tab; if (fameTab === 'ranks') DD.net.send({ t: 'ranks:get' }); if (fameTab === 'season') DD.net.send({ t: 'season:get' }); renderFame(); }; });
+  let season = null;
+  DD.on('season', (m) => { season = m; if (isOpen('famewin')) renderFame(); });
   DD.on('ranks', (m) => { ranks = m; if (isOpen('famewin')) renderFame(); });
   DD.on('achievement', (m) => {
     DD.toast(`🏅 ¡Logro: ${m.name}!${m.title ? ` Nuevo título: «${m.title}» (Pueblo → Fama).` : ''} +${m.gold} 🪙`);
@@ -252,7 +256,7 @@
     document.querySelectorAll('#fame-tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === fameTab));
     const body = $('#fame-body'); body.innerHTML = '';
     if (fameTab === 'logros') {
-      const titles = PROG.ACHIEVEMENTS.filter((a) => a.title && p.achievements.includes(a.id)).map((a) => a.title);
+      const titles = [...PROG.ACHIEVEMENTS.filter((a) => a.title && p.achievements.includes(a.id)).map((a) => a.title), ...(p.extraTitles || [])];
       body.appendChild(el('h3', '', `Título (${titles.length} conseguidos)`));
       const trow = el('div', 'title-row');
       for (const t of [null, ...titles]) {
@@ -271,6 +275,23 @@
         grid.appendChild(c);
       }
       body.appendChild(grid);
+    } else if (fameTab === 'season') {
+      if (!season) { body.appendChild(el('p', 'muted', 'Cargando…')); return; }
+      const left = season.ends - Date.now(), days = Math.floor(left / 86400000);
+      body.appendChild(el('h3', '', `🏆 Temporada ${PROG.seasonNumber(season.id)} · termina en ${days >= 1 ? `${days} día${days === 1 ? '' : 's'}` : fmtTime(left)}`));
+      body.appendChild(el('p', 'muted small', `Ganas puntos jugando: jefes (${PROG.SEASON_PTS.boss}), élites (${PROG.SEASON_PTS.elite}), Asalto semanal (${PROG.SEASON_PTS.raid}), pisos del Descenso (${PROG.SEASON_PTS.floor}), legendarios (${PROG.SEASON_PTS.legend}), tareas del tablón (${PROG.SEASON_PTS.task}), misiones (${PROG.SEASON_PTS.quest}) y entrar cada día (${PROG.SEASON_PTS.daily}). Al acabar: los 3 primeros se llevan título y un aura dorada, plateada o de bronce a los pies; todos los que pasen de ${PROG.SEASON.minPts} puntos, el título de veterano y un aura morada.`));
+      if (season.mine) body.appendChild(el('p', 'good', `Vas ${season.mine.pos}.º con ${season.mine.pts} puntos.`));
+      const ol = el('div', 'season-rank');
+      if (!season.top.length) ol.appendChild(el('p', 'muted', 'Nadie tiene puntos todavía. ¡Ve a por el primer puesto!'));
+      for (const r of season.top) {
+        const row = el('div', 'season-row' + (r.me ? ' me' : '') + (r.pos <= 3 ? ' top' + r.pos : ''));
+        row.append(el('b', '', r.pos <= 3 ? ['🥇', '🥈', '🥉'][r.pos - 1] : r.pos + '.'), el('span', '', `${(RULES.CLASSES[r.cls] || {}).icon || ''} ${r.name}`), el('em', '', `${r.pts} pts`));
+        // rivalidad: cuánto te falta para alcanzarle (o cuánto le sacas)
+        if (season.mine && !r.me) { const diff = r.pts - season.mine.pts; row.appendChild(el('small', diff > 0 ? 'bad' : 'good', diff > 0 ? `te saca ${diff}` : `le sacas ${-diff}`)); }
+        ol.appendChild(row);
+      }
+      body.appendChild(ol);
+      if (season.last && season.last.length) body.appendChild(el('p', 'muted small', `Temporada anterior: ${season.last.map((r, i) => `${['🥇', '🥈', '🥉'][i]} ${r.name} (${r.pts})`).join(' · ')}`));
     } else if (fameTab === 'ranks') {
       if (!ranks) { body.appendChild(el('p', 'muted', 'Cargando…')); return; }
       const M = PROG.WEEKLY_MODS[ranks.mod];
@@ -341,6 +362,104 @@
     if (confirm(`🌀 DESCENSO INFINITO\n\nPiso tras piso, cada uno un nivel más difícil (empiezas a tu nivel). Al derrotar al jefe, su portal te baja al siguiente piso. Cada 5 pisos, un objeto raro; cada 10, uno único. Si caes, vuelves a la taberna.\n\nDesafío de esta semana: ${M.icon} ${M.name} — ${M.desc}\nTu mejor piso: ${best}\n\n¿Bajas?`)) DD.net.send({ t: 'descent:start' });
   }
   DD.on('open-descent', askDescent);
+
+  // ======================================================================
+  //  Mejoras de la taberna (entre todos) y tablón de hazañas
+  // ======================================================================
+  const tavWin = el('div', 'overlay win hidden'); tavWin.id = 'tavwin';
+  tavWin.innerHTML = '<div class="panel card"><button class="mini close-x" type="button" title="Cerrar">✕</button><div class="panel-title">🏦 LA TABERNA DEL GRUPO</div><div id="tav-body"></div></div>';
+  document.body.appendChild(tavWin);
+  tavWin.querySelector('.close-x').onclick = () => closeOverlay('tavwin');
+  DD.on('tavern:info', (m) => {
+    const body = $('#tav-body'); body.innerHTML = '';
+    body.appendChild(el('p', 'muted small', 'Entre todos podéis mejorar la taberna con donaciones de oro. Cada mejora da su bonificación a todos los que jueguen en este servidor.'));
+    let acc = 0;
+    PROG.TAVERN_LEVELS.forEach((L, i) => {
+      const got = i < m.level, cur = i === m.level;
+      const row = el('div', 'tav-lvl' + (got ? ' got' : cur ? ' cur' : ''));
+      row.append(el('b', '', `${L.icon} ${L.name}`), el('small', '', L.text));
+      if (cur) {
+        const have = m.gold - acc, pct = Math.min(100, Math.round(100 * have / L.cost));
+        const bar = el('div', 'meter'); const fill = el('i'); fill.style.width = pct + '%'; bar.appendChild(fill);
+        row.append(bar, el('small', '', `${have} / ${L.cost} 🪙`));
+      } else if (got) row.appendChild(el('small', 'good', '✔ Conseguida'));
+      acc += got ? L.cost : 0;
+      body.appendChild(row);
+    });
+    if (m.level < PROG.TAVERN_LEVELS.length) {
+      const dr = el('div', 'title-row');
+      for (const n of [100, 500, 1000, 5000]) { const b = el('button', 'btn alt', `Donar ${n} 🪙`); b.onclick = () => DD.net.send({ t: 'tavern:donate', gold: n }); dr.appendChild(b); }
+      body.appendChild(dr);
+    }
+    body.appendChild(el('p', 'muted small', `Has donado ${m.mine} 🪙.${m.donors.length ? ' Mecenas: ' + m.donors.map((d) => `${d.name} (${d.gold})`).join(', ') : ''}`));
+    body.appendChild(el('div', 'field-title', '📜 Tablón de hazañas'));
+    if (!m.feats.length) body.appendChild(el('p', 'muted', 'Todavía no hay hazañas. ¡Escribid la primera!'));
+    const ul = el('div', 'feats');
+    for (const f of m.feats.slice(0, 15)) ul.appendChild(el('div', 'feat-row', `${new Date(f.ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })} · ${f.text}`));
+    body.appendChild(ul);
+    openOverlay('tavwin');
+  });
+
+  // ======================================================================
+  //  Mercado entre jugadores
+  // ======================================================================
+  let mkTab = 'buy', market = null;
+  const mkWin = el('div', 'overlay win hidden'); mkWin.id = 'mkwin';
+  mkWin.innerHTML = '<div class="panel card"><button class="mini close-x" type="button" title="Cerrar">✕</button><div class="panel-title">🏪 MERCADO</div><div class="manual-tabs" id="mk-tabs"><button type="button" data-tab="buy">Comprar</button><button type="button" data-tab="sell">Vender</button></div><div id="mk-body"></div></div>';
+  document.body.appendChild(mkWin);
+  mkWin.querySelector('.close-x').onclick = () => closeOverlay('mkwin');
+  mkWin.querySelectorAll('#mk-tabs button').forEach((b) => { b.onclick = () => { mkTab = b.dataset.tab; renderMarket(); }; });
+  DD.on('market', (m) => { market = m; renderMarket(); if (!isOpen('mkwin')) openOverlay('mkwin'); });
+  DD.on('me', () => { if (isOpen('mkwin') && mkTab === 'sell') renderMarket(); });
+  function renderMarket() {
+    if (!market) return;
+    mkWin.querySelectorAll('#mk-tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === mkTab));
+    const body = $('#mk-body'); body.innerHTML = '';
+    const p = me();
+    if (mkTab === 'buy') {
+      const others = market.list.filter((l) => !l.mine);
+      body.appendChild(el('p', 'muted small', `Objetos que venden otros jugadores (de todos los servidores). Tienes ${p ? p.gold : 0} 🪙.`));
+      if (!others.length) body.appendChild(el('p', 'muted', 'No hay nada a la venta ahora mismo.'));
+      const grid = el('div', 'mk-grid');
+      for (const l of others) {
+        const row = el('div', 'mk-row');
+        row.appendChild(itemCell(l.item));
+        const info = el('div', 'mk-info');
+        const nm = el('b', '', (l.item.leg ? '★ ' : '') + l.item.name); nm.style.color = RULES.itemColor(l.item);
+        info.append(nm, el('small', '', `${RULES.typeLine(l.item)} · vende ${l.seller}`));
+        const buy = el('button', 'btn', `${l.price} 🪙`);
+        buy.disabled = !p || p.gold < l.price;
+        buy.onclick = () => { if (confirm(`¿Comprar «${l.item.name}» por ${l.price} de oro?`)) DD.net.send({ t: 'market:buy', id: l.id }); };
+        row.append(info, buy);
+        grid.appendChild(row);
+      }
+      body.appendChild(grid);
+    } else {
+      const mine = market.list.filter((l) => l.mine);
+      body.appendChild(el('p', 'muted small', `Pon a la venta objetos de tu mochila. Cuando alguien los compre recibirás el oro (menos un ${Math.round(market.fee * 100)}% de comisión), aunque no estés conectado. Como mucho ${PROG.MARKET.maxPerChar} a la vez.`));
+      body.appendChild(el('div', 'field-title', `Tus objetos a la venta (${mine.length})`));
+      for (const l of mine) {
+        const row = el('div', 'mk-row');
+        row.appendChild(itemCell(l.item));
+        row.appendChild(el('div', 'mk-info', `${l.item.name} · ${l.price} 🪙`));
+        const c = el('button', 'btn alt', 'Retirar'); c.onclick = () => DD.net.send({ t: 'market:cancel', id: l.id });
+        row.appendChild(c); body.appendChild(row);
+      }
+      body.appendChild(el('div', 'field-title', 'Tu mochila'));
+      const grid = el('div', 'mk-grid');
+      for (const it of (p && p.bag) || []) {
+        const row = el('div', 'mk-row');
+        row.appendChild(itemCell(it));
+        const info = el('div', 'mk-info'); const nm = el('b', '', it.name); nm.style.color = RULES.itemColor(it);
+        info.append(nm, el('small', '', `En tienda valdría unos ${it.value} 🪙`));
+        const inp = el('input'); inp.type = 'number'; inp.min = 1; inp.value = Math.max(1, Math.round(it.value * 1.5)); inp.className = 'mk-price';
+        const sell = el('button', 'btn', 'Vender'); sell.onclick = () => DD.net.send({ t: 'market:sell', id: it.id, price: Number(inp.value) });
+        row.append(info, inp, sell);
+        grid.appendChild(row);
+      }
+      body.appendChild(grid);
+    }
+  }
 
   // ======================================================================
   //  Asalto semanal: mismo mapa para todos, más duro, cofre semanal y clasificación por tiempo

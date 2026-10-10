@@ -7,6 +7,16 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 7, date: 'Octubre', title: 'Para engancharse', items: [
+      '🟠 Objetos LEGENDARIOS con poderes: Rebote, Estallido, Sed de sangre, Frenesí, Égida, Trueno y Eco.',
+      '✨ El botín bueno cae con un haz de luz de su color y suena al caer.',
+      '🎁 Recompensa diaria: entra cada día y al séptimo abre el gran cofre.',
+      '⚔️ Asalto semanal: el mismo mapa para todos, más difícil, con cofre y clasificación por tiempo.',
+      '🌟 Árbol de talentos: tres ramas por clase y un punto cada dos niveles.',
+      '🏆 Temporadas de 6 semanas: puntos por jugar y aura dorada para los mejores.',
+      '🏦 Mejoras de la taberna entre todos y tablón de hazañas.',
+      '🏪 Mercado entre jugadores: vende tu botín y cobra aunque no estés conectado.',
+    ] },
     { v: 6, date: 'Octubre', title: 'Más profesional', items: [
       '🔊 Sonido y música en cada sitio: taberna, mazmorras, jefes y mundo abierto.',
       '👥 Ves la vida de tus compañeros; Alt+clic o P marca un sitio para el grupo; si caes, puedes volver con tu grupo.',

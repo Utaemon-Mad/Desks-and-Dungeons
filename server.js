@@ -135,6 +135,7 @@ function getRoom(name) {
       map: MAP.createMap(saved ? saved.items : undefined),
       ownerId: saved ? saved.ownerId : null,
       motd: (saved && saved.motd) || '',
+      fund: (saved && saved.fund) || { gold: 0, donors: {} },
       banned: new Map(), // pid -> hasta cuándo no puede entrar
       muted: new Map(),  // pid -> hasta cuándo no puede hablar
       instances: new Map(),
@@ -144,7 +145,7 @@ function getRoom(name) {
 }
 
 function saveRoom(room) {
-  store.setRoom(room.name, { ownerId: room.ownerId, motd: room.motd || undefined, items: room.map.items.map(({ type, x, y, dir }) => (dir ? { type, x, y, dir } : { type, x, y })) });
+  store.setRoom(room.name, { ownerId: room.ownerId, motd: room.motd || undefined, fund: room.fund && room.fund.gold ? room.fund : undefined, items: room.map.items.map(({ type, x, y, dir }) => (dir ? { type, x, y, dir } : { type, x, y })) });
 }
 
 function cleanRoomName(s) {
@@ -312,7 +313,7 @@ function onlineChar(cid) {
 
 function lookFrom(profile) {
   const l = profile.char.look || {};
-  return { ...MAP.cleanLook({ cls: profile.char.cls, species: l.species, sex: l.sex, hs: l.hs, skin: l.skin, hair: l.hair, gob: l.gob }), gear: RULES.gearLook(profile.equip) };
+  return { ...MAP.cleanLook({ cls: profile.char.cls, species: l.species, sex: l.sex, hs: l.hs, skin: l.skin, hair: l.hair, gob: l.gob }), gear: RULES.gearLook(profile.equip), aura: PROG.AURAS[profile.aura] ? profile.aura : undefined };
 }
 const charLook = (look) => { const c = { species: look.species, sex: look.sex, hs: look.hs, skin: look.skin, hair: look.hair }; if (look.gob) c.gob = { ...look.gob }; return c; };
 
@@ -339,7 +340,7 @@ function setupProfile(profile, look) {
   profile.waystones = profile.waystones || ['brumaverde'];
   profile.mats = profile.mats || {}; profile.stats = profile.stats || {}; profile.achievements = profile.achievements || [];
   profile.trophies = profile.trophies || [];
-  if (profile.title && !PROG.ACHIEVEMENTS.some((a) => a.title === profile.title && profile.achievements.includes(a.id))) profile.title = null;
+  if (profile.title && !PROG.ACHIEVEMENTS.some((a) => a.title === profile.title && profile.achievements.includes(a.id)) && !(profile.extraTitles || []).includes(profile.title)) profile.title = null;
   if (profile.pet && !RULES.PETS[profile.pet.type]) profile.pet = null;
   if (profile.pet) { profile.pet.bag = Array.isArray(profile.pet.bag) ? profile.pet.bag : []; profile.pet.xp = profile.pet.xp || 0; }
   if (profile.mount && !RULES.MOUNTS[profile.mount]) profile.mount = null;
@@ -413,7 +414,7 @@ function resumePlace(room, user) {
 function sendMe(user) {
   const p = user.profile;
   ensureBoard(p);
-  send(user.ws, { t: 'me', char: p.char, equip: p.equip, bag: p.bag, cons: p.cons, buffs: p.buffs, xp: p.xp, gold: p.gold, quests: p.quests, questsDone: p.questsDone, waystones: p.waystones, pet: p.pet || null, mount: p.mount || null, mats: p.mats, stats: p.stats, achievements: p.achievements, title: p.title || null, board: p.board, trophies: p.trophies, tutDone: !!p.tutDone });
+  send(user.ws, { t: 'me', char: p.char, equip: p.equip, bag: p.bag, cons: p.cons, buffs: p.buffs, xp: p.xp, gold: p.gold, quests: p.quests, questsDone: p.questsDone, waystones: p.waystones, pet: p.pet || null, mount: p.mount || null, mats: p.mats, stats: p.stats, achievements: p.achievements, title: p.title || null, extraTitles: p.extraTitles || [], aura: p.aura || null, board: p.board, trophies: p.trophies, tutDone: !!p.tutDone });
 }
 
 function profileChanged(room, user, opts = {}) {
@@ -429,6 +430,10 @@ function profileChanged(room, user, opts = {}) {
 // ---------- Experiencia y oro ----------
 function reward(room, user, xp, gold) {
   const prof = user.profile;
+  // mejoras de la taberna: más experiencia y oro para todos los del servidor
+  const TB = PROG.tavernBonus(room.fund);
+  if (xp > 0 && TB.xp) xp = Math.round(xp * (1 + TB.xp / 100));
+  if (gold > 0 && TB.gold) gold = Math.round(gold * (1 + TB.gold / 100));
   const before = RULES.levelFromXp(prof.xp);
   prof.xp = Math.max(0, prof.xp + xp);
   prof.gold = Math.max(0, prof.gold + gold);
@@ -448,7 +453,7 @@ function give(room, user, item) {
   user.profile.bag.push(item);
   if (item.rarity === 'unico') track(room, user, 'legend', {});
   saveUser(user); sendMe(user);
-  if (item.leg) system(room, `🟠★ ¡${user.name} encuentra un LEGENDARIO: «${item.name}» (${RULES.LEGENDARY[item.leg].icon} ${RULES.LEGENDARY[item.leg].name})!`);
+  if (item.leg) { system(room, `🟠★ ¡${user.name} encuentra un LEGENDARIO: «${item.name}» (${RULES.LEGENDARY[item.leg].icon} ${RULES.LEGENDARY[item.leg].name})!`); feat(room, `🟠 ${user.name} encontró el legendario «${item.name}».`); }
   else if (item.rarity === 'unico' || item.rarity === 'conjunto') system(room, `${item.rarity === 'conjunto' ? '🟢' : '🟡'} ${user.name} encuentra «${item.name}».`);
   return true;
 }
@@ -473,7 +478,7 @@ function getInstance(room, def) {
   if (!inst) {
     inst = new Instance(def, {
       send: (u, msg) => send(u.ws, msg),
-      derive: (u) => derive(u.profile),
+      derive: (u) => { const d = derive(u.profile); d.mf += PROG.tavernBonus(room.fund).mf; return d; },
       reward: (u, xp, gold) => reward(room, u, xp, gold),
       give: (u, item) => give(room, u, item),
       giveCons: (u, cid, n) => giveCons(u, cid, n),
@@ -672,6 +677,9 @@ function track(room, user, ev, d = {}) {
     else p.stats[st] = (p.stats[st] || 0) + n;
   }
   if (ev === 'kill' && d.boss) { p.stats.bosses = (p.stats.bosses || 0) + 1; rankAdd(user, 'bosses', 1); }
+  // puntos de temporada
+  const SP = PROG.SEASON_PTS;
+  seasonAdd(user, ev === 'kill' ? (d.boss ? SP.boss : d.elite ? SP.elite : SP.kill) * n : ev === 'floor' ? SP.floor : SP[ev] ? SP[ev] * n : 0);
   if (RANK_OF[ev]) rankAdd(user, RANK_OF[ev], PROG.BOARDS[RANK_OF[ev]].max ? d.value : n);
   // tablón
   ensureBoard(p);
@@ -703,6 +711,88 @@ function checkAchievements(room, user) {
   }
   if (got) broadcast(room, { t: 'profile', id: user.id, xp: p.xp, gold: p.gold, level: levelOf(user) });
   return got;
+}
+
+// ---------- Hazañas de la taberna (lo último que ha pasado) ----------
+function feat(room, text) {
+  const key = 'feats:' + room.name;
+  const list = store.meta(key) || [];
+  list.unshift({ ts: Date.now(), text });
+  store.setMeta(key, list.slice(0, 25));
+}
+function tavernView(room, user) {
+  const f = room.fund || { gold: 0, donors: {} };
+  const donors = Object.values(f.donors || {}).sort((a, b) => b.gold - a.gold).slice(0, 8);
+  return { t: 'tavern:info', gold: f.gold, level: PROG.tavernLevel(f), bonus: PROG.tavernBonus(f), donors, feats: store.meta('feats:' + room.name) || [], mine: ((f.donors || {})[user.cid] || {}).gold || 0 };
+}
+function donate(room, user, amount) {
+  const n = Math.max(1, Math.min(user.profile.gold, Math.floor(Number(amount) || 0)));
+  if (!n || user.profile.gold < n) return false;
+  const before = PROG.tavernLevel(room.fund);
+  user.profile.gold -= n;
+  room.fund = room.fund || { gold: 0, donors: {} };
+  room.fund.donors = room.fund.donors || {};
+  room.fund.gold += n;
+  const d = room.fund.donors[user.cid] || { name: user.name, gold: 0 };
+  d.name = user.name; d.gold += n; room.fund.donors[user.cid] = d;
+  saveRoom(room); saveUser(user); sendMe(user);
+  broadcast(room, { t: 'profile', id: user.id, xp: user.profile.xp, gold: user.profile.gold, level: levelOf(user) });
+  const after = PROG.tavernLevel(room.fund);
+  if (after > before) {
+    const L = PROG.TAVERN_LEVELS[after - 1];
+    system(room, `🎉 ¡La taberna mejora! ${L.icon} ${L.name}: ${L.text} para todos los que jueguen aquí.`);
+    feat(room, `${L.icon} La taberna consigue «${L.name}» gracias a todos.`);
+  }
+  return true;
+}
+
+// ---------- Mercado entre jugadores (común a todos los servidores) ----------
+function marketList() { return store.meta('market') || []; }
+function marketView(user) { return { t: 'market', list: marketList().map((l) => ({ id: l.id, item: l.item, price: l.price, seller: l.sellerName, mine: l.cid === user.cid })), fee: PROG.MARKET.fee }; }
+function payOffline(cid, pid, slot, gold) {
+  // si el vendedor está conectado, el oro le llega al momento; si no, se le apunta en su cuenta guardada
+  for (const r of rooms.values()) for (const u of r.users.values()) if (u.cid === cid) { u.profile.gold += gold; saveUser(u); sendMe(u); send(u.ws, { t: 'toast', text: `🏪 Has vendido algo en el mercado: +${gold} 🪙` }); return; }
+  const acc = store.player(pid);
+  if (acc && acc.slots && acc.slots[slot]) { acc.slots[slot].gold = (acc.slots[slot].gold || 0) + gold; acc.slots[slot].marketNews = (acc.slots[slot].marketNews || 0) + gold; store.setPlayer(pid, acc); }
+}
+
+// ---------- Temporadas ----------
+function seasonAdd(user, pts) {
+  if (!pts) return;
+  const key = 'season:' + PROG.seasonKey();
+  const all = store.meta(key) || {};
+  const cur = all[user.cid] || { name: user.name, pts: 0, cls: user.profile.char.cls };
+  cur.name = user.name; cur.cls = user.profile.char.cls;
+  cur.pts = Math.round((cur.pts + pts) * 10) / 10;
+  all[user.cid] = cur;
+  store.setMeta(key, all);
+}
+function seasonView(user) {
+  const sk = PROG.seasonKey();
+  const rows = Object.entries(store.meta('season:' + sk) || {}).map(([cid, r]) => ({ ...r, pts: Math.floor(r.pts), me: cid === user.cid })).sort((a, b) => b.pts - a.pts);
+  rows.forEach((r, i) => { r.pos = i + 1; });
+  const mine = rows.find((r) => r.me) || null;
+  const last = Object.entries(store.meta('season:' + (sk - 1)) || {}).map(([, r]) => ({ name: r.name, pts: Math.floor(r.pts) })).sort((a, b) => b.pts - a.pts).slice(0, 3);
+  return { t: 'season', id: sk, ends: PROG.seasonEnds(), top: rows.slice(0, 15), mine, last, aura: user.profile.aura || null };
+}
+// premios de la temporada anterior (se entregan al entrar)
+function seasonPrize(room, user) {
+  const p = user.profile, sk = PROG.seasonKey() - 1;
+  if (sk < 0 || (p.seasonPaid || -1) >= sk) return;
+  p.seasonPaid = sk;
+  const rows = Object.entries(store.meta('season:' + sk) || {}).sort((a, b) => b[1].pts - a[1].pts);
+  const i = rows.findIndex(([cid]) => cid === user.cid);
+  if (i < 0 || rows[i][1].pts < PROG.SEASON.minPts) return saveUser(user);
+  const prize = PROG.SEASON_PRIZES.find((z) => i + 1 <= z.rank);
+  const title = `${prize.title} ${PROG.seasonNumber(sk)}`;
+  p.extraTitles = [...new Set([...(p.extraTitles || []), title])];
+  const order = ['temporada', 'bronce', 'plata', 'oro'];
+  if (!p.aura || order.indexOf(prize.aura) > order.indexOf(p.aura)) p.aura = prize.aura;
+  user.look = lookFrom(p);
+  saveUser(user); sendMe(user);
+  broadcast(room, { t: 'look', id: user.id, look: user.look });
+  system(room, `🏆 ${user.name} recibe «${title}» por la temporada ${PROG.seasonNumber(sk)} (puesto ${i + 1}).`);
+  feat(room, `🏆 ${user.name}: «${title}».`);
 }
 
 function rankAdd(user, cat, v) {
@@ -755,7 +845,8 @@ function claimLogin(room, user) {
   store.setPlayer(user.pid, acc);
   saveUser(user); sendMe(user);
   send(user.ws, { t: 'login:claimed', streak: st.streak, got });
-  if (st.streak === 7) system(room, `🎁 ${user.name} completa una racha de 7 días y abre el gran cofre.`);
+  seasonAdd(user, PROG.SEASON_PTS.daily);
+  if (st.streak === 7) { system(room, `🎁 ${user.name} completa una racha de 7 días y abre el gran cofre.`); feat(room, `🎁 ${user.name} completó una racha de 7 días.`); }
 }
 
 function giveMats(room, user, mats, silent) {
@@ -905,8 +996,10 @@ function raidDone(room, inst) {
   for (const k of Object.keys(all)) if (Number(k) < week - 4) delete all[k]; // sólo las últimas semanas
   store.setMeta('raids', all);
   const mm = Math.floor(time / 60), ss = String(time % 60).padStart(2, '0');
-  system(room, `🏆 ${heroes.map((u) => u.name).join(', ')} superan el Asalto semanal en ${mm}:${ss}${pos ? ` (puesto ${pos} de la semana)` : ''}.`);
+  system(room, `🏆 ${heroes.map((u) => u.name).join(', ')} superan el Asalto semanal en ${mm}:${ss}${pos <= 20 ? ` (puesto ${pos} de la semana)` : ''}.`);
+  feat(room, `⚔️ ${heroes.map((u) => u.name).join(', ')} superaron el Asalto semanal en ${mm}:${ss}.`);
   // cofre semanal: una vez por semana y personaje
+  for (const u of heroes) seasonAdd(u, PROG.SEASON_PTS.raid);
   for (const u of heroes) {
     if (u.profile.raidWeek === week) { send(u.ws, { t: 'dwhisper', text: 'Ya abriste el cofre del Asalto esta semana: hoy sólo cuenta para la clasificación.' }); continue; }
     u.profile.raidWeek = week;
@@ -1180,7 +1273,11 @@ wss.on('connection', (ws) => {
         history: room.history,
       });
       sendMe(user);
-      setTimeout(() => { if (user.ws.readyState === 1) offerLogin(user); }, 2500);
+      setTimeout(() => {
+        if (user.ws.readyState !== 1) return;
+        offerLogin(user); seasonPrize(room, user);
+        if (user.profile.marketNews) { send(user.ws, { t: 'toast', text: `🏪 Mientras no estabas vendiste cosas en el mercado: +${user.profile.marketNews} 🪙` }); delete user.profile.marketNews; saveUser(user); }
+      }, 2500);
       if (profile.statsReset) {
         delete profile.statsReset;
         store.setPlayer(pid, acc);
@@ -1771,13 +1868,68 @@ wss.on('connection', (ws) => {
       case 'title:set': {
         const p = user.profile;
         const title = msg.title ? String(msg.title) : null;
-        if (title && !PROG.ACHIEVEMENTS.some((a) => a.title === title && p.achievements.includes(a.id))) return;
+        if (title && !PROG.ACHIEVEMENTS.some((a) => a.title === title && p.achievements.includes(a.id)) && !(p.extraTitles || []).includes(title)) return;
         p.title = title;
         saveUser(user); sendMe(user);
         broadcast(room, { t: 'title', id: user.id, title });
         break;
       }
       case 'ranks:get': { if (allow(0.3)) send(ws, ranksView(user)); break; }
+      case 'season:get': { if (allow(0.3)) send(ws, seasonView(user)); break; }
+      case 'tavern:get': { if (allow(0.3)) send(ws, tavernView(room, user)); break; }
+      case 'tavern:donate': {
+        if (!allow(1)) return;
+        if (!donate(room, user, msg.gold)) return err('No tienes oro suficiente.');
+        send(ws, tavernView(room, user));
+        break;
+      }
+      case 'market:get': { if (allow(0.3)) send(ws, marketView(user)); break; }
+      case 'market:sell': {
+        if (!allow(1)) return;
+        if (user.where || user.trade) return err('Vende desde la taberna.');
+        const p = user.profile, i = p.bag.findIndex((x) => x.id === msg.id);
+        const price = Math.floor(Number(msg.price) || 0);
+        if (i < 0) return;
+        if (price < 1 || price > PROG.MARKET.maxPrice) return err('Pon un precio entre 1 y 1.000.000 de oro.');
+        const list = marketList();
+        if (list.filter((l) => l.cid === user.cid).length >= PROG.MARKET.maxPerChar) return err(`Como mucho ${PROG.MARKET.maxPerChar} objetos a la venta a la vez.`);
+        const [item] = p.bag.splice(i, 1);
+        list.unshift({ id: 'm' + crypto.randomBytes(5).toString('hex'), item, price, cid: user.cid, pid: user.pid, slot: user.slot, sellerName: user.name, at: Date.now() });
+        store.setMeta('market', list.slice(0, 300));
+        saveUser(user); sendMe(user);
+        send(ws, marketView(user));
+        if (['raro', 'unico', 'conjunto'].includes(item.rarity) || item.leg) system(room, `🏪 ${user.name} pone a la venta «${item.name}» por ${price} 🪙.`);
+        break;
+      }
+      case 'market:buy': {
+        if (!allow(1)) return;
+        if (user.where || user.trade) return err('Compra desde la taberna.');
+        const list = marketList(), i = list.findIndex((l) => l.id === msg.id);
+        if (i < 0) return err('Ese objeto ya se ha vendido.');
+        const L = list[i];
+        if (L.cid === user.cid) return err('Es tuyo: si quieres, retíralo.');
+        if (user.profile.gold < L.price) return err('No tienes oro suficiente.');
+        if (user.profile.bag.length >= RULES.BAG_SIZE) return err('Tienes la mochila llena.');
+        list.splice(i, 1); store.setMeta('market', list);
+        user.profile.gold -= L.price;
+        user.profile.bag.push(L.item);
+        saveUser(user); sendMe(user);
+        broadcast(room, { t: 'profile', id: user.id, xp: user.profile.xp, gold: user.profile.gold, level: levelOf(user) });
+        payOffline(L.cid, L.pid, L.slot, Math.floor(L.price * (1 - PROG.MARKET.fee)));
+        send(ws, marketView(user));
+        break;
+      }
+      case 'market:cancel': {
+        if (!allow(1)) return;
+        const list = marketList(), i = list.findIndex((l) => l.id === msg.id && l.cid === user.cid);
+        if (i < 0) return;
+        if (user.profile.bag.length >= RULES.BAG_SIZE) return err('Tienes la mochila llena.');
+        const [L] = list.splice(i, 1); store.setMeta('market', list);
+        user.profile.bag.push(L.item);
+        saveUser(user); sendMe(user);
+        send(ws, marketView(user));
+        break;
+      }
       case 'room:get': {
         const u = msg.id ? room.users.get(msg.id) : user;
         if (u && allow(0.3)) send(ws, roomInfo(u));
