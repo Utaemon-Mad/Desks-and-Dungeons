@@ -494,7 +494,7 @@
     const wrap = el('div', 'skills');
     for (const a of d.abilities) {
       const r = el('div', 'skill-row' + (a.ready ? '' : ' locked'));
-      r.append(el('span', 'skill-ic', a.icon));
+      { const ic = el('span', 'skill-ic'); if (window.ICONS) ic.appendChild(ICONS.skill(a, 26)); else ic.textContent = a.icon; r.append(ic); }
       const t = el('div', 'skill-t');
       t.append(el('b', '', `${a.name}${a.ready ? '' : ` · nivel ${a.unlock}`}`), el('small', '', `${RULES.CLASSES[a.cls].name} · ${a.cost} energía · ${a.cd / 1000} s · ${a.desc}`));
       r.appendChild(t);

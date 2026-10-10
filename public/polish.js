@@ -22,6 +22,16 @@
     if (b) dim();
   }, true);
 
+  // ---------- Iconos propios en la barra inferior (en vez de emojis) ----------
+  if (window.ICONS) {
+    for (const b of document.querySelectorAll('#bar .tool[data-act]')) {
+      const ico = b.querySelector('.ico');
+      if (!ico || !ICONS.names.includes(b.dataset.act)) continue;
+      ico.textContent = '';
+      ico.appendChild(ICONS.svg(b.dataset.act, 30, '#f0c060'));
+    }
+  }
+
   // ---------- Subir de nivel ----------
   const lvl = el('div', 'lvlup hidden');
   lvl.innerHTML = '<div class="lvl-rays"></div><div class="lvl-card"><small>¡SUBES DE NIVEL!</small><b></b><span></span></div>';

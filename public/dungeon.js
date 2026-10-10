@@ -417,7 +417,8 @@
       const atk = document.createElement('div');
       atk.className = 'act-btn attack';
       atk.title = `Ataque básico: ${d.weapon.name} (${d.dmg[0]}–${d.dmg[1]}). Clic en un enemigo.`;
-      atk.innerHTML = '<span class="ic">⚔️</span><span class="lb"></span><span class="cd"></span>';
+      atk.innerHTML = '<span class="ic"></span><span class="lb"></span><span class="cd"></span>';
+      atk.querySelector('.ic').appendChild(window.ICONS ? ICONS.svg('sword', 26, '#e8e4d8') : document.createTextNode('⚔️'));
       atk.querySelector('.lb').textContent = d.weapon.name;
       bar.appendChild(atk);
     }
@@ -429,7 +430,7 @@
       b.title = `${a.name} (${i + 1}) · ${a.cost} energía · ${a.cd / 1000}s\n${a.desc}`;
       b.innerHTML = '<span class="k"></span><span class="ic"></span><span class="lb"></span><span class="cd"></span>';
       b.querySelector('.k').textContent = i + 1;
-      b.querySelector('.ic').textContent = a.icon;
+      b.querySelector('.ic').appendChild(window.ICONS ? ICONS.skill(a, 26) : document.createTextNode(a.icon));
       b.querySelector('.lb').textContent = a.name;
       b.onclick = () => castSkill(a);
       bar.appendChild(b);
