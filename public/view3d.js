@@ -177,8 +177,15 @@
     spot.shadow.bias = -0.0015;
     spot.shadow.camera.near = 0.5; spot.shadow.camera.far = 16;
     scene.add(spot); scene.add(spot.target);
+    // la antorcha más cercana al héroe proyecta sombras de verdad (sólo en calidad alta: cuesta 6 pasadas)
+    const torch = new THREE.PointLight('#ff9a40', 0, 6, 1.6);
+    torch.castShadow = true;
+    torch.shadow.mapSize.set(512, 512);
+    torch.shadow.bias = -0.004;
+    torch.shadow.camera.near = 0.1; torch.shadow.camera.far = 8;
+    scene.add(torch);
     const stage = {
-      scene, camera, hemi, sun, pool, spot, target: new THREE.Vector3(), offset: new THREE.Vector3(...(o.offset || [0, 9.5, 7.2])),
+      scene, camera, hemi, sun, pool, spot, torch, target: new THREE.Vector3(), offset: new THREE.Vector3(...(o.offset || [0, 9.5, 7.2])),
       resize() { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); },
       lookAt(x, z, y = 0) {
         stage.target.set(x, y, z);
@@ -194,8 +201,18 @@
           spot.position.set(sh.x - 0.6, sh.y + 4.5, sh.z + 1.6);
           spot.target.position.set(sh.x, 0, sh.z);
           spot.color.set(sh.color); spot.intensity = sh.intensity; spot.distance = sh.dist + 6;
+          spot.angle = sh.angle || 0.95; spot.penumbra = sh.penumbra !== undefined ? sh.penumbra : 0.65;
         } else spot.intensity = 0;
         sources = sources.filter((s) => s !== sh);
+        // fire: llama de antorcha o brasero; la más cercana (a menos de 7 casillas) se lleva la sombra
+        let ft = null;
+        if (Q.name === 'alta' && Q.shadows) for (const s of sources) if (s.fire) { const d = (s.x - t.x) ** 2 + (s.z - t.z) ** 2; if (d < 49 && (!ft || d < ft.d)) ft = { s, d }; }
+        torch.castShadow = !!ft;
+        if (ft) {
+          const s = ft.s;
+          torch.position.set(s.x, s.y, s.z); torch.color.set(s.color); torch.intensity = s.intensity; torch.distance = s.dist;
+          sources = sources.filter((x) => x !== s);
+        } else torch.intensity = 0;
         const sorted = sources.map((s) => ({ s, d: (s.x - t.x) ** 2 + (s.z - t.z) ** 2 - (s.shadow ? 1e6 : 0) })).sort((a, b) => a.d - b.d);
         for (let i = 0; i < pool.length; i++) {
           const L = pool[i], it = i < Q.lights ? sorted[i] : null;
@@ -228,17 +245,49 @@
 
   function show(on) { canvas.classList.toggle('hidden', !on); }
 
+  // Neblina baja que se arrastra por el suelo (ruido animado); color y densidad por tema
+  const MistShader = {
+    vertexShader: 'varying vec2 vW; void main(){ vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xz; gl_Position = projectionMatrix * viewMatrix * w; }',
+    fragmentShader: [
+      'uniform float time, opacity; uniform vec3 color; uniform vec2 hero; varying vec2 vW;',
+      'float h(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
+      'float n(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);',
+      '  return mix(mix(h(i), h(i + vec2(1.0, 0.0)), f.x), mix(h(i + vec2(0.0, 1.0)), h(i + vec2(1.0, 1.0)), f.x), f.y); }',
+      'float fbm(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a * n(p); p = p * 2.03 + 7.1; a *= 0.5; } return v; }',
+      'void main(){',
+      '  vec2 p = vW * 0.28;',
+      '  float m = fbm(p + vec2(time * 0.05, time * 0.03)) * fbm(p * 1.7 - vec2(time * 0.04, -time * 0.02) + 3.0);',
+      '  float lit = 0.22 + 0.9 * exp(-dot(vW - hero, vW - hero) / 7.0);',
+      '  float a = smoothstep(0.12, 0.5, m) * opacity * (0.5 + 0.5 * lit);',
+      '  gl_FragColor = vec4(color * (0.6 + m) * lit, a);',
+      '}'].join('\n'),
+  };
+  function mistLayer(map, color, opacity = 0.35, y = 0.14) {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: { time: { value: 0 }, opacity: { value: opacity }, color: { value: new THREE.Color(color) }, hero: { value: new THREE.Vector2(-99, -99) } },
+      vertexShader: MistShader.vertexShader, fragmentShader: MistShader.fragmentShader,
+      transparent: true, depthWrite: false, fog: false,
+    });
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(map.w, map.h), mat);
+    m.rotation.x = -Math.PI / 2;
+    m.position.set(map.w / 2, y, map.h / 2);
+    m.renderOrder = 4;
+    m.layers.set(1);
+    // la neblina brilla donde llega el farol del héroe y se apaga en lo oscuro
+    return { mesh: m, update(t, hx, hz) { mat.uniforms.time.value = t; if (hx !== undefined) mat.uniforms.hero.value.set(hx, hz); } };
+  }
+
   // ======================================================================
   //  Mazmorras y mundo abierto
   // ======================================================================
   const WALL_H = 1.3;
   const THEME = {
-    cripta: { floor: ['#4a4c56', '#40424c'], seam: '#2a2b32', wall: '#565862', top: '#141418', fog: '#06060a', liquid: '#1a3a4a', sky: '#5a6aa0' },
-    cuevas: { floor: ['#5a4a38', '#4e4030'], seam: '#3a2e22', wall: '#5e4c3a', top: '#16110c', fog: '#080604', liquid: '#1e3a5a', sky: '#8a7a5a' },
-    fortaleza: { floor: ['#504640', '#5a4a36'], seam: '#2e2622', wall: '#625852', top: '#151212', fog: '#080606', liquid: '#1e3a5a', sky: '#8a6a5a' },
-    nido: { floor: ['#36402e', '#3c4632'], seam: '#222a1c', wall: '#44523a', top: '#0e120c', fog: '#040604', liquid: '#2a3a1a', sky: '#5a7a4a' },
-    volcan: { floor: ['#2e2628', '#342a2c'], seam: '#1a1214', wall: '#463434', top: '#100a0a', fog: '#0a0404', liquid: '#c8400a', sky: '#a04a2a' },
-    abismo: { floor: ['#2a1a1c', '#30181a'], seam: '#120808', wall: '#4a2a2a', top: '#0e0606', fog: '#0a0202', liquid: '#e0400a', sky: '#802010' },
+    cripta: { floor: ['#4a4c56', '#40424c'], seam: '#2a2b32', wall: '#565862', top: '#141418', fog: '#06060a', liquid: '#1a3a4a', sky: '#5a6aa0', amb: 0.16, ground: '#0c1018', mist: '#8a9ac8', mistA: 0.32 },
+    cuevas: { floor: ['#5a4a38', '#4e4030'], seam: '#3a2e22', wall: '#5e4c3a', top: '#16110c', fog: '#080604', liquid: '#1e3a5a', sky: '#8a7a5a', amb: 0.15, ground: '#140e08', mist: '#a89878', mistA: 0.22 },
+    fortaleza: { floor: ['#504640', '#5a4a36'], seam: '#2e2622', wall: '#625852', top: '#151212', fog: '#080606', liquid: '#1e3a5a', sky: '#8a6a5a', amb: 0.17, ground: '#140c08', mist: '#a09080', mistA: 0.18 },
+    nido: { floor: ['#36402e', '#3c4632'], seam: '#222a1c', wall: '#44523a', top: '#0e120c', fog: '#040604', liquid: '#2a3a1a', sky: '#5a7a4a', amb: 0.14, ground: '#0a1008', mist: '#8ac87a', mistA: 0.3 },
+    volcan: { floor: ['#2e2628', '#342a2c'], seam: '#1a1214', wall: '#463434', top: '#100a0a', fog: '#0a0404', liquid: '#c8400a', sky: '#a04a2a', amb: 0.15, ground: '#4a1a08', mist: '#ff7a3a', mistA: 0.22 },
+    abismo: { floor: ['#2a1a1c', '#30181a'], seam: '#120808', wall: '#4a2a2a', top: '#0e0606', fog: '#0a0202', liquid: '#e0400a', sky: '#802010', amb: 0.13, ground: '#3a0a06', mist: '#c83a2a', mistA: 0.28 },
   };
   // Color de cada casilla del mundo (la textura del suelo se pinta con estos colores y algo de ruido)
   const WORLD_COLORS = {
@@ -1023,5 +1072,5 @@
     return { stop() { alive = false; cancelAnimationFrame(raf); r.dispose(); } };
   }
 
-  root.VIEW3D = { snapshot, itemArt, makeStage, show, buildMap, fogLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
+  root.VIEW3D = { snapshot, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
 })(this);

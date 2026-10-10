@@ -404,7 +404,7 @@
   const doorObjs = []; // puertas de la mazmorra: { obj, i, leaf }
   const models = new Map();   // id -> { obj, key, hitScale }
   const lootObjs = new Map(), chestObjs = new Map(), teleObjs = new Map(), projObjs = new Map();
-  let portalObj = null, fogDirty = true, seenCount = -1;
+  let portalObj = null, fogDirty = true, seenCount = -1, mist = null;
   const fx3d = [];
   let fxp = null, dustp = null, wx = null;     // chispas (aditivas), polvo/humo y clima
   const herbObjs = new Map(), corpses = [];
@@ -424,6 +424,7 @@
     for (const d of doorObjs) stage.scene.remove(d.obj);
     doorObjs.length = 0;
     if (fog) { stage.scene.remove(fog.mesh); fog = null; }
+    if (mist) { stage.scene.remove(mist.mesh); mist = null; }
     for (const m of [...models.values(), ...lootObjs.values(), ...chestObjs.values(), ...teleObjs.values(), ...projObjs.values()]) stage.scene.remove(m.obj || m);
     models.clear(); lootObjs.clear(); chestObjs.clear(); teleObjs.clear(); projObjs.clear();
     for (const f of fx3d) stage.scene.remove(f.obj);
@@ -449,10 +450,17 @@
     const bg = world ? '#0a1020' : T.fog;
     stage.scene.background = new THREE.Color(bg);
     stage.scene.fog = new THREE.Fog(bg, world ? 16 : 13, world ? 34 : 26);
-    stage.hemi.intensity = world ? 0.62 : 0.3;
+    // mazmorras oscuras: poca luz ambiente (con el color del tema) y que manden las antorchas y el farol
+    stage.hemi.intensity = world ? 0.62 : game.map.kind === 'arena' ? 0.3 : T.amb || 0.16;
     stage.grade = world ? null : GRADES[game.map.kind === 'arena' ? 'arena' : game.map.theme] || null;
     stage.hemi.color.set(world ? '#7a8ac0' : T.sky);
-    stage.hemi.groundColor.set(world ? '#2a2a1a' : '#140c0a');
+    stage.hemi.groundColor.set(world ? '#2a2a1a' : T.ground || '#140c0a');
+    // neblina baja que se arrastra por el suelo
+    if (!world && T.mist && (!DD.gfx || DD.gfx.weather !== false)) {
+      mist = VIEW3D.mistLayer(game.map, T.mist, T.mistA, 0.1);
+      stage.scene.add(mist.mesh);
+      fog.mesh.position.y = Math.max(fog.mesh.position.y, 0.16); // lo no explorado tapa también la neblina
+    }
     // los personajes del mundo
     for (const n of game.map.npcs || []) game.ents.set('npc:' + n.id, { id: 'npc:' + n.id, npc: n.id, kind: 'npc', name: n.name, look: n.look, x: n.x, y: n.y, rx: n.x, ry: n.y, fx: n.x, fy: n.y, t0: 0, dur: 1, dir: 'S', alive: true, static: true });
     // puertas de madera en los umbrales: cerradas hasta que llega un héroe
@@ -704,6 +712,7 @@
       } else if (was && e.kind === 'hero') puff(e.rx + 0.5, e.ry + 0.5, dustColor(e.x, e.y), 2, 0.3);
     }
     const me = game.ents.get(DD.myId);
+    const dark = map.kind === 'dungeon';
     // cámara que sigue al héroe
     const tx = me ? me.rx + 0.5 : map.w / 2, tz = me ? me.ry + 0.5 : map.h / 2;
     if (!game.camInit) { game.cam = { x: tx, y: tz }; game.camInit = !!me; }
@@ -911,6 +920,9 @@
       else { const e = f.id && game.ents.get(f.id); const px = e ? e.rx : f.x, pz = e ? e.ry : f.y; F.obj.position.set(px + 0.5, 0.1 + k * (f.kind === 'heal' ? 1.2 : 0.3), pz + 0.5); F.obj.scale.setScalar(0.5 + k); F.obj.material.opacity = 0.9 * (1 - k); }
     }
     // partículas y clima
+    if (mist) mist.update(now / 1000, me ? me.rx + 0.5 : undefined, me ? me.ry + 0.5 : undefined);
+    // motas de polvo que flotan en la luz del farol
+    if (dark && me && (!DD.gfx || DD.gfx.weather !== false) && Math.random() < 0.35) fxp.emit({ x: me.rx + 0.5 + (Math.random() - 0.5) * 3.5, y: 0.3 + Math.random() * 1.4, z: me.ry + 0.5 + (Math.random() - 0.5) * 3.5, vx: (Math.random() - 0.5) * 0.08, vy: (Math.random() - 0.3) * 0.06, color: '#ffe0b0', size: 0.03, life: 3.5, alpha: 0.45 });
     fxp.update(dt); dustp.update(dt);
     const zoneId = map.zones && me ? Number(map.zones[me.y * map.w + me.x]) || 0 : 0;
     const wantWx = !DD.gfx || DD.gfx.weather ? D.weatherFor(map, zoneId, now) : 'none';
@@ -923,11 +935,17 @@
       if (p) spark(p.light.x + (Math.random() - 0.5) * 0.2, p.light.z - 0.2, Math.random() < 0.5 ? '#ffb03a' : '#ff6a1a', true);
     }
     // luces: las del mapa, el farol del héroe y la magia
-    const flick = (seed) => 0.88 + Math.sin(now / 110 + seed) * 0.08 + Math.sin(now / 37 + seed * 2) * 0.04;
+    // parpadeo de llama: dos ondas y un temblor rápido; la llama también se mueve un poco (la sombra baila)
+    const flick = (seed) => 0.84 + Math.sin(now / 110 + seed) * 0.08 + Math.sin(now / 37 + seed * 2) * 0.05 + Math.sin(now / 13 + seed * 5) * 0.03;
+    const isFire = (c) => /^#ff[5-b]/i.test(c || '');
     const L = [];
-    for (const l of built.lights) L.push({ ...l, intensity: l.intensity * flick(l.x) });
-    for (const p of built.props || []) if (p.light && p.o.visible) L.push({ ...p.light, intensity: p.light.intensity * flick(p.light.x * 3 + p.light.z) });
-    if (me) { L.push({ x: me.rx + 0.5, y: 1.9, z: me.ry + 0.5, color: '#ffd8a8', intensity: map.kind === 'world' ? 1.3 : 1.6, dist: map.kind === 'world' ? 9 : 7.5, shadow: true }); L.push({ x: me.rx + 0.5, y: 1.4, z: me.ry + 0.9, color: '#ffc890', intensity: 0.9, dist: 6 }); }
+    for (const l of built.lights) L.push({ ...l, intensity: l.intensity * flick(l.x), fire: isFire(l.color) });
+    for (const p of built.props || []) {
+      if (!p.light || !p.o.visible) continue;
+      const fire = isFire(p.light.color), sd = p.light.x * 3 + p.light.z;
+      L.push({ ...p.light, x: p.light.x + (fire ? Math.sin(now / 90 + sd) * 0.03 : 0), z: p.light.z + (fire ? Math.cos(now / 70 + sd) * 0.03 : 0), intensity: p.light.intensity * flick(sd), dist: p.light.dist * (dark ? 0.85 : 1), fire });
+    }
+    if (me) { L.push({ x: me.rx + 0.5, y: 1.9, z: me.ry + 0.5, color: '#ffd8a8', intensity: map.kind === 'world' ? 1.3 : dark ? 1.5 : 1.6, dist: map.kind === 'world' ? 9 : 7.5, shadow: true, angle: dark ? 0.62 : 0.95, penumbra: dark ? 0.85 : 0.65 }); L.push({ x: me.rx + 0.5, y: 1.4, z: me.ry + 0.9, color: '#ffc890', intensity: dark ? 0.8 : 0.9, dist: dark ? 4 : 6 }); }
     for (const e of game.ents.values()) if (e.kind === 'hero' && e.id !== DD.myId) L.push({ x: e.rx + 0.5, y: 1.6, z: e.ry + 0.5, color: '#ffd0a0', intensity: 1, dist: 5 });
     for (const [, o] of lootObjs) if (o.userData.light) L.push({ x: o.position.x, y: 0.6, z: o.position.z, color: o.userData.light, intensity: 0.7, dist: 2.2 });
     for (const F of fx3d) if ((F.f.kind === 'blast' || F.f.kind === 'nova') && now >= F.start) L.push({ x: F.f.x + 0.5, y: 0.8, z: F.f.y + 0.5, color: fxColor(F.f), intensity: 3 * (1 - (now - F.start) / F.dur), dist: 6 });
