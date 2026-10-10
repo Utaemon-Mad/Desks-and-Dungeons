@@ -597,3 +597,10 @@ html, body { overscroll-behavior: none; -webkit-touch-callout: none; }
 .tip-line.bad { color: #ff5a4a; }
 .tip-line.muted { opacity: .7; font-size: 12px; }
 .lu-val.max { color: var(--gold); }
+
+/* rasgos de goblin en el editor */
+.gob-picks { display: grid; gap: 6px; }
+.gob-field .field-title { font-size: 13px; margin: 0 0 2px; }
+.gob-field .class-pick { grid-template-columns: repeat(auto-fill, minmax(86px, 1fr)); gap: 4px; }
+.gob-field .class-pick button { font-size: 13px; padding: 5px 3px; }
+.gob-rand { float: right; padding: 2px 8px; font-size: 13px; }

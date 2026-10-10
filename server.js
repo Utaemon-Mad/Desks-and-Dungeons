@@ -195,9 +195,9 @@ function onlineChar(cid) {
 
 function lookFrom(profile) {
   const l = profile.char.look || {};
-  return { ...MAP.cleanLook({ cls: profile.char.cls, species: l.species, sex: l.sex, hs: l.hs, skin: l.skin, hair: l.hair }), gear: RULES.gearLook(profile.equip) };
+  return { ...MAP.cleanLook({ cls: profile.char.cls, species: l.species, sex: l.sex, hs: l.hs, skin: l.skin, hair: l.hair, gob: l.gob }), gear: RULES.gearLook(profile.equip) };
 }
-const charLook = (look) => ({ species: look.species, sex: look.sex, hs: look.hs, skin: look.skin, hair: look.hair });
+const charLook = (look) => { const c = { species: look.species, sex: look.sex, hs: look.hs, skin: look.skin, hair: look.hair }; if (look.gob) c.gob = { ...look.gob }; return c; };
 
 function derive(profile) { return RULES.derive(profile); }
 

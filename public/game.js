@@ -2153,7 +2153,7 @@
 
   // ---------- Editor de personaje ----------
   // create: héroe nuevo en una casilla (con el reparto de los primeros puntos); edit: cambiar aspecto, raza o clase
-  let edMode = 'create', edRot = 0.55;
+  let edMode = 'create', edRot = 0.55, edZoom = false;
   const edAlloc = Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0]));
   const starterCache = {};
   const fmtMods = (mods) => Object.entries(mods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${RULES.STATS.find((x) => x.id === k).abbr}`).join(' ');
@@ -2211,6 +2211,23 @@
     const K = RULES.CLASSES[look.cls];
     $('#login-sheet-note').textContent = `${K.desc} Prefiere: ${K.weapons.map((w) => (RULES.WEAPONS[w] || RULES.OFFHANDS[w]).name.toLowerCase()).join(', ')}.`;
     pickRow($('#hs-pick'), MAP.HAIRSTYLES[look.sex].map((h) => ({ id: h.id, label: h.name })), look.hs, (id) => { look.hs = id; });
+    // goblins: su propio modelo de cabeza, con sus rasgos (el peinado sale de aquí y no de la lista general)
+    const isGob = look.species === 'goblin';
+    $('#hs-pick').classList.toggle('hidden', isGob);
+    $('#hs-title').textContent = isGob ? 'Colores' : 'Peinado';
+    $('#gob-sec').classList.toggle('hidden', !isGob);
+    if (isGob) {
+      look.gob = MAP.cleanGoblin(look.gob, look.sex);
+      const box = $('#gob-picks'); box.innerHTML = '';
+      for (const k of MAP.GOBLIN_KEYS) {
+        const F = MAP.GOBLIN[k];
+        const wrap = document.createElement('div'); wrap.className = 'gob-field';
+        wrap.innerHTML = '<div class="field-title"></div><div class="class-pick small"></div>';
+        wrap.firstChild.textContent = F.name;
+        box.appendChild(wrap);
+        pickRow(wrap.lastChild, F.opts.map((label, i) => ({ id: i, label })), look.gob[k], (id) => { look.gob[k] = id; });
+      }
+    } else delete look.gob;
     const skinEl = $('#skin-pick'); skinEl.innerHTML = '';
     MAP.skinsFor(look.species).forEach((i) => {
       const b = document.createElement('button'); b.type = 'button';
@@ -2256,7 +2273,7 @@
     const gear = RULES.gearLook(equip);
     const pv = $('#preview'), g = pv.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pv.width, pv.height);
-    try { g.drawImage(VIEW3D.snapshot({ ...look, gear }, pv.width, pv.height, 'full', edRot), 0, 0); } catch { drawHero(g, 130, 300, { ...look, gear }, { dir: 'E', t: 0 }); }
+    try { g.drawImage(VIEW3D.snapshot({ ...look, gear }, pv.width, pv.height, edZoom ? 'bust' : 'full', edRot), 0, 0); } catch { drawHero(g, 130, 300, { ...look, gear }, { dir: 'E', t: 0 }); }
     const R = RULES.RACES[look.species];
     $('#ed-summary').textContent = `${R.name}${look.sex === 'f' ? ' · mujer' : ''} · ${K.icon} ${K.name}`;
     const d = RULES.derive({ xp: 0, char: edMode === 'create' ? edChar() : { ...edChar(), alloc: Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0])) }, equip, bag: [], buffs: {} });
@@ -2266,6 +2283,16 @@
   }
   $('#ed-rl').addEventListener('click', () => { edRot -= 0.6; buildPickers(); });
   $('#ed-rr').addEventListener('click', () => { edRot += 0.6; buildPickers(); });
+  // primer plano de la cara en la vista previa (para afinar los rasgos)
+  $('#ed-zoom').addEventListener('click', () => { edZoom = !edZoom; $('#ed-zoom').classList.toggle('on', edZoom); buildPickers(); });
+  // goblin al azar: todos los rasgos, el tono de piel y el color de pelo
+  $('#gob-rand').addEventListener('click', () => {
+    const r = (n) => Math.floor(Math.random() * n);
+    look.gob = Object.fromEntries(MAP.GOBLIN_KEYS.map((k) => [k, r(MAP.GOBLIN[k].opts.length)]));
+    const skins = MAP.skinsFor('goblin'); look.skin = skins[r(skins.length)];
+    look.hair = r(MAP.HAIRS.length);
+    buildPickers();
+  });
 
   $('#login-form').addEventListener('submit', async (e) => {
     e.preventDefault();

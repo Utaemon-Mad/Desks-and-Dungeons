@@ -185,7 +185,7 @@
       <div class="ed-cols">
         <div class="ed-left">
           <canvas id="preview" width="260" height="330"></canvas>
-          <div class="ed-rot"><button type="button" class="btn alt" id="ed-rl" title="Girar">↺</button><button type="button" class="btn alt" id="ed-rr" title="Girar">↻</button></div>
+          <div class="ed-rot"><button type="button" class="btn alt" id="ed-rl" title="Girar">↺</button><button type="button" class="btn alt" id="ed-rr" title="Girar">↻</button><button type="button" class="btn alt" id="ed-zoom" title="Ver la cara de cerca">🔍</button></div>
           <label id="ed-name-l">Nombre
             <input id="login-name" maxlength="16" placeholder="Tu nombre">
           </label>
@@ -196,7 +196,8 @@
           <div class="ed-sec"><div class="field-title">Sexo</div><div id="sex-pick" class="class-pick two"></div></div>
           <div class="ed-sec"><div class="field-title">Raza</div><div id="species-pick" class="class-pick species"></div><p id="ed-race-note" class="tag small"></p></div>
           <div class="ed-sec"><div class="field-title">Clase</div><div id="class-pick" class="class-pick"></div><p id="login-sheet-note" class="tag small"></p></div>
-          <div class="ed-sec"><div class="field-title">Peinado</div><div id="hs-pick" class="class-pick three"></div>
+          <div class="ed-sec hidden" id="gob-sec"><div class="field-title">Rasgos de goblin <button type="button" class="btn alt gob-rand" id="gob-rand" title="Un goblin al azar">🎲 Al azar</button></div><div id="gob-picks" class="gob-picks"></div></div>
+          <div class="ed-sec"><div class="field-title" id="hs-title">Peinado</div><div id="hs-pick" class="class-pick three"></div>
             <div class="looks">
               <div><div class="field-title">Piel</div><div id="skin-pick" class="swatches"></div></div>
               <div><div class="field-title">Pelo</div><div id="hair-pick" class="swatches"></div></div>
@@ -393,6 +394,7 @@
   <script src="rules/progress.js"></script>
   <script src="vendor/three.bundle.min.js"></script>
   <script src="sprites.js"></script>
+  <script src="goblin.js"></script>
   <script src="models.js"></script>
   <script src="view3d.js"></script>
   <script src="dsprites.js"></script>

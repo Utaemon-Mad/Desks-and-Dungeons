@@ -549,12 +549,17 @@ async function instanceTests() {
   assert.ok(ac.slots[0] && ac.slots[0].name === 'Dani' && !ac.slots[1] && !ac.slots[2], 'el perfil antiguo va a la casilla 1');
   assert.deepStrictEqual(ac.servers.map((x) => x.id), MAP.SERVERS.map((x) => x.id), 'tres servidores');
   // el editor manda raza, sexo, peinado y el reparto de los 5 primeros puntos (el servidor recorta lo que pase de 20)
-  lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Eva', look: { cls: 'picaro', cls2: 'mago', species: 'goblin', sex: 'f', hs: 'capucha', skin: 12 }, alloc: { des: 9, sue: 3 } });
+  lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Eva', look: { cls: 'picaro', cls2: 'mago', species: 'goblin', sex: 'f', hs: 'capucha', skin: 12, gob: { ears: 2, hair: 4, marks: 3, nose: 99, rings: 'x' } }, alloc: { des: 9, sue: 3 } });
   ac = await lob.next((m) => m.t === 'account');
   assert.strictEqual(ac.created, 1);
   assert.ok(ac.slots[1].name === 'Eva' && ac.slots[1].cls === 'picaro' && ac.slots[1].level === 1, 'personaje nuevo en la casilla 2');
   assert.ok(ac.slots[1].look.species === 'goblin' && ac.slots[1].look.sex === 'f' && ac.slots[1].look.hs === 'capucha', 'raza, sexo y peinado');
   const eva = store.player(store.hash(tokD)).slots[1];
+  // rasgos de goblin: se guardan los válidos y los raros vuelven a su valor de partida
+  const gl = ac.slots[1].look.gob;
+  assert.ok(gl && gl.ears === 2 && gl.hair === 4 && gl.marks === 3 && gl.nose === 0 && gl.rings === 0 && gl.build === 1, 'rasgos de goblin guardados y limpios');
+  assert.strictEqual(eva.char.look.gob.ears, 2);
+  assert.strictEqual(MAP.cleanLook({ species: 'human', gob: { ears: 1 } }).gob, undefined, 'solo los goblins llevan rasgos de goblin');
   assert.deepStrictEqual([eva.char.alloc.des, eva.char.alloc.sue], [5, 0], 'puntos iniciales: como mucho 5 y nunca más de 20 natural');
   assert.ok(RULES.derive(eva).natural.des <= RULES.STAT_MAX);
   lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Otra', look: {} });

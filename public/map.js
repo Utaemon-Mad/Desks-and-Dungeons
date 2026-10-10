@@ -212,6 +212,28 @@
   const hairstyle = (sex, hs) => (HAIRSTYLES[sex] || HAIRSTYLES.m).find((h) => h.id === hs) || (HAIRSTYLES[sex] || HAIRSTYLES.m)[0];
 
   // Normaliza el aspecto que llega de un cliente (o de una versión anterior del juego)
+  // Rasgos propios de los goblins (modelo de cabeza hecho a mano): cada opción es un índice de estas listas
+  const GOBLIN = {
+    head: { name: 'Cabeza', opts: ['Redonda', 'Alargada', 'Ancha', 'Pequeña'] },
+    ears: { name: 'Orejas', opts: ['Hoja larga', 'Murciélago', 'Caídas', 'Mordisqueadas', 'Cortas'] },
+    nose: { name: 'Nariz', opts: ['Ganchuda', 'Recta y larga', 'Respingona', 'Zanahoria', 'Aguja'] },
+    eyes: { name: 'Ojos', opts: ['Ámbar', 'Limón', 'Oro viejo', 'Azufre'] },
+    look: { name: 'Mirada', opts: ['Pícara', 'Despierta', 'Furiosa', 'Bizca', 'Dormilona'] },
+    teeth: { name: 'Dientes', opts: ['Colmillos', 'Sierra', 'Diente de oro', 'Mellado', 'Dientón'] },
+    hair: { name: 'Peinado', opts: ['Calvo', 'Cresta', 'Moño', 'Trenzas', 'Alborotado', 'Mechones', 'Coleta'] },
+    rings: { name: 'Pendientes', opts: ['Aros de oro', 'Aros de plata', 'Cascada', 'Rubí', 'Huesos', 'Aro en la nariz'] },
+    marks: { name: 'Marcas', opts: ['Ninguna', 'Verrugas', 'Pecas', 'Cicatriz', 'Pintura roja', 'Pintura azul'] },
+    build: { name: 'Complexión', opts: ['Flacucho', 'Normal', 'Rechoncho'] },
+  };
+  const GOBLIN_KEYS = Object.keys(GOBLIN);
+  // valores de partida: los chicos con cresta y las chicas con trenzas
+  function goblinDefaults(sex) { return { head: 0, ears: 0, nose: 0, eyes: 0, look: 0, teeth: 0, hair: sex === 'f' ? 3 : 1, rings: 0, marks: 0, build: 1 }; }
+  function cleanGoblin(g, sex) {
+    const d = goblinDefaults(sex), out = {};
+    for (const k of GOBLIN_KEYS) { const v = g && g[k]; out[k] = Number.isInteger(v) && v >= 0 && v < GOBLIN[k].opts.length ? v : d[k]; }
+    return out;
+  }
+
   function cleanLook(look) {
     look = look || {};
     let cls = Object.prototype.hasOwnProperty.call(CLASSES, look.cls) ? look.cls : LEGACY_CLASS[look.cls];
@@ -224,6 +246,7 @@
     const out = { cls, species, sex, hs, skin: idx(look.skin, SKINS.length), hair: idx(look.hair, HAIRS.length) };
     if (!skinsFor(species).includes(out.skin)) out.skin = skinsFor(species)[0];
     if (typeof look.sub === 'string' && /^[a-z-]{1,40}$/.test(look.sub)) out.sub = look.sub;
+    if (species === 'goblin') out.gob = cleanGoblin(look.gob, sex);
     return out;
   }
 
@@ -238,7 +261,7 @@
   const SERVER_NAME_MAX = 20;
 
   const MAP = createMap();
-  Object.assign(MAP, { SERVERS, SERVER_NAME_MAX, createMap, defaultItems, sanitizeItems, MERCHANTS, merchantAt, CLASSES, LEGACY_CLASS, SPECIES, SKINS, SPECIES_SKINS, skinsFor, DRAGON_COLORS, HAIRS, SEXES, HAIRSTYLES, hairstyle, cleanLook });
+  Object.assign(MAP, { SERVERS, SERVER_NAME_MAX, createMap, defaultItems, sanitizeItems, MERCHANTS, merchantAt, CLASSES, LEGACY_CLASS, SPECIES, SKINS, SPECIES_SKINS, skinsFor, DRAGON_COLORS, HAIRS, SEXES, HAIRSTYLES, hairstyle, cleanLook, GOBLIN, GOBLIN_KEYS, goblinDefaults, cleanGoblin });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = MAP;
   else root.MAP = MAP;
