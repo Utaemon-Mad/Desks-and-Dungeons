@@ -271,6 +271,10 @@
   const DESCENT_THEMES = ['cuevas', 'cripta', 'nido', 'fortaleza', 'volcan', 'abismo'];
   const descentTheme = (floor) => DESCENT_THEMES[(floor - 1) % DESCENT_THEMES.length];
   const descentLevel = (startLevel, floor) => startLevel + floor - 1;
+  // Asalto semanal: el mismo mapa para todos durante la semana, más duro y con su propio desafío; clasificación por tiempo
+  const RAID = { name: 'Asalto semanal', hpMult: 1.6, dmgMult: 1.3, xpMult: 1.5, bonusLevel: 2, minLevel: 3 };
+  const raidTheme = (week = weekKey()) => DESCENT_THEMES[((week + 2) % DESCENT_THEMES.length + DESCENT_THEMES.length) % DESCENT_THEMES.length];
+  const raidMod = (week = weekKey()) => { const ids = Object.keys(WEEKLY_MODS); return ids[(((week + 3) % ids.length) + ids.length) % ids.length]; };
 
   // ======================================================================
   //  Clasificaciones semanales
@@ -300,7 +304,7 @@
     MATS, FISH_BY_ZONE, HERB_BY_ZONE, matDrops, catchFish,
     MAX_UP, upgradeCost, applyUpgrade, enchantCost, enchant, COMBINE_TO, combineCost, combine, salvage, baseName,
     RECIPES, COOK_PRICE, FOOD_MIN,
-    LOGIN_REWARDS, loginState, DAILY, WEEKLY, FAM, dayKey, weekKey, boardFor, taskDef, taskText, taskMatch, taskReward,
+    RAID, raidTheme, raidMod, LOGIN_REWARDS, loginState, DAILY, WEEKLY, FAM, dayKey, weekKey, boardFor, taskDef, taskText, taskMatch, taskReward,
     ACHIEVEMENTS, MAX_STATS, STAT_NAMES, WORLD_BOSSES, WORLD_EVENT,
     WEEKLY_MODS, weekMod, descentTheme, descentLevel, BOARDS, ARENA, arenaTiles,
   };

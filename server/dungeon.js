@@ -59,7 +59,7 @@ class Instance {
     this.npcs = def.npcs || [];
     this.waystones = def.waystones || [];
     this.pets = new Map(); // dueño -> mascota
-    this.mod = def.descent ? def.descent.mod : null; // desafío semanal del Descenso
+    this.mod = def.descent ? def.descent.mod : def.raid ? def.raid.mod : null; // desafío semanal del Descenso o del Asalto
     this.duel = def.duel || null;                     // arena: { a, b, bet, startAt }
     this.herbs = new Map((def.herbs || []).map((h) => [h.id, { ...h, readyAt: 0 }]));
     this.worldBoss = null;
@@ -175,6 +175,7 @@ class Instance {
     if (this.mod === 'frenesi') { m.ms = Math.round(m.ms * 0.75); m.atk = Math.round(m.atk * 0.8); }
     if (this.mod === 'gigantes') { m.hp = Math.round(m.hp * 1.5); m.xp = Math.round(m.xp * 1.5); m.big = true; }
     if (o.hpMult) m.hp = Math.round(m.hp * o.hpMult);
+    if (this.def.raid) { m.hp = Math.round(m.hp * PROG.RAID.hpMult); m.dmg = m.dmg.map((v) => v * PROG.RAID.dmgMult); m.xp = Math.round(m.xp * PROG.RAID.xpMult); }
     const id = 'e' + ++this.seq;
     this.enemies.set(id, {
       id, k: m.k, m, x, y, hp: m.hp, maxHp: m.hp, dir: 'S', sm: m.ms, summoned: !!o.summoned,
@@ -1111,6 +1112,7 @@ class Instance {
       const spot = this.freeNear(e.x, e.y, (a, b) => this.walkTile(a, b) && ![...this.loot.values()].some((l) => l.x === a && l.y === b));
       this.portal = spot;
       this.event({ e: 'portal', x: spot.x, y: spot.y, name: e.m.name });
+      if (this.def.raid && this.hooks.raidDone) this.hooks.raidDone(this);
       // el resto de la sala huye: no queda nadie que pelee por su señor
       for (const o of [...this.enemies.values()]) if (o.summoned) { this.enemies.delete(o.id); this.event({ e: 'die', id: o.id, k: o.k, x: o.x, y: o.y, xp: 0 }); }
     }
@@ -1426,7 +1428,7 @@ class Instance {
 
   // Resumen para la lista de partidas abiertas
   summary() {
-    return { id: this.id, name: this.def.name, theme: this.def.theme, level: this.level, players: [...this.players.values()].map((p) => p.user.name), bossDead: this.bossDead };
+    return { id: this.id, name: this.def.name, theme: this.def.theme, level: this.level, players: [...this.players.values()].map((p) => p.user.name), bossDead: this.bossDead, raid: !!this.def.raid };
   }
 }
 

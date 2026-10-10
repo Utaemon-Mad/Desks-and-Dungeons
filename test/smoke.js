@@ -744,6 +744,31 @@ async function instanceTests() {
   assert.deepStrictEqual(PROG.loginState({ last: PROG.dayKey() - 1, streak: 7 }).streak, 1, 'tras el día 7 vuelve a empezar');
   dl.ws.close();
 
+  // Asalto semanal: mismo mapa para todos, enemigos más duros, cofre y clasificación
+  const tokR = 'a1b2'.repeat(8);
+  mkAccU(tokR, 'Asaltante');
+  const rcl = await client('Asaltante');
+  rcl.send({ t: 'join', room: MAP.SERVERS[0].id, slot: 0, token: tokR });
+  await rcl.next((m) => m.t === 'welcome');
+  rcl.send({ t: 'raid:info' });
+  const rinfo = await rcl.next((m) => m.t === 'raid:info');
+  assert.ok(RULES.THEMES[rinfo.theme] && PROG.WEEKLY_MODS[rinfo.mod] && !rinfo.done, 'información del asalto de la semana');
+  await sleep(1000);
+  rcl.send({ t: 'raid:start' });
+  const rstart = await rcl.next((m) => m.t === 'dstart');
+  assert.ok(/Asalto semanal/.test(rstart.dungeon.name), 'entra en el asalto');
+  const rinst = rooms.get(MAP.SERVERS[0].id).instances.get(rstart.dungeon.id);
+  const sameMap = GEN.generate({ theme: rinfo.theme, level: rinst.level, seed: 'asalto-' + rinfo.week });
+  assert.strictEqual(sameMap.tiles, rinst.def.tiles, 'el mapa es el de la semana (igual para todos)');
+  const rbossE = [...rinst.enemies.values()].find((e) => e.m.boss);
+  assert.ok(rbossE.maxHp > RULES.monsterAt(rbossE.k, rinst.level).hp * 1.5, 'el jefe tiene más vida que en una mazmorra normal');
+  rinst.damageEnemy(rinst.players.get([...rinst.players.keys()][0]), rbossE, 1e9, { noCrit: true });
+  await sleep(100);
+  const rrank = (store.meta('raids') || {})[rinfo.week] || [];
+  assert.ok(rrank.some((r) => r.names.includes('Asaltante')), 'entra en la clasificación');
+  assert.strictEqual(store.player(store.hash(tokR)).slots[0].raidWeek, rinfo.week, 'cofre semanal entregado');
+  rcl.ws.close();
+
   // Dueño de la taberna: mensaje del día, silenciar y expulsar (el primero en entrar en un servidor nuevo es el dueño)
   const SRV3 = MAP.SERVERS[2].id;
   const mkAcc = (tok, name) => store.setPlayer(store.hash(tok), { slots: [{ name, xp: 0, gold: 10, rv: RULES.RULES_VERSION, char: RULES.newChar('guerrero', { species: 'human', sex: 'm' }), equip: {}, bag: [], cons: {}, buffs: {} }, null, null], last: null });

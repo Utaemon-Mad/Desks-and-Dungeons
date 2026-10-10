@@ -802,3 +802,10 @@ body.cb .dlog-line.loot-conjunto { color: #cc79a7; }
 .daily-day.big { background: linear-gradient(#5a2e10, #3a1a08); }
 .daily-got { color: #ffe39a; font-weight: 600; text-align: center; }
 @media (max-width: 820px) { .daily-row { grid-template-columns: repeat(4, 1fr); } }
+
+/* Asalto semanal */
+.raid-btn { background: linear-gradient(#a8321e, #6a1a0e) !important; border-color: #3a0a04 !important; color: #fff !important; }
+#raidwin .panel { width: min(560px, calc(100% - 24px)); }
+.raid-rank { margin: 4px 0 8px; padding-left: 22px; }
+.raid-rank li { margin-bottom: 3px; }
+.raid-rank li:first-child { color: #ffd24a; font-weight: 700; }

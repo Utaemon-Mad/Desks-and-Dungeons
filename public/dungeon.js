@@ -46,6 +46,7 @@
   }
   $('#dlevel').addEventListener('input', (e) => { menu.level = Number(e.target.value); buildThemes(); });
   $('#dgo').onclick = () => { menuEl.classList.add('hidden'); DD.net.send({ t: 'dnew', theme: menu.theme === 'random' ? null : menu.theme, level: menu.level }); };
+  { const b = document.createElement('button'); b.className = 'btn big raid-btn'; b.type = 'button'; b.id = 'draid'; b.textContent = '⚔️ ASALTO SEMANAL (en grupo)'; b.onclick = () => { menuEl.classList.add('hidden'); DD.emit('open-raid'); }; $('#dgo').after(b); }
   { const b = document.createElement('button'); b.className = 'btn alt big'; b.type = 'button'; b.id = 'ddescent'; b.textContent = '🌀 DESCENSO INFINITO'; b.onclick = () => { menuEl.classList.add('hidden'); DD.emit('open-descent'); }; $('#dgo').after(b); }
 
   DD.on('dmenu', (m) => {
@@ -59,7 +60,7 @@
       row.className = 'drow';
       const info = document.createElement('div');
       info.className = 'dinfo';
-      const nm = document.createElement('b'); nm.textContent = `${(RULES.THEMES[d.theme] || {}).icon || ''} ${d.name}`;
+      const nm = document.createElement('b'); nm.textContent = `${d.raid ? '⚔️' : (RULES.THEMES[d.theme] || {}).icon || ''} ${d.name}`;
       const meta = document.createElement('small'); meta.textContent = `Nivel ${d.level} · ${d.players.length ? 'dentro: ' + d.players.join(', ') : 'vacía'}`;
       info.append(nm, meta);
       const play = document.createElement('button'); play.className = 'btn'; play.textContent = '⚔️ UNIRSE';

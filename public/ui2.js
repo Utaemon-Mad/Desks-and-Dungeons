@@ -343,6 +343,33 @@
   DD.on('open-descent', askDescent);
 
   // ======================================================================
+  //  Asalto semanal: mismo mapa para todos, más duro, cofre semanal y clasificación por tiempo
+  // ======================================================================
+  const raidWin = el('div', 'overlay win hidden'); raidWin.id = 'raidwin';
+  raidWin.innerHTML = '<div class="panel card"><button class="mini close-x" type="button" title="Cerrar">✕</button><div class="panel-title">⚔️ ASALTO SEMANAL</div><div id="raid-body"></div></div>';
+  document.body.appendChild(raidWin);
+  raidWin.querySelector('.close-x').onclick = () => closeOverlay('raidwin');
+  DD.on('open-raid', () => { if (DD.scene !== 'tavern') return; DD.net.send({ t: 'raid:info' }); });
+  DD.on('raid:info', (m) => {
+    const body = $('#raid-body'); body.innerHTML = '';
+    const T = RULES.THEMES[m.theme] || {}, M = PROG.WEEKLY_MODS[m.mod] || {};
+    body.appendChild(el('p', '', `Esta semana: ${T.icon || ''} ${T.name || m.theme} · desafío ${M.icon || ''} ${M.name || ''}: ${M.desc || ''}`));
+    body.appendChild(el('p', 'muted small', `El mapa es el mismo para todos hasta el lunes. Enemigos con +60% de vida y +30% de daño (nivel ${m.level}). Pensado para 3 o más amigos.`));
+    body.appendChild(el('p', m.done ? 'muted' : 'good', m.done ? '✔ Ya abriste el cofre esta semana: si repites, sólo cuenta el tiempo.' : '🎁 Al derrotar al jefe: cofre semanal con objeto raro o único, oro, materiales… ¡y un 10% de legendario!'));
+    body.appendChild(el('div', 'field-title', '🏆 Clasificación de la semana (por tiempo)'));
+    if (!m.rank.length) body.appendChild(el('p', 'muted', 'Nadie lo ha superado todavía. ¡Sed los primeros!'));
+    else {
+      const ol = el('ol', 'raid-rank');
+      for (const r of m.rank) ol.appendChild(el('li', '', `${Math.floor(r.time / 60)}:${String(r.time % 60).padStart(2, '0')} · ${r.names.join(', ')} (nv ${r.level})`));
+      body.appendChild(ol);
+    }
+    const go = el('button', 'btn big', '⚔️ EMPEZAR EL ASALTO');
+    go.onclick = () => { closeOverlay('raidwin'); DD.net.send({ t: 'raid:start' }); };
+    const row = el('div', 'edit-row'); row.appendChild(go); body.appendChild(row);
+    openOverlay('raidwin');
+  });
+
+  // ======================================================================
   //  Ajustes de gráficos y rendimiento
   // ======================================================================
   const GFX_KEY = 'dd-gfx';

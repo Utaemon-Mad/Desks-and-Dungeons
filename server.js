@@ -493,6 +493,7 @@ function getInstance(room, def) {
       worldBoss: (users, m, killer) => worldBossDown(room, users, m, killer),
       nextFloor: (u, desc, r) => nextFloor(room, u, desc, r),
       duelEnd: (loser, inst) => duelEnd(room, loser, inst),
+      raidDone: (inst) => raidDone(room, inst),
     });
     room.instances.set(def.id, inst);
   }
@@ -869,6 +870,55 @@ function nextFloor(room, user, desc, r) {
   detach(room, user);
   user.where = null;
   joinInstance(room, user, inst);
+}
+
+// ---------- Asalto semanal ----------
+function raidInfo(user) {
+  const week = PROG.weekKey();
+  const rank = ((store.meta('raids') || {})[week] || []).slice(0, 10);
+  return { t: 'raid:info', week, theme: PROG.raidTheme(week), mod: PROG.raidMod(week), rank, done: user.profile.raidWeek === week, level: Math.max(levelOf(user), PROG.RAID.minLevel) + PROG.RAID.bonusLevel };
+}
+function startRaid(room, user) {
+  const week = PROG.weekKey();
+  const level = Math.max(levelOf(user), PROG.RAID.minLevel) + PROG.RAID.bonusLevel;
+  // el mapa sale de la semana: el mismo para todos
+  const d = GEN.generate({ theme: PROG.raidTheme(week), level, seed: 'asalto-' + week });
+  d.id = 'raid' + crypto.randomBytes(3).toString('hex');
+  const M = PROG.WEEKLY_MODS[PROG.raidMod(week)];
+  d.name = `Asalto semanal · ${d.name}`;
+  d.raid = { week, mod: PROG.raidMod(week), start: Date.now() };
+  const inst = getInstance(room, d);
+  joinInstance(room, user, inst);
+  system(room, `⚔️ ${user.name} empieza el Asalto semanal (nivel ${level}, desafío ${M.icon} ${M.name}). ¡Uníos desde 🗝️ Mazmorras: es para jugar en grupo!`);
+}
+function raidDone(room, inst) {
+  const R = inst.def.raid, week = R.week;
+  const time = Math.round((Date.now() - R.start) / 1000);
+  const heroes = [...inst.players.values()].map((p) => p.user);
+  const all = store.meta('raids') || {};
+  const list = all[week] || [];
+  const entry = { names: heroes.map((u) => u.name), time, level: inst.level, at: Date.now() };
+  list.push(entry);
+  list.sort((a, b) => a.time - b.time);
+  const pos = list.indexOf(entry) + 1;
+  all[week] = list.slice(0, 20);
+  for (const k of Object.keys(all)) if (Number(k) < week - 4) delete all[k]; // sólo las últimas semanas
+  store.setMeta('raids', all);
+  const mm = Math.floor(time / 60), ss = String(time % 60).padStart(2, '0');
+  system(room, `🏆 ${heroes.map((u) => u.name).join(', ')} superan el Asalto semanal en ${mm}:${ss}${pos ? ` (puesto ${pos} de la semana)` : ''}.`);
+  // cofre semanal: una vez por semana y personaje
+  for (const u of heroes) {
+    if (u.profile.raidWeek === week) { send(u.ws, { t: 'dwhisper', text: 'Ya abriste el cofre del Asalto esta semana: hoy sólo cuenta para la clasificación.' }); continue; }
+    u.profile.raidWeek = week;
+    const lvl = inst.level, cls = [u.profile.char.cls];
+    const items = [RULES.makeItem(rnd, { ilvl: lvl, rarity: rnd() < 0.35 ? 'unico' : 'raro', classes: cls })];
+    if (rnd() < 0.1) items.push(RULES.makeItem(rnd, { ilvl: lvl, rarity: 'unico', classes: cls, leg: Object.keys(RULES.LEGENDARY)[crypto.randomInt(0, Object.keys(RULES.LEGENDARY).length)] }));
+    const got = [];
+    for (const it of items) { if (give(room, u, it)) got.push(`«${it.name}»`); }
+    reward(room, u, 0, 40 * lvl); got.push(`${40 * lvl} 🪙`);
+    giveMats(room, u, { esencia: 3, polvo: 2 }, true);
+    send(u.ws, { t: 'dwhisper', text: `🎁 Cofre del Asalto semanal: ${got.join(', ')}, 3 💠 y 2 ✨.` });
+  }
 }
 
 // ---------- Arena: duelos con apuesta en el sótano de Alfonso ----------
@@ -1715,6 +1765,8 @@ wss.on('connection', (ws) => {
 
       // ----- Descenso infinito y duelos -----
       case 'descent:start': { if (!user.where && allow(2)) startDescent(room, user); break; }
+      case 'raid:info': { if (allow()) send(ws, raidInfo(user)); break; }
+      case 'raid:start': { if (!user.where && allow(2)) startRaid(room, user); break; }
       case 'duel:req': {
         const other = room.users.get(msg.to);
         if (!other || other === user || !allow()) return;
