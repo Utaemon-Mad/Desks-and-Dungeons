@@ -16,6 +16,7 @@ server/gen.js           generador de mazmorras (salas, puertas, decorado, antorc
 server/world.js         mundo abierto y NPC
 server/store.js         guardado en data/*.json
 public/index.html       página única y orden de carga de los scripts
+public/audio.js         sonido y música hechos con WebAudio (SFX.play, SFX.music)
 public/rules/engine.js  reglas: stats, razas, clases, habilidades, objetos estilo Diablo 2, afijos, botín, monstruos
 public/rules/progress.js forja, misiones, logros, descenso semanal
 public/rules/items-data.js tabla de nombre y aspecto de las 192 armaduras y 156 armas/escudos (4 variantes por nivel)
@@ -32,8 +33,10 @@ public/tavern/editor.js editor de muebles de la taberna (dueño)
 public/tavern/screen.js zoom del juego y pantalla completa
 public/tavern/tavern3d.js taberna en 3D, bucle de dibujo y clics en la sala
 public/tavern/boot.js   arranque (se carga el último de la taberna)
-public/dungeon.js       mazmorra en el navegador: escena, controles, interfaz de combate
-public/ui.js, ui2.js    ventanas: ficha, inventario, tiendas, forja, guía
+public/dungeon.js       mazmorra en el navegador: escena, controles, interfaz de combate y de grupo (marcas, volver con el grupo)
+public/polish.js        fundidos, celebración de nivel y cartel de objeto único
+public/tutorial.js      tutorial de Alfonso para personajes nuevos
+public/ui.js, ui2.js    ventanas: ficha, inventario, tiendas, forja, guía; ajustes (volumen, tamaño, daltónico, teclas en DD.keys)
 public/sprites.js, dsprites.js  sprites 2D: iconos de objetos y reserva sin 3D
 public/style.css        estilos
 test/smoke.js           pruebas de reglas y de red (npm test)
