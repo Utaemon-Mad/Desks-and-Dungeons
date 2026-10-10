@@ -1250,5 +1250,5 @@
     return m;
   }
 
-  root.MODELS = { mat, mesh, box, cyl, sph, cone, shade, mix, buildHero, buildEnemy, buildPet, buildMount, animate, furniture, prop, weapon, flame, candle, mug, herb, rod, RARITY, GL, loadAssets, posePeek, pieceGeo, piece, glProp: (n) => (GL.props[n] ? GL.props[n].clone(true) : null) };
+  root.MODELS = { mat, mesh, box, cyl, sph, buildHero, buildEnemy, buildPet, buildMount, animate, furniture, prop, weapon, flame, mug, herb, rod, RARITY, GL, loadAssets, posePeek, pieceGeo, piece, glProp: (n) => (GL.props[n] ? GL.props[n].clone(true) : null), cone  };
 })(this);

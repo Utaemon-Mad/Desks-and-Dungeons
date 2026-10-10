@@ -8,7 +8,6 @@
   const me = () => DD.me;
   const derived = () => (DD.me ? RULES.derive(DD.me) : null);
   const inTavern = () => DD.scene === 'tavern';
-  const RC = DSPRITES.RARITY;
 
   function iconCanvas(src, size = 32) {
     const c = document.createElement('canvas'); c.width = size; c.height = size;

@@ -6,7 +6,6 @@
 
   const T = 16; // píxeles por casilla
   const $ = (s) => document.querySelector(s);
-  const DCH = new Set(DUNGEON.DUNGEON_CHARS.split(''));
   const monName = (e) => (e.kind === 'hero' ? e.name : (e.elite ? 'Élite: ' : '') + ((RULES.MONSTERS[e.k] || {}).name || e.k));
   const WATER_T = new Set(['w', 'v', 'q', '~']);
 
@@ -158,7 +157,6 @@
     for (const l of game.log) { const d = document.createElement('div'); d.className = 'dlog-line ' + (l.cls || ''); d.textContent = l.text; el.appendChild(d); }
   }
 
-  const FX_COL = { fire: '#ff7a2a', cold: '#9ad8ff', holy: '#fff2a0', void: '#a05aff', blood: '#ff3a4a', lightning: '#fff27a', nature: '#7ad85a' };
   const PROJ_COL = { arrow: '#e8dcc0', javelin: '#c8a070', bolt: '#7aff9a', necro: '#9a5aff', fire: '#ff7a2a' };
 
   function onEvent(ev, now) {

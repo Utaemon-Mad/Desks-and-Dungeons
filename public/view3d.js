@@ -1024,5 +1024,5 @@
     return { stop() { alive = false; cancelAnimationFrame(raf); r.dispose(); } };
   }
 
-  root.VIEW3D = { snapshot, itemArt, makeStage, show, getRenderer, buildMap, fogLayer, THEME, WALL_H, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer, present };
+  root.VIEW3D = { snapshot, itemArt, makeStage, show, buildMap, fogLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
 })(this);
