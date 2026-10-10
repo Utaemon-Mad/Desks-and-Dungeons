@@ -55,10 +55,18 @@ function rulesTests() {
   for (let i = 0; i < 40000; i++) { const r = RULES.rollRarity(rng, 300); c2[r] = (c2[r] || 0) + 1; }
   assert.ok(c2.magico / count.magico > c2.unico / count.unico, 'hallazgo mágico con rendimientos decrecientes');
   // armas: tres niveles (normal, excepcional, élite) que pegan más y piden más
-  const t = [0, 1, 2].map((tier) => RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'arma', base: 'espada', tier }));
+  const t = [0, 1, 2].map((tier) => RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'arma', base: 'espada', tier, sk: 0 }));
   assert.ok(t[0].dmg[1] < t[1].dmg[1] && t[1].dmg[1] < t[2].dmg[1], 'el élite pega más');
   assert.ok(t[0].reqStats.fue < t[2].reqStats.fue && t[2].req >= RULES.TIERS[2].lvl, 'y pide más Fuerza y nivel');
   assert.ok(/Hoja fásica/.test(t[2].name) && /élite/i.test(RULES.typeLine(t[2])), 'nombre del tipo élite');
+  // variantes: 4 por nivel en armas y armaduras, con nombre propio; las estadísticas son las del nivel
+  const v3 = RULES.makeItem(RULES.seeded('var'), { ilvl: 40, rarity: 'normal', slot: 'arma', base: 'espada', tier: 2, sk: 3 });
+  assert.ok(v3.sk === 3 && v3.name === 'Hoja del vacío' && v3.reqStats.fue === t[2].reqStats.fue, 'variante de arma');
+  assert.strictEqual(RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'pecho', base: 'placas', tier: 2, sk: 2 }).name, 'Placa del dragón dorado', 'variante de armadura');
+  assert.strictEqual(RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'casco', base: 'malla', tier: 0, sk: 9 }).sk, 3, 'variante fuera de rango: la última');
+  for (const s of ['pecho', 'casco', 'guantes', 'botas']) for (const ty of Object.keys(RULES.ARMOR_SKINS[s])) for (const tier of RULES.ARMOR_SKINS[s][ty]) assert.strictEqual(tier.length, 4, 'cuatro variantes de armadura');
+  for (const b of Object.keys(RULES.WEAPON_SKINS)) for (const tier of RULES.WEAPON_SKINS[b]) assert.strictEqual(tier.length, 4, 'cuatro variantes de arma');
+  // objetos guardados sin variante (o con la 0/1 de antes) siguen teniendo nombre
   // mágico: prefijo y/o sufijo; raro: de 3 a 6 propiedades; el daño mejorado sube el daño del arma
   for (let i = 0; i < 50; i++) {
     const m = RULES.makeItem(rng, { ilvl: 30, rarity: 'magico', slot: 'anillo' });

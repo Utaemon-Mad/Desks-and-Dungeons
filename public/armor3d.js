@@ -1,5 +1,5 @@
-// Armaduras que se ven en el personaje: cada base de RULES.ARMOR_SKINS (pecho, casco, guantes y botas;
-// tela, cuero, malla y placas; normal, excepcional y élite; dos variantes) tiene su aspecto: petos, hombreras,
+// Armaduras que se ven en el personaje: cada base de la tabla ITEMDATA.ARMOR (pecho, casco, guantes y botas;
+// tela, cuero, malla y placas; normal, excepcional y élite; cuatro variantes) tiene su aspecto: petos, hombreras,
 // faldones, cotas, tabardos, capas, yelmos, capuchas, coronas, guanteletes, grebas…
 // Las piezas se colocan sobre el esqueleto KayKit en su postura de reposo (en cruz) y se pegan a los huesos,
 // así siguen todas las animaciones. Diseños propios inspirados en el estilo de Diablo 2.
@@ -15,54 +15,18 @@
     void: '#1c1428', green: '#3a5a2a', teal: '#1a4a4a', bone: '#e8dcc0', fur: '#cdbb9a', chain: '#8c919a', diamond: '#cfe0f0',
   };
 
-  // ---------- aspecto de cada base: [ranura][tipo][nivel][variante] ----------
-  // cloth: color de la ropa del modelo; metal / trim: metal y adornos; parts: piezas; cape: capa; glow: brillo
-  const S = (cloth, metal, trim, parts, o = {}) => ({ cloth, metal, trim, parts, ...o });
-  const CHEST = {
-    tela: [
-      [S('#c8b890', C.leatherD, C.leatherD, ['quilt', 'belt']), S('#6a5a40', C.leatherD, C.bronze, ['sash', 'belt'])],
-      [S('#d6dae6', C.silver, C.silver, ['collar', 'belt', 'trimNeck'], { cape: true, glow: '#9ab0ff' }), S('#7a1a2a', C.gold, C.gold, ['sash', 'belt', 'trimNeck'], { cape: true })],
-      [S('#2a2238', C.purple, '#8a5aff', ['collar', 'belt', 'trimNeck', 'runes'], { cape: true, glow: '#8a5aff' }), S('#1a2a6a', C.gold, C.gold, ['collar', 'belt', 'trimNeck', 'runes'], { cape: true, glow: '#7ad0ff' })],
-    ],
-    cuero: [
-      [S(C.leather, C.leatherD, C.bronze, ['vest', 'belt', 'pads']), S(C.leatherD, C.steel, C.steel, ['vest', 'studs', 'belt', 'pads'])],
-      [S('#4a5a2a', '#3a4a22', C.bronze, ['vest', 'scales', 'belt', 'pads'], { scale: '#5a6e30' }), S('#6a1a12', C.black, C.bone, ['vest', 'straps', 'belt', 'padSpikes'])],
-      [S('#2a4a3a', '#1e3a2e', C.gold, ['vest', 'scales', 'straps', 'belt', 'padsBig'], { scale: '#2e6a52' }), S('#1a2a2a', '#1e4a4a', C.gold, ['carapace', 'shellPads', 'belt'])],
-    ],
-    malla: [
-      [S(C.chain, C.steel, C.leatherD, ['mail', 'belt']), S('#7a7a6a', C.steel, C.leatherD, ['mail', 'scales', 'belt', 'mailSkirt'], { scale: '#8a8a7a' })],
-      [S('#6a707a', C.steel, C.leatherD, ['mail', 'mailSkirt', 'pauldronSmall', 'belt']), S('#5a6068', C.dark, C.red, ['mail', 'scales', 'pauldronSmall', 'belt', 'tabard'], { scale: '#5e646e', tabard: C.red })],
-      [S(C.diamond, C.diamond, C.silver, ['mail', 'pauldronRound', 'gorget', 'belt', 'tabard'], { tabard: C.blue, shiny: true }), S('#4a4e58', C.dark, C.gold, ['mail', 'mailSkirt', 'pauldronLayer', 'gorget', 'belt'])],
-    ],
-    placas: [
-      [S('#6a6a70', C.steel, C.steel, ['breast', 'back', 'pauldronRound', 'belt', 'faulds']), S('#3a3a40', C.dark, C.dark, ['breast', 'ridge', 'back', 'pauldronSpike', 'gorget', 'faulds'])],
-      [S('#5a5a62', C.steel, C.gold, ['breast', 'ornate', 'back', 'pauldronLayer', 'gorget', 'faulds', 'trimNeck'], { cape: true }), S('#5a4a3a', C.bronze, C.gold, ['breast', 'ornate', 'back', 'pauldronRound', 'faulds', 'trimNeck'])],
-      [S('#d8d0b8', C.white, C.gold, ['breast', 'ornate', 'back', 'pauldronWing', 'gorget', 'faulds', 'trimNeck'], { cape: true, glow: '#fff2a0' }), S('#2a1a1a', C.black, C.red, ['breast', 'ridge', 'back', 'pauldronSpike', 'gorget', 'faulds', 'trimNeck'], { cape: true, glow: '#ff3a2a' })],
-    ],
-  };
-  const HELM = {
-    tela: [[S('#6a5a40', 0, 0, ['hood']), S('#8a1a1a', 0, C.gold, ['cap'])], [S(C.blue, 0, C.gold, ['hood', 'point']), S('#e8e0d0', 0, C.gold, ['turban'])], [S(0, C.gold, C.gold, ['circlet']), S(C.void, 0, '#8a5aff', ['hood', 'hoodGlow'])]],
-    cuero: [[S(C.leather, 0, C.leatherD, ['leatherCap']), S(C.leatherD, C.steel, C.steel, ['leatherCap', 'band'])], [S(C.leatherD, 0, C.bronze, ['brimHat']), S(C.bone, 0, 0, ['boneMask'])], [S('#3a2a5a', C.gold, C.gold, ['shako', 'plume']), S(C.bone, 0, 0, ['skullHelm'])]],
-    malla: [[S(C.chain, C.chain, 0, ['coif']), S(C.chain, C.steel, 0, ['coif', 'dome'])], [S(C.chain, C.steel, 0, ['basinet', 'aventail']), S(C.chain, C.steel, 0, ['sallet'])], [S(C.chain, C.steel, C.gold, ['armet', 'plume']), S(C.chain, C.dark, 0, ['dome', 'spikes', 'aventail'])]],
-    placas: [[S(0, C.steel, 0, ['dome', 'nasal', 'cheeks']), S(0, C.steel, C.dark, ['greatHelm'])], [S(0, C.steel, C.gold, ['dome', 'nasal', 'wings']), S(0, C.dark, C.bone, ['dome', 'cheeks', 'horns'])], [S(0, C.gold, C.gold, ['crown']), S(0, C.black, C.red, ['dome', 'demonHorns', 'demonMask'], { glow: '#ff3a2a' })]],
-  };
-  const GLOVE = {
-    tela: [[S('#c8b890', 0, 0, ['wraps']), S('#e0d8c0', 0, 0, ['wraps', 'wrapsLong'])], [S('#7a1a2a', 0, C.gold, ['cuffCloth']), S(C.blue, 0, '#7ad0ff', ['cuffCloth', 'runeHand'], { glow: '#7ad0ff' })], [S(C.void, 0, '#8a5aff', ['cuffCloth', 'runeHand'], { glow: '#8a5aff' }), S('#2a1a3a', 0, C.gold, ['cuffCloth', 'cuffGold'])]],
-    cuero: [[S(C.leather, 0, 0, ['cuffLeather', 'hand']), S(C.leatherD, 0, C.fur, ['cuffFur', 'hand'])], [S('#6a7078', 0, 0, ['cuffLeather', 'hand']), S(C.leatherD, C.steel, 0, ['bracer', 'hand'])], [S(C.blood, C.black, 0, ['bracer', 'hand', 'knuckleSpikes']), S(C.leatherK, C.steel, 0, ['bracerBig', 'hand', 'studsArm'])]],
-    malla: [[S(C.chain, C.chain, 0, ['cuffChain', 'hand']), S(C.chain, C.chain, 0, ['cuffChain', 'handBig'])], [S('#6a707a', C.steel, 0, ['cuffChain', 'hand', 'cuffPlate']), S('#5e646e', C.dark, 0, ['bracer', 'hand'])], [S(C.diamond, C.diamond, C.silver, ['cuffPlate', 'hand'], { shiny: true }), S(C.dark, '#3a5a3a', C.gold, ['cuffPlate', 'hand', 'claws'])]],
-    placas: [[S(0, C.steel, 0, ['cuffPlate', 'handPlate']), S(0, C.steel, 0, ['cuffPlate', 'handBig'])], [S(0, C.steel, C.gold, ['cuffFlare', 'handPlate', 'knuckleSpikes']), S(0, C.dark, 0, ['cuffPlate', 'handBig'])], [S(0, C.dark, C.bronze, ['cuffFlare', 'handBig', 'knuckleSpikes']), S(0, C.black, C.red, ['cuffFlare', 'handPlate', 'claws'], { glow: '#ff3a2a' })]],
-  };
-  const BOOT = {
-    tela: [[S(C.leather, 0, 0, ['sandal']), S('#6a4a6a', 0, 0, ['slipper'])], [S('#7a1a2a', 0, C.gold, ['softBoot']), S(C.blue, 0, C.gold, ['slipper', 'curlToe'])], [S(C.void, 0, '#8a5aff', ['softBoot'], { glow: '#8a5aff' }), S('#c8ccd8', 0, C.silver, ['softBoot'], { glow: '#cfe0ff' })]],
-    cuero: [[S(C.leather, 0, 0, ['boot']), S(C.leatherD, 0, 0, ['boot', 'fold'])], [S(C.blood, C.black, 0, ['boot', 'shinSpike']), S('#6a7078', 0, 0, ['boot', 'fold'])], [S('#2a4a3a', 0, C.gold, ['boot', 'scalesLeg'], { scale: '#2e6a52' }), S('#1a2a2a', '#1e4a4a', 0, ['boot', 'shellShin'])]],
-    malla: [[S(C.chain, C.chain, 0, ['boot', 'chainLeg']), S(C.chain, C.chain, 0, ['boot', 'chainLeg', 'fold'])], [S('#6a707a', C.steel, 0, ['boot', 'chainLeg', 'kneeCop']), S('#5e646e', C.dark, 0, ['boot', 'scalesLeg'], { scale: '#5e646e' })], [S(C.diamond, C.diamond, 0, ['boot', 'kneeCop', 'greave'], { shiny: true }), S('#b8c8e0', '#c8d8f0', C.silver, ['boot', 'greave', 'kneeCop'], { shiny: true })]],
-    placas: [[S(0, C.steel, 0, ['greave', 'kneeCop', 'sabaton']), S(0, C.steel, 0, ['greave', 'sabaton'])], [S(0, C.steel, C.gold, ['greave', 'kneeCop', 'kneeSpike', 'sabaton']), S(0, C.dark, 0, ['greave', 'kneeCop', 'sabaton', 'layered'])], [S(0, C.black, C.red, ['greave', 'kneeSpike', 'sabaton', 'layered'], { glow: '#ff3a2a' }), S(0, C.gold, C.white, ['greave', 'kneeCop', 'sabaton'])]],
-  };
-  const SPEC = { pecho: CHEST, casco: HELM, guantes: GLOVE, botas: BOOT };
+  // ---------- aspecto de cada base: sale de la tabla compartida (public/rules/items-data.js) ----------
+  // look: { cloth, metal, trim, parts, cape, glow, shiny, scale, tabard }
+  const SPEC = {};
+  for (const [slot, types] of Object.entries(root.ITEMDATA.ARMOR)) {
+    SPEC[slot] = {};
+    for (const [t, tiers] of Object.entries(types)) SPEC[slot][t] = tiers.map((vs) => vs.map((v) => v[2]));
+  }
   function spec(slot, gear) {
     const t = gear[slot];
-    if (!t || !SPEC[slot][t]) return null;
-    return SPEC[slot][t][Math.min(2, gear[slot + 'T'] || 0)][gear[slot + 'S'] ? 1 : 0];
+    if (!t || !SPEC[slot] || !SPEC[slot][t]) return null;
+    const vs = SPEC[slot][t][Math.min(2, gear[slot + 'T'] || 0)];
+    return vs[Math.min(vs.length - 1, Math.max(0, gear[slot + 'S'] | 0))];
   }
 
   // Ropa y capa que pide el peto (el resto del aspecto lo ponen las piezas)

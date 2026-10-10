@@ -680,7 +680,9 @@
       const col = MODELS.RARITY[l.r] || '#d8d4c8';
       const it = l.it || {};
       let o = null;
-      if (it.slot === 'arma') o = MODELS.weapon(it.base, l.r);
+      // armas y escudos con su modelo de verdad (tipo, nivel y variante); el resto, una caja del color del material
+      if ((it.slot === 'arma' || it.slot === 'mano') && window.WEAPON3D) o = WEAPON3D.build(it.base, it.tier || 0, l.r, { sk: it.sk });
+      if (!o && it.slot === 'arma') o = MODELS.weapon(it.base, l.r);
       if (o) { o.rotation.z = Math.PI / 2; o.position.y = 0.12; o.scale.setScalar(0.8); g.add(o); }
       else MODELS.mesh(MODELS.box(0.22, 0.16, 0.22), MODELS.mat(it.slot === 'mano' ? '#7a2222' : it.type === 'placas' ? '#a8aeb8' : it.type === 'malla' ? '#7e8692' : it.type === 'cuero' ? '#6a4226' : it.slot === 'amuleto' || it.slot === 'anillo' ? '#c8a040' : '#6a4aa0', { metal: it.type === 'placas' ? 0.6 : 0 }), 0, 0.1, 0, g);
       const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.12, ['inferior', 'normal', 'superior'].includes(l.r) ? 0.6 : 1.8, 6, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: ['inferior', 'normal', 'superior'].includes(l.r) ? 0.25 : 0.45, depthWrite: false, side: THREE.DoubleSide }));

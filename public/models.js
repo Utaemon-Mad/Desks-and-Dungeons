@@ -855,11 +855,11 @@
     const hR = nodes.handslotr || nodes['handslot.r'], hL = nodes.handslotl || nodes['handslot.l']; // el cargador quita los puntos de los nombres
     const P = { gl: true, root, model: m, armR: hR, handR: hR, handL: hL, head: nodes.head, headMesh };
     // armas del equipo en las manos
-    const attach = (hand, propName, base, rarity, tier) => {
+    const attach = (hand, propName, base, rarity, tier, sk) => {
       let w = null;
       // armas hechas a mano por tipo y nivel (weapons3d.js); si no está, las de KayKit o las de siempre
       if (base && globalThis.WEAPON3D) {
-        w = globalThis.WEAPON3D.build(base, tier || 0, rarity, { set: o.set, setColor: o.capeColor });
+        w = globalThis.WEAPON3D.build(base, tier || 0, rarity, { sk, set: o.set, setColor: o.capeColor });
         if (w) { w.scale.setScalar(1 / s); w.rotation.set(0, 0, base === 'arco' ? Math.PI / 2 : 0); if (hand) hand.add(w); return w; }
       }
       if (propName && GL.props[propName]) {
@@ -873,8 +873,8 @@
       if (w && hand) hand.add(w);
       return w;
     };
-    if (o.w) P.weapon = attach(o.w === 'arco' ? hL : hR, o.wProp || WEAPON_PROP[o.w], o.w, o.wr, o.wt);
-    if (o.o) P.off = attach(hL, o.oProp || (o.o === 'escudo' ? (name === 'Knight' ? 'shield_badge' : name === 'Barbarian' ? 'shield_round' : 'shield_square') : o.o === 'orbe' ? 'spellbook_open' : null), o.o, o.or, o.ot);
+    if (o.w) P.weapon = attach(o.w === 'arco' ? hL : hR, o.wProp || WEAPON_PROP[o.w], o.w, o.wr, o.wt, o.wS);
+    if (o.o) P.off = attach(hL, o.oProp || (o.o === 'escudo' ? (name === 'Knight' ? 'shield_badge' : name === 'Barbarian' ? 'shield_round' : 'shield_square') : o.o === 'orbe' ? 'spellbook_open' : null), o.o, o.or, o.ot, o.oS);
     if (o.mug && GL.props.mug_full) { const mg = GL.props.mug_full.clone(true); mg.position.set(0, 0.03, 0); hR.add(mg); P.mug = mg; }
     root.userData.parts = P;
     root.userData.gl = { mixer: new THREE.AnimationMixer(m), actions: {}, base: null, shot: null, last: 0, marks: {}, kind: o.weaponKind || 'melee1', walk: o.walk, idle: o.idle, float: o.float };
@@ -1091,7 +1091,7 @@
     const goblin = species === 'goblin' && !npc && globalThis.GOBLIN3D;
     const root = buildGL(name, {
       skin, hair, cloth, helmet: helmet && !A3, cape, capeColor: set ? set[1] : RARITY[gear.pechoR] || cloth, set: gear.set,
-      w: gear.w, wr: gear.wr, wt: gear.wt, o: gear.o, or: gear.or, ot: gear.ot, weaponKind: kind, mug: npc === 'tabernero',
+      w: gear.w, wr: gear.wr, wt: gear.wt, wS: gear.wS, o: gear.o, or: gear.or, ot: gear.ot, oS: gear.oS, weaponKind: kind, mug: npc === 'tabernero',
       head: hs && !goblin ? hs.head : null,
     });
     // los goblins llevan su propia cabeza hecha a mano (goblin.js), con todas sus opciones

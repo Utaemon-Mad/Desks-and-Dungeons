@@ -1,6 +1,6 @@
 // Armas y escudos que se ven en la mano: cada tipo (espada, daga, hacha, maza, mandoble, martillo, lanza,
 // arco, ballesta, bastón, varita, escudo, orbe) tiene un modelo distinto para cada nivel (normal, excepcional,
-// élite). La rareza cambia los adornos: mágico azul, raro dorado, único todo dorado y brillante, conjunto en
+// élite) y 4 variantes por nivel (tabla ITEMDATA.WEAPONS). La rareza cambia los adornos: mágico azul, raro dorado, único todo dorado y brillante, conjunto en
 // los colores del conjunto. Convención: empuñadura en el origen y la hoja hacia +y (en unidades del personaje).
 (function (root) {
   'use strict';
@@ -67,15 +67,19 @@
   function build(base, tier = 0, rarity, o = {}) {
     const THREE = T();
     const g = new THREE.Group();
-    const t = Math.max(0, Math.min(2, tier || 0));
+    // aspecto de la variante (tabla compartida public/rules/items-data.js): modelo, metal, adornos, gema y brillo
+    const tier0 = Math.max(0, Math.min(2, tier || 0));
+    const vs = root.ITEMDATA && root.ITEMDATA.WEAPONS[base] ? root.ITEMDATA.WEAPONS[base][tier0] : null;
+    const L = o.look || (vs ? vs[Math.min(vs.length - 1, Math.max(0, o.sk | 0))][2] : {}) || {};
+    const t = L.m !== undefined ? L.m : tier0;
     const accent = o.setColor && rarity === 'conjunto' ? o.setColor : null;
-    const steel = mat('metal', t === 2 && base !== 'espada' ? COL.dark : COL.steel, rarity);
-    const steelL = mat('metal', COL.steel, rarity);
-    const trim = mat('trim', accent || (t ? COL.gold : COL.bronze), rarity);
+    const steel = mat('metal', L.metal || (t === 2 && base !== 'espada' ? COL.dark : COL.steel), rarity);
+    const steelL = mat('metal', L.metal || COL.steel, rarity);
+    const trim = mat('trim', accent || L.trim || (t ? COL.gold : COL.bronze), rarity);
     const wood = mat('wood', t === 2 ? COL.woodD : COL.wood), leather = mat('leather', COL.leather), bone = mat('bone', COL.bone);
-    const glowC = RAR[rarity] || (t === 2 ? '#7ad0ff' : null);
+    const glowC = RAR[rarity] || L.glow || (t === 2 ? '#7ad0ff' : null);
     const glow = glowC ? mat('glow', glowC) : null;
-    const gem = mat('glow', RAR[rarity] || (t === 2 ? '#d8102a' : '#4a7aff'));
+    const gem = mat('glow', RAR[rarity] || L.gem || (t === 2 ? '#d8102a' : '#4a7aff'));
     switch (base) {
       case 'espada': {
         if (t === 0) { add(g, blade('sw0', [[0.024, 0.06], [0.022, 0.36], [0, 0.44]], 0.008), steelL); add(g, box(0.13, 0.022, 0.035), trim, 0, 0.055); grip(g, 0.09, 0.014, leather, trim); }
