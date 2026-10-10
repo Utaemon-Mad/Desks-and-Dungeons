@@ -830,6 +830,7 @@
       h('Las mazmorras');
       p('🗝️ Mazmorras: elige un tema (o al azar) y el nivel (desde 1 hasta tu nivel + 3). Se genera una mazmorra nueva cada vez. Tus amigos pueden unirse desde la misma ventana. Derrota al jefe para abrir el portal de salida.');
       p('Controles: clic en el suelo para andar (mantén pulsado para seguir al ratón), clic en un enemigo para atacarlo sin parar, WASD o flechas para moverte. 1-8: habilidades. Q: poción de vida (Mayús+Q la grande), E: energía, R/T: brebajes, Z X C V: pergaminos. M: mapa. I: equipo.');
+      p('👥 En grupo: a la izquierda ves la vida de tus compañeros. Alt+clic (o clic central, o la tecla P) marca un sitio para todos; con Mayús, un aviso de peligro. Si caes, en la taberna aparece «Volver con tu grupo» mientras tus amigos sigan dentro.');
       p('Los arqueros y chamanes disparan a la casilla donde estás: ¡muévete y esquivarás el proyectil! Los jefes marcan en rojo el suelo antes de un gran golpe: sal de ahí.');
       h('El mundo abierto');
       p('🗺️ Mundo: Brumaverde está en el centro y, cuanto más lejos, más nivel hace falta: valle (1-3), bosque (3-6), ciénaga (6-10), yermo (10-14), picos helados (14-19) y erial de ceniza (19-26). Si entras en una zona muy por encima de tu nivel, la corrupción te irá quitando vida.');

@@ -117,6 +117,8 @@
       ? [...game.ents.values()].find((e) => e.kind === 'hero' && e.id !== DD.myId)
       : [...game.ents.values()].find((e) => e.kind === 'enemy' && e.boss && game.vis && game.vis[e.y * game.map.w + e.x]);
     game.boss = boss || null;
+    game.mates = [...game.ents.values()].filter((e) => e.kind === 'hero' && e.id !== DD.myId).length;
+    updateParty();
     // música: la del jefe mientras se le vea (y unos segundos después)
     if (boss) game.bossSeen = now;
     const k = game.map && game.map.kind;
@@ -242,7 +244,12 @@
       case 'special': log(`${ev.name}: ${{ slam: '¡golpe sísmico!', nova: '¡nova de muerte!', breath: '¡aliento de fuego!', volley: '¡andanada!', summon: 'llama a sus esbirros', charge: '¡embiste!' }[ev.s] || ''}`, 'hurt'); break;
       case 'summon': for (let i = 0; i < 10; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7cff6a', true); break;
       case 'portal': log(`¡${ev.name} ha caído! Se abre un portal de salida.`, 'good big'); DD.toast('🏆 ¡Jefe derrotado! Recoge el botín y cruza el portal.'); DD.sfx('portal'); for (let i = 0; i < 30; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7ad0ff', true); break;
-      case 'down': log(`${who(ev.id)} cae.`, 'hurt'); DD.sfx('down', { vol: ev.id === me ? 1 : 0.6 }); break;
+      case 'down': log(`${who(ev.id)} cae.`, 'hurt'); DD.sfx('down', { vol: ev.id === me ? 1 : 0.6 }); if (ev.id !== me) DD.toast(`💀 ${who(ev.id)} ha caído y vuelve a la taberna.`); break;
+      case 'ping':
+        (game.pings = game.pings || []).push({ x: ev.x, y: ev.y, k: ev.k, id: ev.id, start: now });
+        DD.sfx('ping', { vol: ev.id === me ? 0.6 : 1 });
+        if (ev.id !== me) log(`${who(ev.id)} ${ev.k === 'danger' ? '⚠️ avisa de peligro' : '📍 marca un sitio'}.`, 'mine');
+        break;
       case 'petdown': log(`${ev.name} huye malherido; volverá en 30 s.`, 'hurt'); break;
       case 'petskill': { const pt = game.ents.get(ev.id); if (pt) { float(pt.x, pt.y, ev.name + '!', '#ffb040', ev.owner === me); for (let i = 0; i < 10; i++) spark(pt.x + 0.5, pt.y + 0.4, '#ffb040', true); } break; }
       case 'roll': { const e = game.ents.get(ev.id); if (e) { e.rollAt = now; puff(ev.from.x + 0.5, ev.from.y + 0.5, dustColor(ev.from.x, ev.from.y), 6, 0.6); } if (ev.id === me) DD.sfx('roll'); break; }
@@ -262,6 +269,8 @@
 
   DD.on('dstart', (m) => {
     game.active = true;
+    rejoinBtn.classList.add('hidden');
+    game.pings = [];
     game.map = m.dungeon;
     game.props = m.dungeon.props || [];
     game.ents.clear(); game.floaters = []; game.fx = []; game.projs = []; game.teles = []; game.particles = []; game.auras = [];
@@ -291,7 +300,7 @@
     DD.toast(m.dungeon.kind === 'world'
       ? `${m.dungeon.name}: explora, pesca junto al agua (🎣/G), recoge hierbas y vuelve al pueblo (casa iluminada) para descansar.`
       : m.dungeon.kind === 'arena' ? 'Duelo: clic en tu rival para atacarle, habilidades con 1-8, Espacio para esquivar. ¡Gana quien quede en pie!'
-      : 'Clic para andar, clic en un enemigo para atacarlo. 1-8 habilidades, Q/E pociones, Espacio esquiva. Derrota al jefe para abrir el portal.');
+      : 'Clic para andar, clic en un enemigo para atacarlo. 1-8 habilidades, Q/E pociones, Espacio esquiva, Alt+clic o P marca un sitio para el grupo. Derrota al jefe para abrir el portal.');
   });
   DD.on('dsnap', (m) => { if (game.active) { applySnap(m); updateVision(); } });
   DD.on('dme', (m) => { game.you = m; game.youAt = performance.now(); updateHud(); });
@@ -305,7 +314,11 @@
     VIEW3D.show(false);
     DD.setScene('tavern');
     if (m.reason === 'win') DD.toast('🏆 ¡Mazmorra completada!');
-    else if (m.reason === 'down') DD.toast(`💀 Has caído${m.lost ? ` y pierdes ${m.lost} de oro` : ''}. Vuelves a la taberna.`);
+    else if (m.reason === 'down') {
+      DD.toast(`💀 Has caído${m.lost ? ` y pierdes ${m.lost} de oro` : ''}. Vuelves a la taberna.`);
+      // si quedaban amigos dentro, se puede volver con ellos
+      if (game.map && game.map.kind === 'dungeon' && game.mates > 0) offerRejoin(game.map.id);
+    }
     else if (m.reason === 'return') DD.toast('🌀 El pergamino te devuelve a la taberna.');
     else if (m.reason === 'arena') DD.toast('🤺 Fin del duelo. Alfonso os sirve algo para las heridas.');
     else DD.toast('Vuelves a la taberna: vida y energía recuperadas.');
@@ -323,6 +336,51 @@
     if (game.ents.has(m.id)) game.bubbles.set(m.id, { text: m.text, until: performance.now() + 4000 + m.text.length * 50 });
   });
   $('#dexit').onclick = () => DD.net.send({ t: 'dleave' });
+
+  // ---------- Grupo: vida de los compañeros ----------
+  const partyEl = document.createElement('div');
+  partyEl.id = 'dparty';
+  viewEl.appendChild(partyEl);
+  const partyRows = new Map();
+  function updateParty() {
+    const me = game.ents.get(DD.myId);
+    let mates = [...game.ents.values()].filter((e) => e.kind === 'hero' && e.id !== DD.myId);
+    if (game.map && game.map.kind === 'world' && me) mates = mates.filter((e) => Math.max(Math.abs(e.x - me.x), Math.abs(e.y - me.y)) <= 30);
+    if (game.map && game.map.kind === 'arena') mates = [];
+    mates = mates.slice(0, 6);
+    const ids = new Set(mates.map((e) => e.id));
+    for (const [id, row] of partyRows) if (!ids.has(id)) { row.remove(); partyRows.delete(id); }
+    for (const e of mates) {
+      let row = partyRows.get(e.id);
+      if (!row) {
+        row = document.createElement('div'); row.className = 'pmate';
+        row.innerHTML = '<div class="pm-top"><b></b><small></small></div><div class="meter hp"><i></i></div>';
+        row.title = 'Clic: marcar dónde está';
+        row.onclick = () => DD.net.send({ t: 'dping', x: e.x, y: e.y });
+        partyEl.appendChild(row); partyRows.set(e.id, row);
+      }
+      const pct = e.maxHp ? Math.max(0, Math.min(100, 100 * e.hp / e.maxHp)) : 100;
+      row.querySelector('b').textContent = e.name || '¿?';
+      row.querySelector('small').textContent = e.lvl ? `nv ${e.lvl}` : '';
+      row.querySelector('i').style.width = pct + '%';
+      row.classList.toggle('low', pct < 30);
+      if (e.prevPct != null && pct < 30 && e.prevPct >= 30) DD.toast(`⚠️ ¡${e.name} está muy malherido!`);
+      e.prevPct = pct;
+    }
+    partyEl.classList.toggle('hidden', !mates.length);
+  }
+
+  // ---------- Volver con el grupo después de caer ----------
+  const rejoinBtn = document.createElement('button');
+  rejoinBtn.id = 'drejoin'; rejoinBtn.type = 'button'; rejoinBtn.className = 'btn big hidden';
+  rejoinBtn.textContent = '⚔️ VOLVER CON TU GRUPO';
+  document.body.appendChild(rejoinBtn);
+  let rejoinId = null, rejoinTimer = null;
+  rejoinBtn.onclick = () => { if (rejoinId) DD.net.send({ t: 'djoin', id: rejoinId }); rejoinBtn.classList.add('hidden'); };
+  function offerRejoin(id) {
+    rejoinId = id; rejoinBtn.classList.remove('hidden');
+    clearTimeout(rejoinTimer); rejoinTimer = setTimeout(() => rejoinBtn.classList.add('hidden'), 5 * 60000);
+  }
 
   // Tiempo del servidor (para las esperas de habilidades)
   const serverNow = () => (game.you ? game.you.now + (performance.now() - game.youAt) : Date.now());
@@ -459,6 +517,7 @@
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (/^[1-8]$/.test(k)) { const a = abilities()[Number(k) - 1]; if (a) castSkill(a); return; }
     if (k === 'm') { game.showMap = !game.showMap; return; }
+    if (k === 'p' && game.mouse0) { const t = screenToTile(game.mouse0.x, game.mouse0.y); if (t.x >= 0) DD.net.send({ t: 'dping', x: t.x, y: t.y, k: e.shiftKey ? 'danger' : 'here' }); return; }
     if (k === ' ') { e.preventDefault(); doRoll(); return; }
     if (k === 'g') { DD.net.send({ t: 'dfish' }); return; }
     if (k === 'i' || k === 'b') { DD.emit('open-char', 'equipo'); return; }
@@ -525,6 +584,12 @@
   cv.addEventListener('pointerleave', () => { game.mouseOnMap = false; });
   cv.addEventListener('pointerdown', (e) => {
     if (!game.active || e.button === 2) return;
+    if (e.button === 1 || e.altKey) {
+      e.preventDefault();
+      const t = screenToTile(e.clientX, e.clientY);
+      if (t.x >= 0) DD.net.send({ t: 'dping', x: t.x, y: t.y, k: e.shiftKey ? 'danger' : 'here' });
+      return;
+    }
     game.hover = screenToTile(e.clientX, e.clientY);
     const r = clickAt(e.clientX, e.clientY, false);
     // mantener pulsado sobre el suelo: el héroe sigue al ratón
@@ -534,7 +599,8 @@
     }
   });
   window.addEventListener('pointerup', () => { clearInterval(holding); holding = null; });
-  cv.addEventListener('pointermove', (e) => { if (holding) game.mouse = { x: e.clientX, y: e.clientY }; });
+  cv.addEventListener('pointermove', (e) => { game.mouse0 = { x: e.clientX, y: e.clientY }; if (holding) game.mouse = game.mouse0; });
+  cv.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
 
 
   // ======================================================================
@@ -1095,8 +1161,29 @@
     g.fillStyle = vg; g.fillRect(0, 0, innerWidth, innerHeight);
     if (game.you && game.you.hp / game.you.maxHp < 0.3) { g.fillStyle = `rgba(150,0,0,${0.08 + Math.sin(now / 200) * 0.05})`; g.fillRect(0, 0, innerWidth, innerHeight); }
     drawOverlay(now);
+    drawPings(now);
     if (game.showMap) drawMinimap();
     updateBar();
+  }
+
+  // Marcas del grupo: anillos que laten durante 4 s
+  function drawPings(now) {
+    if (!game.pings || !game.pings.length) return;
+    game.pings = game.pings.filter((p) => now - p.start < 4000);
+    for (const p of game.pings) {
+      const s = stage.project(p.x + 0.5, 0, p.y + 0.5), t = (now - p.start) / 1000;
+      const col = p.k === 'danger' ? '255,80,60' : '255,215,90';
+      for (let r = 0; r < 2; r++) {
+        const ph = (t * 1.4 + r * 0.5) % 1;
+        g.strokeStyle = `rgba(${col},${(1 - ph) * Math.min(1, (4 - t))})`; g.lineWidth = 3;
+        g.beginPath(); g.ellipse(s.x, s.y, 12 + ph * 34, (12 + ph * 34) * 0.55, 0, 0, Math.PI * 2); g.stroke();
+      }
+      const bob = Math.sin(t * 6) * 4;
+      g.font = '26px sans-serif'; g.textAlign = 'center';
+      g.fillText(p.k === 'danger' ? '⚠️' : '📍', s.x, s.y - 30 + bob);
+      g.font = '600 12px "Pixelify Sans", sans-serif'; g.fillStyle = `rgb(${col})`;
+      g.fillText(who(p.id), s.x, s.y - 54 + bob);
+    }
   }
 
   // Clima según la zona (y la hora): el tiempo cambia cada pocos minutos, igual para todos
@@ -1301,6 +1388,11 @@
       g.fillRect(x0 + e.x * k - sz / 2, y0 + e.y * k - sz / 2, sz, sz);
     }
     if (game.portal) { g.fillStyle = '#7ad0ff'; g.fillRect(x0 + game.portal.x * k - 2, y0 + game.portal.y * k - 2, 5, 5); }
+    for (const p of game.pings || []) {
+      const ph = ((performance.now() - p.start) / 600) % 1;
+      g.strokeStyle = p.k === 'danger' ? '#ff5a3c' : '#ffd75a'; g.lineWidth = 2;
+      g.beginPath(); g.arc(x0 + (p.x + 0.5) * k, y0 + (p.y + 0.5) * k, 3 + ph * 7, 0, Math.PI * 2); g.stroke();
+    }
   }
 
   // ======================================================================

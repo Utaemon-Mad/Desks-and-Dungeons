@@ -1342,6 +1342,16 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'dgo': { const i = inst(); if (i && allowGame()) i.go(user.id, msg.x, msg.y); break; }
+      case 'dping': {
+        // marca en el suelo para el grupo (como mucho una cada 0,7 s)
+        const i = inst(), now = Date.now();
+        if (!i || now - (user.lastPing || 0) < 700) break;
+        const x = Math.floor(Number(msg.x)), y = Math.floor(Number(msg.y));
+        if (!(x >= 0 && y >= 0 && x < i.w && y < i.h)) break;
+        user.lastPing = now;
+        i.event({ e: 'ping', id: user.id, x, y, k: msg.k === 'danger' ? 'danger' : 'here' });
+        break;
+      }
       case 'dattack': { const i = inst(); if (i && allowGame()) i.attack(user.id, String(msg.id)); break; }
       case 'ddir': { const i = inst(); if (i && allowGame()) i.dir(user.id, msg.dx, msg.dy); break; }
       case 'dskill': { const i = inst(); if (i && allowGame()) i.skill(user.id, msg); break; }

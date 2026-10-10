@@ -655,3 +655,19 @@ html, body { overscroll-behavior: none; -webkit-touch-callout: none; }
   .inv2 { grid-template-columns: 1fr; }
   .inv-doll { grid-template-columns: 80px 110px 80px; grid-template-rows: 90px 150px 90px; }
 }
+
+/* Grupo: vida de los compañeros (debajo de tu retrato) */
+#dparty { position: absolute; left: 12px; top: 128px; z-index: 6; display: flex; flex-direction: column; gap: 4px; width: 200px; pointer-events: auto; }
+#dparty.hidden { display: none; }
+.pmate { background: rgba(28, 18, 12, .82); border: 1px solid #6a4a2a; border-radius: 6px; padding: 4px 7px 5px; cursor: pointer; }
+.pmate:hover { border-color: #e0a93a; }
+.pm-top { display: flex; justify-content: space-between; align-items: baseline; font-size: 12px; color: #f3e6c8; }
+.pm-top b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }
+.pm-top small { color: #b99a72; }
+.pmate .meter { height: 7px; margin-top: 3px; }
+.pmate.low { animation: pm-low .8s infinite alternate; }
+@keyframes pm-low { to { border-color: #ff4a3a; box-shadow: 0 0 8px rgba(255, 60, 40, .6); } }
+#drejoin { position: fixed; left: 50%; bottom: 96px; transform: translateX(-50%); z-index: 40; box-shadow: 0 0 18px rgba(224, 169, 58, .6); animation: rejoin-pulse 1.2s infinite alternate; }
+#drejoin.hidden { display: none; }
+@keyframes rejoin-pulse { to { box-shadow: 0 0 30px rgba(224, 169, 58, .95); } }
+@media (max-width: 820px) { #dparty { top: 160px; left: 6px; width: 150px; } .pm-top { font-size: 11px; } }
