@@ -353,9 +353,74 @@
   const applyGfx = () => { try { localStorage.setItem(GFX_KEY, JSON.stringify(gfx)); } catch { /* nada */ } VIEW3D.setQuality(gfx.quality); DD.emit('gfx', gfx); };
   setTimeout(() => VIEW3D.setQuality(gfx.quality), 0);
   DD.on('open-options', () => { openOverlay('optwin'); renderOptions(); });
+  // ---------- Interfaz: tamaño del texto y modo daltónico ----------
+  const UI_KEY = 'dd-ui';
+  let uiOpt = { scale: 1, cb: false };
+  try { uiOpt = { ...uiOpt, ...JSON.parse(localStorage.getItem(UI_KEY) || '{}') }; } catch { /* nada */ }
+  const BASE_COL = {};
+  for (const k of Object.keys(RULES.RARITIES)) BASE_COL[k] = RULES.RARITIES[k].color;
+  // colores que se distinguen con cualquier tipo de daltonismo (paleta Okabe-Ito)
+  const CB_COL = { magico: '#56b4e9', raro: '#f0e442', unico: '#e69f00', conjunto: '#cc79a7' };
+  function applyUi() {
+    try { localStorage.setItem(UI_KEY, JSON.stringify(uiOpt)); } catch { /* nada */ }
+    document.documentElement.style.setProperty('--ui-zoom', uiOpt.scale);
+    document.body.classList.toggle('cb', !!uiOpt.cb);
+    for (const k of Object.keys(BASE_COL)) {
+      const c = uiOpt.cb && CB_COL[k] ? CB_COL[k] : BASE_COL[k];
+      RULES.RARITIES[k].color = c;
+      if (window.DSPRITES && DSPRITES.RARITY) DSPRITES.RARITY[k] = k === 'normal' && !uiOpt.cb ? '#d8d4c8' : c;
+    }
+  }
+  applyUi();
+
+  // ---------- Teclas configurables ----------
+  const KEY_KEY = 'dd-keys';
+  const KEY_DEF = { roll: ' ', map: 'm', inv: 'i', sheet: 'c', ping: 'p', potion: 'q', energy: 'e' };
+  const KEY_NAMES = { roll: 'Voltereta', map: 'Mapa', inv: 'Equipo y mochila', sheet: 'Ficha', ping: 'Marcar un sitio', potion: 'Poción de vida', energy: 'Poción de energía' };
+  DD.keys = { ...KEY_DEF };
+  try { Object.assign(DD.keys, JSON.parse(localStorage.getItem(KEY_KEY) || '{}')); } catch { /* nada */ }
+  const keyLabel = (k) => (k === ' ' ? 'Espacio' : k.length === 1 ? k.toUpperCase() : k);
+  let waitKey = null;
+  window.addEventListener('keydown', (e) => {
+    if (!waitKey) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const action = waitKey; waitKey = null;
+    if (k === 'Escape') return renderOptions();
+    // teclas reservadas: habilidades 1-8, movimiento y chat
+    if (/^[1-8]$/.test(k) || ['w', 'a', 's', 'd', 'Enter', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(k)) { DD.toast('Esa tecla ya se usa para moverse, hablar o lanzar habilidades.'); return renderOptions(); }
+    const other = Object.keys(DD.keys).find((a) => a !== action && DD.keys[a] === k);
+    if (other) DD.keys[other] = DD.keys[action]; // se intercambian
+    DD.keys[action] = k;
+    try { localStorage.setItem(KEY_KEY, JSON.stringify(DD.keys)); } catch { /* nada */ }
+    renderOptions();
+  }, true);
+
   function renderOptions() {
     const body = $('#opt-body'); body.innerHTML = '';
-    body.appendChild(el('div', 'field-title', 'Calidad'));
+    const title = $('#optwin .panel-title'); if (title) title.textContent = '⚙️ AJUSTES';
+    const section = (t) => body.appendChild(el('div', 'field-title opt-sec', t));
+    const slider = (label, val, fn) => {
+      const r = el('label', 'opt-row opt-slider');
+      const i = el('input'); i.type = 'range'; i.min = 0; i.max = 100; i.value = Math.round(val * 100);
+      const v = el('b', '', i.value + '%');
+      i.oninput = () => { v.textContent = i.value + '%'; fn(i.value / 100); };
+      r.append(el('span', '', label), i, v);
+      body.appendChild(r);
+    };
+
+    section('🔊 Sonido');
+    const vols = SFX.vols;
+    slider('General', vols.master, (x) => SFX.setVol('master', x));
+    slider('Música', vols.music, (x) => SFX.setVol('music', x));
+    slider('Efectos', vols.sfx, (x) => { SFX.setVol('sfx', x); SFX.play('coin'); });
+    {
+      const r = el('label', 'opt-row'); const c = el('input'); c.type = 'checkbox'; c.checked = SFX.muted;
+      c.onchange = () => { SFX.setMuted(c.checked); const st = $('#sound-state'); if (st) st.textContent = SFX.muted ? 'no' : 'sí'; };
+      r.append(c, el('span', '', 'Silenciar todo')); body.appendChild(r);
+    }
+
+    section('🖥️ Gráficos');
     const q = el('div', 'title-row');
     for (const [id, name] of [['auto', 'Automática'], ['baja', 'Baja'], ['media', 'Media'], ['alta', 'Alta']]) {
       const b = el('button', 'btn' + (gfx.quality === id ? '' : ' alt'), name);
@@ -363,7 +428,7 @@
       q.appendChild(b);
     }
     body.appendChild(q);
-    body.appendChild(el('p', 'muted small', 'Baja: sin sombras, menos luces y partículas, menos resolución (para móviles antiguos). Alta: sombras suaves, todas las luces y más partículas.'));
+    body.appendChild(el('p', 'muted small', 'Baja: sin sombras, menos luces y partículas (para ordenadores o móviles antiguos). Alta: sombras suaves, todas las luces y más partículas.'));
     const toggle = (key, label) => {
       const r = el('label', 'opt-row');
       const c = el('input'); c.type = 'checkbox'; c.checked = !!gfx[key];
@@ -376,5 +441,34 @@
     toggle('fps', 'Mostrar imágenes por segundo');
     const cur = VIEW3D.qualityInfo ? VIEW3D.qualityInfo() : null;
     if (cur) body.appendChild(el('p', 'muted small', `Ahora: calidad ${cur.name}, resolución ×${cur.pr}, ${cur.shadows ? 'con' : 'sin'} sombras, ${cur.lights} luces.`));
+
+    section('🔤 Interfaz');
+    const zr = el('div', 'title-row');
+    for (const [v, name] of [[0.9, 'Pequeño'], [1, 'Normal'], [1.15, 'Grande'], [1.3, 'Muy grande']]) {
+      const b = el('button', 'btn' + (uiOpt.scale === v ? '' : ' alt'), name);
+      b.onclick = () => { uiOpt.scale = v; applyUi(); renderOptions(); };
+      zr.appendChild(b);
+    }
+    body.appendChild(el('p', 'muted small', 'Tamaño de ventanas y textos:'));
+    body.appendChild(zr);
+    {
+      const r = el('label', 'opt-row'); const c = el('input'); c.type = 'checkbox'; c.checked = !!uiOpt.cb;
+      c.onchange = () => { uiOpt.cb = c.checked; applyUi(); DD.emit('me', DD.me); };
+      r.append(c, el('span', '', 'Modo daltónico: colores de calidad que se distinguen mejor y la inicial de la calidad en cada objeto'));
+      body.appendChild(r);
+    }
+
+    section('⌨️ Teclas');
+    body.appendChild(el('p', 'muted small', 'Pulsa un botón y después la tecla nueva (Esc para cancelar). Las habilidades usan 1-8 y el movimiento WASD o flechas.'));
+    const grid = el('div', 'key-grid');
+    for (const a of Object.keys(KEY_DEF)) {
+      const b = el('button', 'btn alt key-btn', waitKey === a ? '…' : keyLabel(DD.keys[a]));
+      b.onclick = () => { waitKey = a; renderOptions(); };
+      grid.append(el('span', '', KEY_NAMES[a]), b);
+    }
+    body.appendChild(grid);
+    const reset = el('button', 'btn alt', 'Teclas por defecto');
+    reset.onclick = () => { Object.assign(DD.keys, KEY_DEF); try { localStorage.removeItem(KEY_KEY); } catch { /* nada */ } renderOptions(); };
+    body.appendChild(reset);
   }
 })();

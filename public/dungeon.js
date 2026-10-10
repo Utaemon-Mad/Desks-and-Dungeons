@@ -516,14 +516,16 @@
     if (!game.active || DD.scene !== 'dungeon' || (document.activeElement && document.activeElement.tagName === 'INPUT')) return;
     if (document.querySelector('.overlay:not(.hidden)')) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const K = DD.keys || {};
     if (/^[1-8]$/.test(k)) { const a = abilities()[Number(k) - 1]; if (a) castSkill(a); return; }
-    if (k === 'm') { game.showMap = !game.showMap; return; }
-    if (k === 'p' && game.mouse0) { const t = screenToTile(game.mouse0.x, game.mouse0.y); if (t.x >= 0) DD.net.send({ t: 'dping', x: t.x, y: t.y, k: e.shiftKey ? 'danger' : 'here' }); return; }
-    if (k === ' ') { e.preventDefault(); doRoll(); return; }
+    if (k === (K.map || 'm')) { game.showMap = !game.showMap; return; }
+    if (k === (K.ping || 'p') && game.mouse0) { const t = screenToTile(game.mouse0.x, game.mouse0.y); if (t.x >= 0) DD.net.send({ t: 'dping', x: t.x, y: t.y, k: e.shiftKey ? 'danger' : 'here' }); return; }
+    if (k === (K.roll || ' ')) { e.preventDefault(); doRoll(); return; }
     if (k === 'g') { DD.net.send({ t: 'dfish' }); return; }
-    if (k === 'i' || k === 'b') { DD.emit('open-char', 'equipo'); return; }
-    if (k === 'c') { /* C: pergamino de sanación si lo hay, si no la ficha */ if (!(DD.me && DD.me.cons['perg-sanacion'])) { DD.emit('open-char', 'ficha'); return; } }
-    const consKey = k.toUpperCase();
+    if (k === (K.inv || 'i') || k === 'b') { DD.emit('open-char', 'equipo'); return; }
+    if (k === (K.sheet || 'c')) { /* C: pergamino de sanación si lo hay, si no la ficha */ if (!(DD.me && DD.me.cons['perg-sanacion']) || K.sheet !== 'c') { DD.emit('open-char', 'ficha'); return; } }
+    // pociones: sus teclas se pueden cambiar en Ajustes
+    const consKey = k === (K.potion || 'q') ? 'Q' : k === (K.energy || 'e') ? 'E' : k === 'q' || k === 'e' ? '' : k.toUpperCase();
     const cons = consList().filter((c) => c.key === consKey);
     if (cons.length) { const pick = consKey === 'Q' && e.shiftKey ? cons[cons.length - 1] : cons[0]; useCons(pick.id); return; }
     if (k === 'Enter') { e.preventDefault(); $('#chat-input').focus(); return; }
@@ -1440,7 +1442,7 @@
   window.addEventListener('keydown', (e) => {
     if (!game.active || DD.scene !== 'dungeon' || (document.activeElement && document.activeElement.tagName === 'INPUT')) return;
     if (e.key === 'f' || e.key === 'F') DD.net.send({ t: 'dmount' });
-    if ((e.key === 'm' || e.key === 'M') && game.map.kind === 'world') { game.bigMap = !game.bigMap; game.showMap = true; e.stopImmediatePropagation(); }
+    if (e.key.toLowerCase() === ((DD.keys && DD.keys.map) || 'm') && game.map.kind === 'world') { game.bigMap = !game.bigMap; game.showMap = true; e.stopImmediatePropagation(); }
   }, true);
 
   // ======================================================================

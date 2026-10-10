@@ -71,7 +71,7 @@
       <button data-m="hero">🏠 Volver al menú principal</button>
       <button data-m="help">📜 Comandos</button>
       <button data-m="sound">🔔 Sonido: <b id="sound-state">sí</b></button>
-      <button data-m="gfx">⚙️ Gráficos y rendimiento</button>
+      <button data-m="gfx">⚙️ Ajustes (sonido, gráficos, teclas…)</button>
       <button data-m="fs" data-fs>⛶ Pantalla completa</button>
     </div>
 
@@ -146,6 +146,8 @@
     <div class="title-box">
       <div class="logo huge">Desks <span>&amp;</span> Dungeons</div>
       <p class="tag">Una taberna, tus amigos y mazmorras sin fin</p>
+      <div id="loadbox" class="loadbox"><div class="loadbar"><i id="load-fill"></i></div><small id="load-txt">Preparando la taberna…</small></div>
+      <p id="load-tip" class="load-tip"></p>
       <div id="press" class="press">Pulsa cualquier tecla</div>
       <nav id="main-menu" class="main-menu hidden">
         <button type="button" data-go="new"><span>Nuevo personaje</span><small id="mm-new">Tres casillas para tus héroes</small></button>
