@@ -284,7 +284,34 @@
     guantes: { tela: ['Guantes de tela', 'mp'], cuero: ['Guantes de cuero', 'mp'], malla: ['Guanteletes de malla', 'mp'], placas: ['Guanteletes', 'mp'] },
     botas:   { tela: ['Sandalias', 'fp'], cuero: ['Botas de cuero', 'fp'], malla: ['Botas de malla', 'fp'], placas: ['Grebas', 'fp'] },
   };
-  const ARMOR_TIER_WORD = [null, 'reforzado', null]; // excepcional: «Coraza reforzada»; élite: «Coraza de élite»
+  // Bases de armadura al estilo de Diablo 2: por ranura, tipo y nivel (normal, excepcional, élite), dos variantes
+  // cada una (it.sk = 0 o 1). Cada base tiene su aspecto en el modelo 3D (public/armor3d.js).
+  const ARMOR_SKINS = {
+    pecho: {
+      tela: [[['Armadura acolchada', 'f'], ['Túnica de peregrino', 'f']], [['Armadura fantasmal', 'f'], ['Manto de seda', 'm']], [['Sudario del ocaso', 'm'], ['Vestidura arcana', 'f']]],
+      cuero: [[['Armadura de cuero', 'f'], ['Cuero tachonado', 'm']], [['Piel de serpiente', 'f'], ['Piel de demonio', 'f']], [['Piel de wyrm', 'f'], ['Caparazón de escarabajo', 'm']]],
+      malla: [[['Cota de anillas', 'f'], ['Cota de escamas', 'f']], [['Malla enlazada', 'f'], ['Malla tigulada', 'f']], [['Malla de diamante', 'f'], ['Gran camisote', 'm']]],
+      placas: [[['Coraza', 'f'], ['Placa gótica', 'f']], [['Placa ornamentada', 'f'], ['Placa repujada', 'f']], [['Placa sagrada', 'f'], ['Placa de arconte', 'f']]],
+    },
+    casco: {
+      tela: [[['Capucha', 'f'], ['Gorro', 'm']], [['Capucha de mago', 'f'], ['Turbante', 'm']], [['Diadema', 'f'], ['Capucha del vacío', 'f']]],
+      cuero: [[['Gorro de cuero', 'm'], ['Casquete', 'm']], [['Sombrero de guerra', 'm'], ['Máscara de hueso', 'f']], [['Shako', 'm'], ['Calavera de hidra', 'f']]],
+      malla: [[['Almófar', 'm'], ['Yelmo de malla', 'm']], [['Bacinete', 'm'], ['Celada', 'f']], [['Armet', 'm'], ['Yelmo con púas', 'm']]],
+      placas: [[['Yelmo', 'm'], ['Gran yelmo', 'm']], [['Yelmo alado', 'm'], ['Yelmo con cuernos', 'm']], [['Corona', 'f'], ['Cabeza de demonio', 'f']]],
+    },
+    guantes: {
+      tela: [[['Guantes de tela', 'mp'], ['Vendas', 'fp']], [['Guantes de seda', 'mp'], ['Guantes arcanos', 'mp']], [['Guantes del vacío', 'mp'], ['Guantes de hechicero', 'mp']]],
+      cuero: [[['Guantes de cuero', 'mp'], ['Guantes de piel', 'mp']], [['Guantes de tiburón', 'mp'], ['Brazales', 'mp']], [['Guantes de vampiro', 'mp'], ['Brazales de ogro', 'mp']]],
+      malla: [[['Guanteletes de malla', 'mp'], ['Mitones de anillas', 'mp']], [['Guanteletes enlazados', 'mp'], ['Brazales de escamas', 'mp']], [['Guanteletes de diamante', 'mp'], ['Garras de dragón', 'fp']]],
+      placas: [[['Guanteletes', 'mp'], ['Manoplas', 'fp']], [['Guanteletes de guerra', 'mp'], ['Puños de hierro', 'mp']], [['Guanteletes de ogro', 'mp'], ['Guanteletes de arconte', 'mp']]],
+    },
+    botas: {
+      tela: [[['Sandalias', 'fp'], ['Zapatillas', 'fp']], [['Botas de seda', 'fp'], ['Escarpines de mago', 'mp']], [['Pasos del vacío', 'mp'], ['Botas de bruma', 'fp']]],
+      cuero: [[['Botas de cuero', 'fp'], ['Botas pesadas', 'fp']], [['Botas de piel de demonio', 'fp'], ['Botas de tiburón', 'fp']], [['Botas de wyrm', 'fp'], ['Botas de escarabajo', 'fp']]],
+      malla: [[['Botas de malla', 'fp'], ['Botas de anillas', 'fp']], [['Botas enlazadas', 'fp'], ['Botas de escamas', 'fp']], [['Botas de diamante', 'fp'], ['Botas de mithril', 'fp']]],
+      placas: [[['Grebas', 'fp'], ['Botas de placas', 'fp']], [['Grebas de guerra', 'fp'], ['Grebas de batalla', 'fp']], [['Grebas de arconte', 'fp'], ['Grebas del mito', 'fp']]],
+    },
+  };
   const JEWELS = { amuleto: { name: 'Amuleto', g: 'm' }, anillo: { name: 'Anillo', g: 'm' } };
 
   // Concordancia de adjetivos: g = m, f, mp, fp
@@ -422,8 +449,7 @@
       return { name, g, req, O };
     }
     if (ARMOR_SLOT[it.slot] && ARMOR_NAMES[it.slot][it.type]) {
-      const [n0, g] = ARMOR_NAMES[it.slot][it.type];
-      const name = tier === 1 ? `${n0} ${adj(ARMOR_TIER_WORD[1], g)}` : tier === 2 ? `${n0} de élite` : n0;
+      const [name, g] = ARMOR_SKINS[it.slot][it.type][Math.min(2, tier)][it.sk ? 1 : 0];
       const fue = ARMOR_REQ[it.type][tier];
       return { name, g, req: fue ? { fue } : {} };
     }
@@ -502,6 +528,8 @@
       it.type = base;
       it.tier = tier;
       it.armor = Math.max(1, Math.round(ARMOR_BASE[base] * ARMOR_SLOT[slot] * TIERS[tier].mult * grow * qMult));
+      // variante de la base (sin gastar tiradas del generador: sale del nivel, la calidad y el tipo)
+      it.sk = o.sk !== undefined ? (o.sk ? 1 : 0) : (ilvl * 7 + tier * 3 + base.length + RARITY_ORDER.indexOf(rarity) + slot.length) % 2;
     } else {
       base = slot;
     }
@@ -932,7 +960,9 @@
     const g = {};
     if (e.arma) { g.w = e.arma.base; g.wr = e.arma.rarity; }
     if (e.mano) { g.o = e.mano.base; g.or = e.mano.rarity; }
-    for (const s of ['casco', 'pecho', 'guantes', 'botas']) if (e[s]) { g[s] = e[s].type; g[s + 'R'] = e[s].rarity; }
+    if (e.arma) g.wt = e.arma.tier || 0;
+    if (e.mano) g.ot = e.mano.tier || 0;
+    for (const s of ['casco', 'pecho', 'guantes', 'botas']) if (e[s]) { g[s] = e[s].type; g[s + 'R'] = e[s].rarity; g[s + 'T'] = e[s].tier || 0; g[s + 'S'] = e[s].sk ? 1 : 0; }
     const sets = {};
     for (const s of SLOT_IDS) if (e[s] && e[s].set) sets[e[s].set] = (sets[e[s].set] || 0) + 1;
     const best = Object.entries(sets).sort((a, b) => b[1] - a[1])[0];
@@ -1120,7 +1150,7 @@
   const xpPenalty = (playerLevel, monsterLevel) => (monsterLevel >= playerLevel - 3 ? 1 : Math.max(0.2, 1 - 0.15 * (playerLevel - 3 - monsterLevel)));
 
   const RULES = {
-    MAX_LEVEL, BAG_SIZE, RULES_VERSION, STAT_BASE, STAT_MAX, POINTS_START, STATS, STAT_IDS, EXTRA, ELEMENTS, RACES, RACE_IDS, SEXES, CLASSES, CLASS_IDS, LEGACY_CLASS, ARMOR_TYPES,
+    MAX_LEVEL, BAG_SIZE, RULES_VERSION, STAT_BASE, STAT_MAX, POINTS_START, STATS, STAT_IDS, EXTRA, ELEMENTS, RACES, RACE_IDS, SEXES, CLASSES, CLASS_IDS, LEGACY_CLASS, ARMOR_TYPES, ARMOR_SKINS,
     ABILITIES, ABILITY_BY_ID, XP_TABLE, SLOTS, SLOT_IDS, TIERS, WEAPONS, FISTS, OFFHANDS, ARMOR_NAMES, ARMOR_REQ, JEWELS,
     RARITIES, RARITY_ORDER, LEGACY_RARITY, AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES,
     statName, fmtStat, classId, raceId, levelFromXp, pointsTotal, pointsSpent, pointsFree, baseStats, statRoom, newChar, cleanChar,

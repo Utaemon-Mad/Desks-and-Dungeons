@@ -1075,28 +1075,33 @@
     const species = look.species || 'human';
     const skin = species === 'dragonborn' ? '#9a3a2a' : MAP.SKINS[look.skin] || MAP.SKINS[0];
     const hair = npc === 'bruja' ? '#b8b8c0' : MAP.HAIRS[look.hair] || MAP.HAIRS[0];
-    const cloth = set ? set[0] : npcCloth || look.color || K.color;
+    // el peto manda en el color de la ropa (y algunos llevan capa); los conjuntos, en su color
+    const A3 = !npc && globalThis.ARMOR3D;
+    const chestSt = A3 ? A3.chestStyle(gear) : null;
+    const cloth = set ? set[0] : npcCloth || (chestSt && chestSt.cloth) || look.color || K.color;
     const W = gear.w && RULES.WEAPONS[gear.w];
     const kind = !W ? 'unarmed' : W.kind === 'magic' ? 'magic' : W.kind === 'ranged' ? (gear.w === 'arco' ? 'ranged1' : 'ranged2') : gear.w === 'daga' ? 'dagger' : W.hands === 2 ? 'melee2' : 'melee1';
     // sexo y peinado: la cabeza sale de otro modelo (los comerciantes de la taberna conservan la suya)
     const hs = !npc && MAP.hairstyle ? MAP.hairstyle(look.sex, look.hs) : null;
     const helmet = !!gear.casco && !npc && !(hs && hs.id === 'capucha');
-    const cape = !!set || gear.pechoR === 'unico' || gear.pechoR === 'raro' || npc === 'bruja';
+    const cape = !!set || gear.pechoR === 'unico' || gear.pechoR === 'raro' || npc === 'bruja' || !!(chestSt && chestSt.cape);
     const goblin = species === 'goblin' && !npc && globalThis.GOBLIN3D;
     const root = buildGL(name, {
-      skin, hair, cloth, helmet, cape, capeColor: set ? set[1] : RARITY[gear.pechoR] || cloth, set: gear.set,
+      skin, hair, cloth, helmet: helmet && !A3, cape, capeColor: set ? set[1] : RARITY[gear.pechoR] || cloth, set: gear.set,
       w: gear.w, wr: gear.wr, o: gear.o, or: gear.or, weaponKind: kind, mug: npc === 'tabernero',
       head: hs && !goblin ? hs.head : null,
     });
     // los goblins llevan su propia cabeza hecha a mano (goblin.js), con todas sus opciones
     const gob = goblin && MAP.cleanGoblin ? MAP.cleanGoblin(look.gob, look.sex) : null;
-    if (goblin) globalThis.GOBLIN3D.build(root.userData.parts, { skin, hair, gob, sex: look.sex, helmet: !!gear.casco, seed: JSON.stringify(gob) + skin });
+    if (goblin) globalThis.GOBLIN3D.build(root.userData.parts, { skin, hair, gob, sex: look.sex, helmet: A3 ? A3.coversHair(gear) : !!gear.casco, seed: JSON.stringify(gob) + skin });
     else raceFeatures(root, species, { skin, hair, beard: look.beard || ((hs && hs.beard) || (species === 'dwarf' && hs && hs.head !== 'Barbarian' && look.sex !== 'f') ? hair : null), helmet, head: (hs && hs.head) || name });
     const SP = MAP.SPECIES[species] || {};
     root.scale.setScalar(SP.scale || 1);
     const body = root.userData.parts.model;
     if (SP.wide) { body.scale.x *= SP.wide; body.scale.z *= SP.wide; }
     if (SP.slim) { body.scale.x *= SP.slim; body.scale.z *= SP.slim; }
+    // armaduras que se ven: petos, hombreras, yelmos, guanteletes, grebas… (armor3d.js)
+    if (A3) A3.build(root, gear, { setTrim: set ? set[1] : null });
     if (gob) { const b = globalThis.GOBLIN3D.BUILD[gob.build] || 1; body.scale.x *= b; body.scale.z *= b; }
     return root;
   }
