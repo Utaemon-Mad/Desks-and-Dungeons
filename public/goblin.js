@@ -45,10 +45,11 @@
   // Curva de la boca: sonrisa torcida (sube por las comisuras)
   const mouthY = (x) => 1.405 + 0.06 * Math.pow(Math.abs(x) / 0.22, 2) + 0.012 * x / 0.22;
 
-  function headGeo(hi) {
-    return cached(geoCache, 'head' + hi, () => {
-      const H = HEADS[hi];
-      const g = new (T().SphereGeometry)(1, 120, 90, PHI0, Math.PI * 2);
+  const WS = 200, HS = 150; // segmentos de la esfera (muchos: la nariz sale del mismo cráneo)
+  function headGeo(hi, ni = 0) {
+    return cached(geoCache, 'head' + hi + '|' + ni, () => {
+      const H = HEADS[hi], N = NOSES[ni];
+      const g = new (T().SphereGeometry)(1, WS, HS, PHI0, Math.PI * 2);
       const pos = g.attributes.position;
       for (let i = 0; i < pos.count; i++) {
         const dx = pos.getX(i), dy = pos.getY(i), dz = pos.getZ(i);
@@ -79,13 +80,22 @@
         z += 0.015 * lip;
         // sienes hundidas
         for (const sx of [-1, 1]) { const k = gauss(x - sx * 0.4, ly - 1.75, z - 0.12, 0.12); x -= sx * 0.025 * k; }
+        // nariz esculpida en la misma piel: un pico que sale de la cara, con el puente subiendo hacia la frente
+        // y la punta que cae (ganchuda) o se levanta (respingona)
+        const ny = ly - N.y;
+        const nd = Math.sqrt(Math.pow(x / N.w, 2) + Math.pow(ny / (ny > 0 ? N.h * 1.7 : N.h), 2));
+        if (nd < 1 && dz > 0.3) {
+          const k = Math.pow(1 - nd, N.p) * smooth(0.3, 0.7, dz);
+          z += N.L * k;
+          y -= N.droop * N.L * k * k * k;
+        }
         pos.setXYZ(i, x + H.c[0], y + H.c[1], z + H.c[2]);
       }
       g.computeVertexNormals();
       // la costura de la nuca: cada par de vértices repetidos comparte normal
-      const W = 121, nor = g.attributes.normal;
-      for (let r = 0; r <= 90; r++) {
-        const a = r * W, b = r * W + 120;
+      const W = WS + 1, nor = g.attributes.normal;
+      for (let r = 0; r <= HS; r++) {
+        const a = r * W, b = r * W + WS;
         const n = V(nor.getX(a) + nor.getX(b), nor.getY(a) + nor.getY(b), nor.getZ(a) + nor.getZ(b)).normalize();
         nor.setXYZ(a, n.x, n.y, n.z); nor.setXYZ(b, n.x, n.y, n.z);
       }
@@ -297,12 +307,13 @@
   }
 
   // ---------- narices ----------
+  // L: lo que sale; w/h: medio ancho y medio alto de la base; p: forma (más alto = más afilada); droop: caída de la punta
   const NOSES = [
-    { pts: [[0, 0, 0], [0, 0.01, 0.22], [0, -0.005, 0.4], [0, -0.06, 0.53], [0, -0.12, 0.56]], r: 0.09 },  // ganchuda
-    { pts: [[0, 0, 0], [0, 0.004, 0.25], [0, -0.006, 0.48], [0, -0.03, 0.66]], r: 0.085 },               // recta y larga
-    { pts: [[0, 0, 0], [0, -0.01, 0.22], [0, 0.01, 0.38], [0, 0.08, 0.48]], r: 0.095 },                  // respingona
-    { pts: [[0, 0, 0], [0, -0.01, 0.22], [0, -0.035, 0.45]], r: 0.135 },                                // zanahoria
-    { pts: [[0, 0, 0], [0, 0.002, 0.3], [0, -0.006, 0.6], [0, -0.02, 0.82]], r: 0.065 },                // aguja
+    { L: 0.42, w: 0.095, h: 0.085, p: 1.7, droop: 0.32, y: 1.53 },   // ganchuda
+    { L: 0.5, w: 0.09, h: 0.08, p: 1.8, droop: 0.06, y: 1.53 },      // recta y larga
+    { L: 0.3, w: 0.1, h: 0.09, p: 1.5, droop: -0.35, y: 1.52 },      // respingona
+    { L: 0.32, w: 0.14, h: 0.12, p: 1.25, droop: 0.12, y: 1.52 },    // zanahoria
+    { L: 0.62, w: 0.075, h: 0.07, p: 2.2, droop: 0.04, y: 1.535 },   // aguja
   ];
 
   // ---------- colores de ojos (globo, iris) ----------
@@ -336,7 +347,6 @@
     const skinC = new THREE.Color(o.skin);
     const sHex = '#' + skinC.getHexString();
     const darkHex = '#' + skinC.clone().multiplyScalar(0.7).getHexString();
-    const noseHex = '#' + skinC.clone().lerp(new THREE.Color('#d0505a'), 0.12).getHexString();
     const add = (geom, material, x = 0, y = 0, z = 0, parent = grp) => { const m = new THREE.Mesh(geom, material); m.position.set(x, y, z); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m; };
     const sphG = (r, w = 20, h = 14) => cached(geoCache, `s${r}|${w}|${h}`, () => new THREE.SphereGeometry(r, w, h));
     const coneG = (r, h, s = 10) => cached(geoCache, `c${r}|${h}|${s}`, () => new THREE.ConeGeometry(r, h, s));
@@ -344,7 +354,8 @@
     const cylG = (r0, r1, h) => cached(geoCache, `y${r0}|${r1}|${h}`, () => new THREE.CylinderGeometry(r0, r1, h, 12));
 
     // ---- cráneo con la piel pintada ----
-    const head = add(headGeo(hi), mat(sHex, { map: skinTexture(hi, sHex, gob.marks || 0, o.seed || 'gob'), rough: 0.62 }));
+    const ni = gob.nose || 0;
+    const head = add(headGeo(hi, ni), mat(sHex, { map: skinTexture(hi, sHex, gob.marks || 0, o.seed || 'gob'), rough: 0.62 }));
     head.updateMatrixWorld(true);
     const ray = new THREE.Raycaster();
     const C = V(...H.c);
@@ -358,7 +369,7 @@
     const ruby = mat('#d8102a', { rough: 0.12, emissive: '#5a0008', ei: 0.6 });
     const ivory = mat('#efe4c2', { rough: 0.35 });
     const bone = mat('#e8dcc0', { rough: 0.55 });
-    const skinM = mat(sHex, { rough: 0.62 }), darkM = mat(darkHex, { rough: 0.7 }), noseM = mat(noseHex, { rough: 0.55 });
+    const skinM = mat(sHex, { rough: 0.62 }), darkM = mat(darkHex, { rough: 0.7 });
     const innerEar = mat('#' + skinC.clone().lerp(new THREE.Color('#c86070'), 0.18).multiplyScalar(0.8).getHexString(), { rough: 0.6 });
     const hairHex = o.hair || '#2a1a10';
     const hairM = mat(hairHex, { rough: 0.55 });
@@ -410,9 +421,7 @@
     }
 
     // ---- nariz ----
-    const N = NOSES[gob.nose || 0];
-    const nose = add(taperGeo('nose' + (gob.nose || 0), N.pts, N.r, 0.004, 20, 30, 0.82, 0.08), noseM, 0, 1.525, faceZ(0, 1.525) - 0.11);
-    void nose;
+    // (la nariz ya va esculpida en el cráneo: headGeo)
 
     // ---- boca y dientes ----
     const tooth = (x, h, w, up, material = ivory, tilt = 0) => {
@@ -466,8 +475,9 @@
       }
     }
     if (RG === 5) { // aro en la nariz (y aros de oro en las orejas, puestos arriba)
-      const r = add(torG(0.045, 0.011), gold, 0, 1.475, faceZ(0, 1.5) + 0.055);
-      r.rotation.x = 0.35;
+      const ny = NOSES[ni].y - NOSES[ni].h * 0.75;
+      const r = add(torG(0.04, 0.011), gold, 0, ny - 0.03, faceZ(0, ny) + 0.005);
+      r.rotation.x = 0.5;
     }
 
     // ---- marcas en relieve ----
@@ -481,7 +491,7 @@
       // casquete de pelo pegado al cráneo. region(x, y, z) da cuánto se mete el punto en la zona con pelo
       // (positivo dentro, negativo fuera): el pelo se levanta poco a poco desde el borde, sin escalones
       const cap = (region, lift = 0.028) => {
-        const src = headGeo(hi), pos = src.attributes.position, nor = src.attributes.normal;
+        const src = headGeo(hi, ni), pos = src.attributes.position, nor = src.attributes.normal;
         const g = new THREE.BufferGeometry();
         const np = new Float32Array(pos.count * 3), m = new Float32Array(pos.count);
         for (let i = 0; i < pos.count; i++) {
