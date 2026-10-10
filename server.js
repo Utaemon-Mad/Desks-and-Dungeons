@@ -352,7 +352,7 @@ function resumePlace(room, user) {
 function sendMe(user) {
   const p = user.profile;
   ensureBoard(p);
-  send(user.ws, { t: 'me', char: p.char, equip: p.equip, bag: p.bag, cons: p.cons, buffs: p.buffs, xp: p.xp, gold: p.gold, quests: p.quests, questsDone: p.questsDone, waystones: p.waystones, pet: p.pet || null, mount: p.mount || null, mats: p.mats, stats: p.stats, achievements: p.achievements, title: p.title || null, board: p.board, trophies: p.trophies });
+  send(user.ws, { t: 'me', char: p.char, equip: p.equip, bag: p.bag, cons: p.cons, buffs: p.buffs, xp: p.xp, gold: p.gold, quests: p.quests, questsDone: p.questsDone, waystones: p.waystones, pet: p.pet || null, mount: p.mount || null, mats: p.mats, stats: p.stats, achievements: p.achievements, title: p.title || null, board: p.board, trophies: p.trophies, tutDone: !!p.tutDone });
 }
 
 function profileChanged(room, user, opts = {}) {
@@ -1373,6 +1373,20 @@ wss.on('connection', (ws) => {
         user.profile.quests[id] = { n: 0 };
         profileChanged(room, user);
         send(ws, { t: 'dwhisper', text: `📜 Nueva misión: ${RULES.QUESTS[id].name}` });
+        break;
+      }
+      case 'tut:done': {
+        // regalo de Alfonso al acabar el tutorial (una vez por personaje)
+        const p = user.profile;
+        if (!p || p.tutDone) break;
+        p.tutDone = true;
+        if (msg.skip) { profileChanged(room, user); break; }
+        p.cons['pocion-vida-p'] = (p.cons['pocion-vida-p'] || 0) + 3;
+        p.cons['pocion-energia'] = (p.cons['pocion-energia'] || 0) + 2;
+        p.gold += 50;
+        profileChanged(room, user);
+        broadcast(room, { t: 'profile', id: user.id, xp: p.xp, gold: p.gold, level: levelOf(user) });
+        send(ws, { t: 'toast', text: '🎁 Alfonso te regala 3 pociones de vida, 2 de energía y 50 de oro.' });
         break;
       }
       case 'quest:turnin': {

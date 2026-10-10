@@ -668,6 +668,7 @@
         DD.emit('me', m);
         break;
       }
+      case 'toast': toast(m.text); break;
       case 'levelup': {
         toast(`⭐ ¡Subes a nivel ${m.level}! Pulsa el icono rojo bajo tu retrato para repartir ${m.points} puntos.`);
         sfx('levelup');
@@ -852,6 +853,7 @@
     const text = chatInput.value.trim();
     if (!text) { chatInput.blur(); return; }
     if (text === '/ayuda' || text === '/help') { showHelp(); chatInput.value = ''; return; }
+    if (text === '/tutorial') { if (DD.restartTutorial) DD.restartTutorial(); chatInput.value = ''; return; }
     net.send({ t: 'chat', text });
     chatInput.value = '';
   });
