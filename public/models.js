@@ -1107,14 +1107,15 @@
   const goblinHeads = new Map();
   function goblinHead(geo) {
     if (goblinHeads.has(geo)) return goblinHeads.get(geo);
-    const g = geo.clone(), pos = g.attributes.position, uv = g.attributes.uv;
+    const g = geo.clone(), pos = g.attributes.position, uv = g.attributes.uv, nor = g.attributes.normal;
     for (let i = 0; i < pos.count; i++) {
       const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), u = uv.getX(i);
-      if (Math.abs(x) > 0.455 && y > 1.36 && y < 1.68 && z > -0.08 && z < 0.06 && u < 0.1) pos.setX(i, Math.sign(x) * 0.43);
+      // y la luz como si fuera piel lisa: la normal mira hacia fuera del cráneo o de la cara
+      if (Math.abs(x) > 0.455 && y > 1.36 && y < 1.68 && z > -0.08 && z < 0.06 && u < 0.1) { pos.setX(i, Math.sign(x) * 0.43); nor.setXYZ(i, Math.sign(x), 0, 0); }
       const zf = 0.438 - 0.6 * x * x;
-      if (y > 1.43 && y < 1.545 && Math.abs(x) < 0.15 && u < 0.075 && z > zf) pos.setZ(i, zf);
+      if (y > 1.425 && y < 1.56 && Math.abs(x) < 0.17 && u < 0.08 && z > zf) { pos.setZ(i, zf); const l = Math.hypot(1.2 * x, 1); nor.setXYZ(i, 1.2 * x / l, 0, 1 / l); }
     }
-    pos.needsUpdate = true;
+    pos.needsUpdate = true; nor.needsUpdate = true;
     goblinHeads.set(geo, g);
     return g;
   }
@@ -1248,18 +1249,11 @@
       lid.rotation.set(0.5, 0, sx * 0.32);
     }
 
-    // ---- nariz larga, ganchuda y muy picuda, con aletas y una verruga ----
-    const nb = W(0, 1.525, 0.4);
-    const nosePts = [[0, 0, 0], [0, 0.012, 0.14], [0, 0.005, 0.28], [0, -0.025, 0.4], [0, -0.07, 0.47]].map(([x, y, z]) => new THREE.Vector3(x, y, z));
-    const noseG = geo('gob-nose', () => taperTube(nosePts, 0.088, 0.005, 16, 26, 0.92));
+    // ---- nariz: una sola pieza, larga y muy picuda, que nace de la cara y se afila hasta la punta ----
+    const nb = W(0, 1.53, 0.22);
+    const nosePts = [[0, 0, 0], [0, 0.004, 0.24], [0, -0.006, 0.46], [0, -0.04, 0.63]].map(([x, y, z]) => new THREE.Vector3(x, y, z));
+    const noseG = geo('gob-nose2', () => taperTube(nosePts, 0.085, 0.004, 20, 30, 0.82));
     const nose = new THREE.Mesh(noseG, skin); nose.position.copy(nb); nose.scale.setScalar(k); nose.castShadow = true; g.add(nose);
-    // aletas de la nariz pegadas a la base y orificios por debajo
-    for (const sx of [-1, 1]) {
-      const al = put(sph(0.042, 16, 12), skin, sx * 0.058, 1.495, 0.452); al.scale.multiply(new THREE.Vector3(1.05, 0.8, 1));
-      const ns = put(sph(0.014, 10, 8), black, sx * 0.052, 1.478, 0.478); ns.scale.multiply(new THREE.Vector3(1.1, 0.55, 0.9));
-    }
-    const wp = nosePts[2].clone().add(new THREE.Vector3(0.022, 0.03, 0)).multiplyScalar(k).add(nb);
-    const wart = new THREE.Mesh(sph(0.016, 8, 6), skinDark); wart.position.copy(wp); wart.scale.setScalar(k); g.add(wart);
 
     // ---- boca: dientes de arriba torcidos y dos colmillos de abajo que asoman ----
     const mouthY = 1.415;
