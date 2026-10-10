@@ -57,6 +57,7 @@
   function show(el) { for (const e of SCREENS) e.classList.toggle('hidden', e !== el); document.body.classList.add('at-title'); }
 
   function toTitle(atMenu = true) {
+    SFX.music('menu');
     net.close(); users.clear(); DD.me = null; C.myId = null;
     DD.emit('to-title');
     C.setEditing(false);
@@ -369,6 +370,37 @@
     acct = m;
     enterGame(createSlot, server);
   });
+
+  // ---------- Carga: barra de progreso y consejos mientras llegan los modelos 3D ----------
+  const TIPS = [
+    'Alt+clic (o la tecla P) marca un sitio en el suelo para todo el grupo.',
+    'Espacio hace una voltereta: eres invulnerable un instante. Úsala contra los golpes de los jefes.',
+    'Los jefes marcan el suelo en rojo antes de un gran golpe: ¡sal de ahí!',
+    'Pasa el ratón por un objeto para comparar sus propiedades con lo que llevas puesto.',
+    'Los goblins encuentran más objetos mágicos: +15% de hallazgo mágico.',
+    'Madre Zarza vende pociones: lleva unas cuantas antes de bajar a una mazmorra.',
+    'Si caes, aparece «Volver con tu grupo» en la taberna mientras tus amigos sigan dentro.',
+    'En ☰ Menú → Ajustes puedes cambiar el volumen, la calidad, el tamaño del texto y las teclas.',
+    'Los objetos de conjunto (verdes) los sueltan los jefes. ¡Junta varias piezas para ganar bonificaciones!',
+    'Con 🔗 Copiar enlace de invitación tus amigos entran directamente en tu taberna.',
+    'Las puertas cerradas tapan lo que hay detrás: ábrelas con cuidado.',
+    'En la Forja de Brunilda puedes mejorar tus objetos hasta +10.',
+  ];
+  const tipEl = $('#load-tip'), loadBox = $('#loadbox'), fillEl = $('#load-fill'), loadTxt = $('#load-txt');
+  let tipI = Math.floor(Math.random() * TIPS.length);
+  const nextTip = () => { if (tipEl) { tipEl.textContent = '💡 ' + TIPS[tipI++ % TIPS.length]; tipEl.classList.remove('tip-in'); void tipEl.offsetWidth; tipEl.classList.add('tip-in'); } };
+  nextTip();
+  const tipTimer = setInterval(() => { if (titleEl.classList.contains('hidden')) return; nextTip(); }, 6500);
+  window.addEventListener('dd-load', (e) => {
+    const { done, total } = e.detail || {};
+    if (!total || !fillEl) return;
+    const pct = Math.round(100 * done / total);
+    fillEl.style.width = pct + '%';
+    loadTxt.textContent = pct < 100 ? `Cargando héroes y monstruos… ${pct}%` : '¡Listo!';
+  });
+  const loadDone = () => { if (!loadBox) return; fillEl.style.width = '100%'; loadTxt.textContent = '¡Listo!'; setTimeout(() => loadBox.classList.add('done'), 600); };
+  if (DD.modelsReady) DD.modelsReady.then(loadDone, loadDone); else loadDone();
+  void tipTimer;
 
   Object.assign(C, { buildPickers, loginEl, profile, renderSlots, toTitle });
   Object.defineProperty(C, 'screen', { get: () => screen, set: (v) => { screen = v; } });

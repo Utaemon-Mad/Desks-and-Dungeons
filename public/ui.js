@@ -17,8 +17,8 @@
   const itemIcon = (it, size) => iconCanvas(DSPRITES.itemIcon(it), size);
   function consIcon(id, size = 32) { const C = RULES.CONSUMABLES[id]; return iconCanvas(C.spell ? DSPRITES.scroll(C.color) : DSPRITES.potion(C.color), size); }
 
-  function openOverlay(id) { document.querySelectorAll('.overlay.win').forEach((o) => { if (o.id !== id) o.classList.add('hidden'); }); $('#' + id).classList.remove('hidden'); hideTip(); }
-  function closeOverlay(id) { $('#' + id).classList.add('hidden'); hideTip(); }
+  function openOverlay(id) { if ($('#' + id).classList.contains('hidden')) DD.sfx('open'); document.querySelectorAll('.overlay.win').forEach((o) => { if (o.id !== id) o.classList.add('hidden'); }); $('#' + id).classList.remove('hidden'); hideTip(); }
+  function closeOverlay(id) { if (!$('#' + id).classList.contains('hidden')) DD.sfx('close'); $('#' + id).classList.add('hidden'); hideTip(); }
   document.querySelectorAll('.overlay.win').forEach((o) => {
     o.addEventListener('pointerdown', (e) => { if (e.target === o) closeOverlay(o.id); });
     const x = o.querySelector('.close-x'); if (x) x.onclick = () => { closeOverlay(o.id); if (o.id === 'tradewin') DD.net.send({ t: 'trade:cancel' }); };
@@ -510,7 +510,7 @@
   let shop = null;
   DD.on('open-shop', (npc) => { if (!inTavern() && npc !== 'bruja') return; shop = { npc }; openOverlay('shopwin'); $('#shop-body').innerHTML = '<p class="muted">…</p>'; DD.net.send({ t: 'shop:open', npc }); });
   DD.on('shop', (m) => { shop = m; if ($('#shopwin').classList.contains('hidden')) return; renderShop(); });
-  DD.on('sold', (m) => { DD.toast(`Vendido por ${m.gold} 🪙`); DD.blip(1046, 0.08); });
+  DD.on('sold', (m) => { DD.toast(`Vendido por ${m.gold} 🪙`); DD.sfx('buy'); });
 
   function renderShop() {
     const p = me();
@@ -830,6 +830,7 @@
       h('Las mazmorras');
       p('🗝️ Mazmorras: elige un tema (o al azar) y el nivel (desde 1 hasta tu nivel + 3). Se genera una mazmorra nueva cada vez. Tus amigos pueden unirse desde la misma ventana. Derrota al jefe para abrir el portal de salida.');
       p('Controles: clic en el suelo para andar (mantén pulsado para seguir al ratón), clic en un enemigo para atacarlo sin parar, WASD o flechas para moverte. 1-8: habilidades. Q: poción de vida (Mayús+Q la grande), E: energía, R/T: brebajes, Z X C V: pergaminos. M: mapa. I: equipo.');
+      p('👥 En grupo: a la izquierda ves la vida de tus compañeros. Alt+clic (o clic central, o la tecla P) marca un sitio para todos; con Mayús, un aviso de peligro. Si caes, en la taberna aparece «Volver con tu grupo» mientras tus amigos sigan dentro.');
       p('Los arqueros y chamanes disparan a la casilla donde estás: ¡muévete y esquivarás el proyectil! Los jefes marcan en rojo el suelo antes de un gran golpe: sal de ahí.');
       h('El mundo abierto');
       p('🗺️ Mundo: Brumaverde está en el centro y, cuanto más lejos, más nivel hace falta: valle (1-3), bosque (3-6), ciénaga (6-10), yermo (10-14), picos helados (14-19) y erial de ceniza (19-26). Si entras en una zona muy por encima de tu nivel, la corrupción te irá quitando vida.');

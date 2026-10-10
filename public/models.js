@@ -720,11 +720,14 @@
     if (GL.loading) return GL.loading;
     if (!THREE.GLTFLoader) return Promise.resolve(false);
     const L = new THREE.GLTFLoader();
-    const get = (u) => new Promise((res, rej) => L.load(base + u, res, undefined, rej));
+    // progreso de la carga (para la barra de la pantalla de inicio)
+    GL.progress = { done: 0, total: 0 };
+    const tick = (x) => { GL.progress.done++; try { window.dispatchEvent(new CustomEvent('dd-load', { detail: GL.progress })); } catch { /* nada */ } return x; };
+    const get = (u) => { GL.progress.total++; return new Promise((res, rej) => L.load(base + u, (g) => res(tick(g)), undefined, rej)); };
     const names = Object.keys(CHAR_DEF);
     // animales (Quaternius): si alguno falla, se queda el modelo de siempre
     const animalBase = base.replace(/kaykit\/$/, 'quaternius/');
-    const getAnimal = (n) => new Promise((res) => L.load(animalBase + n + '.glb', res, undefined, () => res(null)));
+    const getAnimal = (n) => { GL.progress.total++; return new Promise((res) => L.load(animalBase + n + '.glb', (g) => res(tick(g)), undefined, () => res(tick(null)))); };
     const animalNames = Object.keys(ANIMALS);
     GL.loading = Promise.all([get('chars/anims.glb'), get('chars/anims_skel.glb'), get('props/weapons.glb'), Promise.all(animalNames.map(getAnimal)), ...PIECE_PACKS.map(([f]) => get(f)), ...names.map((n) => get('chars/' + n + '.glb'))]).then(([anims, animsSkel, weapons, animals, ...rest]) => {
       animals.forEach((g, i) => {

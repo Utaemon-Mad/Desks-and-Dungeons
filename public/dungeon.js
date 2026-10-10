@@ -117,6 +117,12 @@
       ? [...game.ents.values()].find((e) => e.kind === 'hero' && e.id !== DD.myId)
       : [...game.ents.values()].find((e) => e.kind === 'enemy' && e.boss && game.vis && game.vis[e.y * game.map.w + e.x]);
     game.boss = boss || null;
+    game.mates = [...game.ents.values()].filter((e) => e.kind === 'hero' && e.id !== DD.myId).length;
+    updateParty();
+    // música: la del jefe mientras se le vea (y unos segundos después)
+    if (boss) game.bossSeen = now;
+    const k = game.map && game.map.kind;
+    SFX.music(k === 'world' ? (game.bossSeen && now - game.bossSeen < 8000 ? 'boss' : 'world') : k === 'arena' || (game.bossSeen && now - game.bossSeen < 8000) ? 'boss' : 'dungeon');
     updateHud();
   }
 
@@ -159,6 +165,14 @@
 
   const PROJ_COL = { arrow: '#e8dcc0', javelin: '#c8a070', bolt: '#7aff9a', necro: '#9a5aff', fire: '#ff7a2a' };
 
+  // tipo de sonido de cada habilidad, por su nombre
+  const CAST_KIND = {};
+  for (const list of Object.values(RULES.ABILITIES)) for (const a of list) {
+    CAST_KIND[a.name] = a.fx === 'fire' ? 'fire' : a.fx === 'cold' ? 'ice' : a.fx === 'holy' ? 'holy' : a.fx === 'nature' ? 'nature' : a.fx === 'lightning' ? 'storm'
+      : /heal/i.test(a.type) ? 'heal' : a.type === 'blink' ? 'shadow' : a.type === 'buff' ? 'shout' : ['strike', 'nova', 'dash', 'cone', 'line'].includes(a.type) ? 'phys' : 'arcane';
+  }
+  const castKind = (name) => CAST_KIND[name] || 'arcane';
+
   function onEvent(ev, now) {
     const me = DD.myId;
     switch (ev.e) {
@@ -174,7 +188,7 @@
             game.floaters.push({ x: t.x, y: t.y, text: String(ev.dmg) + (ev.block ? ' 🛡' : ''), color: col, big: ev.t === me || ev.crit, crit: !!ev.crit, start: now });
             for (let i = 0; i < (ev.crit ? 14 : 5); i++) spark(t.x + 0.5, t.y + 0.3, t.kind === 'hero' ? '#c83a3a' : (RULES.MONSTERS[t.k] || {}).undead ? '#d8d0b8' : '#9a1a1a');
             if (ev.crit) { ring(t.rx ?? t.x, t.ry ?? t.y, '#ffd23f'); if (ev.by === me) { game.hitstop = now + 75; if (!DD.gfx || DD.gfx.shake) game.shake = now + 200; } }
-            if (ev.t === me) { game.lastHurt = now; DD.blip(150, 0.06); if (ev.dmg > (game.you ? game.you.maxHp * 0.15 : 99) && (!DD.gfx || DD.gfx.shake)) game.shake = now + 220; }
+            if (ev.t === me) { game.lastHurt = now; DD.sfx(ev.block ? 'block' : 'hurt'); if (ev.dmg > (game.you ? game.you.maxHp * 0.15 : 99) && (!DD.gfx || DD.gfx.shake)) game.shake = now + 220; }
           }
         }
         if (by && t && !ev.dodge) {
@@ -182,7 +196,9 @@
           if (ev.kind === 'ranged') game.fx.push({ kind: 'arrow', from: { x: by.x, y: by.y }, to: { x: t.x, y: t.y }, start: now, dur: 160 });
           if (ev.kind === 'magic') game.fx.push({ kind: 'bolt', from: { x: by.x, y: by.y }, to: { x: t.x, y: t.y }, start: now, dur: 220, color: '#9ad8ff' });
         }
-        if (ev.by === me && ev.dmg && !ev.miss) DD.blip(ev.crit ? 330 : 240, 0.04);
+        if (ev.by === me && ev.dmg && !ev.miss) DD.sfx('hit', { crit: ev.crit });
+        else if (ev.by === me && (ev.miss || ev.dodge)) DD.sfx('miss');
+        else if (t && t.kind === 'hero' && ev.t !== me && ev.dmg && !ev.miss && !ev.dodge) DD.sfx('hit', { vol: 0.35 });
         break;
       }
       case 'swing': { const e = game.ents.get(ev.id), t = game.ents.get(ev.t); if (e && t) { e.lunge = now; e.lungeDx = Math.sign(t.x - e.x); e.lungeDy = Math.sign(t.y - e.y); } break; }
@@ -190,7 +206,7 @@
         const by = game.ents.get(ev.by);
         if (by) { by.castAt = now; for (let i = 0; i < 8; i++) spark(by.x + 0.5, by.y + 0.2, '#fff2a0', true); }
         log(`${who(ev.by)} usa ${ev.name}`, ev.by === me ? 'mine' : '');
-        DD.blip(700, 0.06);
+        if (ev.by === me || (by && by.kind === 'hero')) { const k = castKind(ev.name), v = ev.by === me ? 1 : 0.45; if (k === 'heal') DD.sfx('heal', { vol: v }); else if (k === 'phys') DD.sfx('swing', { vol: v }); else DD.sfx('cast', { kind: k, vol: v }); }
         break;
       }
       case 'fx': if (ev.kind === 'splash') { splash(ev.x, ev.y, 14); break; } game.fx.push({ ...ev, start: now + (ev.delay || 0), dur: ev.kind === 'aura' ? ev.until : ev.kind === 'blast' || ev.kind === 'nova' ? 420 : 260 }); if (ev.kind === 'aura') game.auras.push({ id: ev.id, until: now + ev.until, radius: ev.radius }); break;
@@ -201,57 +217,65 @@
         if (ev.boss && (!DD.gfx || DD.gfx.shake)) game.shake = now + 500;
         if (ev.xp) float(ev.x, ev.y, `+${ev.xp} PX`, '#9fe0ff', true);
         if (ev.xp !== 0) log(`${(RULES.MONSTERS[ev.k] || {}).name || ev.k} cae.${ev.xp ? ` +${ev.xp} PX` : ''}`, ev.boss ? 'good big' : 'good');
-        DD.blip(ev.boss ? 90 : 120, ev.boss ? 0.4 : 0.12);
+        DD.sfx('die', { boss: ev.boss });
         break;
       }
       case 'loot': {
         if (ev.gold) float(ev.x, ev.y, `+${ev.gold} 🪙`, '#ffd23f', ev.id === me);
         if (ev.xp && ev.id === me) setTimeout(() => float(ev.x, ev.y, `+${ev.xp} PX`, '#9fe0ff', true), 300);
+        if (ev.item && ev.id === me && (ev.item.rarity === 'unico' || ev.item.rarity === 'conjunto')) DD.emit('bigloot', ev.item);
         if (ev.item) { float(ev.x, ev.y, ev.item.name, DSPRITES.RARITY[ev.item.rarity], true); log(`${who(ev.id)} recoge «${ev.item.name}» (${RULES.RARITIES[ev.item.rarity].name.toLowerCase()})`, 'loot-' + ev.item.rarity); }
         if (ev.cons) float(ev.x, ev.y, RULES.CONSUMABLES[ev.cons].name, '#ff8a8a');
         if (ev.mat) { const M = PROG.MATS[ev.mat]; float(ev.x, ev.y, `+${ev.n} ${M.icon}`, ev.mat === 'polvo' ? '#ffe27a' : ev.mat === 'esencia' ? '#7ad0ff' : '#c8c8d0', ev.id === me); }
-        if (ev.id === me) DD.blip(ev.item ? 1320 : 1046, 0.08);
+        if (ev.id === me) { if (ev.item) DD.sfx('item', { rarity: ev.item.rarity }); else if (ev.cons) DD.sfx('potion'); else DD.sfx('coin'); }
         break;
       }
-      case 'chest': for (let i = 0; i < 16; i++) spark(ev.x + 0.5, ev.y + 0.4, '#ffd23f', true); DD.blip(880, 0.12); break;
+      case 'chest': for (let i = 0; i < 16; i++) spark(ev.x + 0.5, ev.y + 0.4, '#ffd23f', true); DD.sfx('chest'); break;
       case 'heal': { const t = game.ents.get(ev.id); if (t) float(t.x, t.y, '+' + ev.amount, '#7dff8a', ev.id === me); break; }
       case 'eheal': { const t = game.ents.get(ev.id); if (t) { float(t.x, t.y, '+' + ev.amount, '#7dff8a'); game.fx.push({ kind: 'heal', x: t.x, y: t.y, start: now, dur: 400 }); } break; }
       case 'proj': game.projs.push({ ...ev, start: now }); break;
-      case 'tele': game.teles.push({ ...ev, start: now }); DD.blip(200, 0.15); break;
+      case 'tele': game.teles.push({ ...ev, start: now }); DD.sfx('tele'); break;
       case 'boom': {
         const t = game.teles.find((x) => x.id === ev.id);
         if (t) { for (const [x, y] of t.cells) if (Math.random() < 0.35) spark(x + 0.5, y + 0.5, t.kind === 'breath' ? '#ff7a2a' : '#c8b8a8'); game.teles.splice(game.teles.indexOf(t), 1); }
         game.shake = now + 260;
-        DD.blip(70, 0.25);
+        DD.sfx('boom');
         break;
       }
       case 'special': log(`${ev.name}: ${{ slam: '¡golpe sísmico!', nova: '¡nova de muerte!', breath: '¡aliento de fuego!', volley: '¡andanada!', summon: 'llama a sus esbirros', charge: '¡embiste!' }[ev.s] || ''}`, 'hurt'); break;
       case 'summon': for (let i = 0; i < 10; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7cff6a', true); break;
-      case 'portal': log(`¡${ev.name} ha caído! Se abre un portal de salida.`, 'good big'); DD.toast('🏆 ¡Jefe derrotado! Recoge el botín y cruza el portal.'); for (let i = 0; i < 30; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7ad0ff', true); break;
-      case 'down': log(`${who(ev.id)} cae.`, 'hurt'); break;
+      case 'portal': log(`¡${ev.name} ha caído! Se abre un portal de salida.`, 'good big'); DD.toast('🏆 ¡Jefe derrotado! Recoge el botín y cruza el portal.'); DD.sfx('portal'); for (let i = 0; i < 30; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7ad0ff', true); break;
+      case 'down': log(`${who(ev.id)} cae.`, 'hurt'); DD.sfx('down', { vol: ev.id === me ? 1 : 0.6 }); if (ev.id !== me) DD.toast(`💀 ${who(ev.id)} ha caído y vuelve a la taberna.`); break;
+      case 'ping':
+        (game.pings = game.pings || []).push({ x: ev.x, y: ev.y, k: ev.k, id: ev.id, start: now });
+        DD.sfx('ping', { vol: ev.id === me ? 0.6 : 1 });
+        if (ev.id !== me) log(`${who(ev.id)} ${ev.k === 'danger' ? '⚠️ avisa de peligro' : '📍 marca un sitio'}.`, 'mine');
+        break;
       case 'petdown': log(`${ev.name} huye malherido; volverá en 30 s.`, 'hurt'); break;
       case 'petskill': { const pt = game.ents.get(ev.id); if (pt) { float(pt.x, pt.y, ev.name + '!', '#ffb040', ev.owner === me); for (let i = 0; i < 10; i++) spark(pt.x + 0.5, pt.y + 0.4, '#ffb040', true); } break; }
-      case 'roll': { const e = game.ents.get(ev.id); if (e) { e.rollAt = now; puff(ev.from.x + 0.5, ev.from.y + 0.5, dustColor(ev.from.x, ev.from.y), 6, 0.6); } if (ev.id === me) DD.blip(300, 0.04); break; }
+      case 'roll': { const e = game.ents.get(ev.id); if (e) { e.rollAt = now; puff(ev.from.x + 0.5, ev.from.y + 0.5, dustColor(ev.from.x, ev.from.y), 6, 0.6); } if (ev.id === me) DD.sfx('roll'); break; }
       case 'fish': { const e = game.ents.get(ev.id); if (e) e.fishAt = { x: ev.x, y: ev.y }; splash(ev.x, ev.y, 4); break; }
       case 'bite': { const e = game.ents.get(ev.id); if (e && e.fishAt) splash(e.fishAt.x, e.fishAt.y, 10); break; }
       case 'fishend': { const e = game.ents.get(ev.id); if (e) e.fishAt = null; if (ev.id === me) $('#dbite').classList.add('hidden'); break; }
       case 'worldboss': {
         log(`🌋 ¡${ev.name} ha aparecido!`, 'hurt big');
         banner(`🌋 ${ev.name}`, '¡Un jefe de mundo ha aparecido! Únete a la batalla.');
-        DD.blip(80, 0.5); setTimeout(() => DD.blip(60, 0.5), 300);
+        DD.sfx('worldboss');
         break;
       }
       case 'join': if (ev.id !== me) log(`${who(ev.id)} entra.`); break;
-      case 'door': game.openDoors.add(ev.y * game.map.w + ev.x); updateVision(); fogDirty = true; break;
+      case 'door': DD.sfx('door', { vol: 0.8 }); game.openDoors.add(ev.y * game.map.w + ev.x); updateVision(); fogDirty = true; break;
     }
   }
 
   DD.on('dstart', (m) => {
     game.active = true;
+    rejoinBtn.classList.add('hidden');
+    game.pings = [];
     game.map = m.dungeon;
     game.props = m.dungeon.props || [];
     game.ents.clear(); game.floaters = []; game.fx = []; game.projs = []; game.teles = []; game.particles = []; game.auras = [];
-    game.log = []; game.statics = null; game.boss = null; game.camInit = false; game.keys.clear(); game.sentDir = '0,0';
+    game.log = []; game.statics = null; game.boss = null; game.bossSeen = 0; game.camInit = false; game.keys.clear(); game.sentDir = '0,0';
     game.seen = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.vis = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.openDoors = new Set(m.dungeon.doors || []);
@@ -277,12 +301,12 @@
     DD.toast(m.dungeon.kind === 'world'
       ? `${m.dungeon.name}: explora, pesca junto al agua (🎣/G), recoge hierbas y vuelve al pueblo (casa iluminada) para descansar.`
       : m.dungeon.kind === 'arena' ? 'Duelo: clic en tu rival para atacarle, habilidades con 1-8, Espacio para esquivar. ¡Gana quien quede en pie!'
-      : 'Clic para andar, clic en un enemigo para atacarlo. 1-8 habilidades, Q/E pociones, Espacio esquiva. Derrota al jefe para abrir el portal.');
+      : 'Clic para andar, clic en un enemigo para atacarlo. 1-8 habilidades, Q/E pociones, Espacio esquiva, Alt+clic o P marca un sitio para el grupo. Derrota al jefe para abrir el portal.');
   });
   DD.on('dsnap', (m) => { if (game.active) { applySnap(m); updateVision(); } });
   DD.on('dme', (m) => { game.you = m; game.youAt = performance.now(); updateHud(); });
   DD.on('dwhisper', (m) => DD.toast(m.text));
-  DD.on('dbite', () => { $('#dbite').classList.remove('hidden'); DD.blip(1500, 0.2); setTimeout(() => DD.blip(1800, 0.2), 120); });
+  DD.on('dbite', () => { $('#dbite').classList.remove('hidden'); DD.sfx('bite'); });
   DD.on('me', () => { if (game.active) buildBar(); });
   DD.on('dexit', (m) => {
     game.active = false;
@@ -291,7 +315,11 @@
     VIEW3D.show(false);
     DD.setScene('tavern');
     if (m.reason === 'win') DD.toast('🏆 ¡Mazmorra completada!');
-    else if (m.reason === 'down') DD.toast(`💀 Has caído${m.lost ? ` y pierdes ${m.lost} de oro` : ''}. Vuelves a la taberna.`);
+    else if (m.reason === 'down') {
+      DD.toast(`💀 Has caído${m.lost ? ` y pierdes ${m.lost} de oro` : ''}. Vuelves a la taberna.`);
+      // si quedaban amigos dentro, se puede volver con ellos
+      if (game.map && game.map.kind === 'dungeon' && game.mates > 0) offerRejoin(game.map.id);
+    }
     else if (m.reason === 'return') DD.toast('🌀 El pergamino te devuelve a la taberna.');
     else if (m.reason === 'arena') DD.toast('🤺 Fin del duelo. Alfonso os sirve algo para las heridas.');
     else DD.toast('Vuelves a la taberna: vida y energía recuperadas.');
@@ -309,6 +337,51 @@
     if (game.ents.has(m.id)) game.bubbles.set(m.id, { text: m.text, until: performance.now() + 4000 + m.text.length * 50 });
   });
   $('#dexit').onclick = () => DD.net.send({ t: 'dleave' });
+
+  // ---------- Grupo: vida de los compañeros ----------
+  const partyEl = document.createElement('div');
+  partyEl.id = 'dparty';
+  viewEl.appendChild(partyEl);
+  const partyRows = new Map();
+  function updateParty() {
+    const me = game.ents.get(DD.myId);
+    let mates = [...game.ents.values()].filter((e) => e.kind === 'hero' && e.id !== DD.myId);
+    if (game.map && game.map.kind === 'world' && me) mates = mates.filter((e) => Math.max(Math.abs(e.x - me.x), Math.abs(e.y - me.y)) <= 30);
+    if (game.map && game.map.kind === 'arena') mates = [];
+    mates = mates.slice(0, 6);
+    const ids = new Set(mates.map((e) => e.id));
+    for (const [id, row] of partyRows) if (!ids.has(id)) { row.remove(); partyRows.delete(id); }
+    for (const e of mates) {
+      let row = partyRows.get(e.id);
+      if (!row) {
+        row = document.createElement('div'); row.className = 'pmate';
+        row.innerHTML = '<div class="pm-top"><b></b><small></small></div><div class="meter hp"><i></i></div>';
+        row.title = 'Clic: marcar dónde está';
+        row.onclick = () => DD.net.send({ t: 'dping', x: e.x, y: e.y });
+        partyEl.appendChild(row); partyRows.set(e.id, row);
+      }
+      const pct = e.maxHp ? Math.max(0, Math.min(100, 100 * e.hp / e.maxHp)) : 100;
+      row.querySelector('b').textContent = e.name || '¿?';
+      row.querySelector('small').textContent = e.lvl ? `nv ${e.lvl}` : '';
+      row.querySelector('i').style.width = pct + '%';
+      row.classList.toggle('low', pct < 30);
+      if (e.prevPct != null && pct < 30 && e.prevPct >= 30) DD.toast(`⚠️ ¡${e.name} está muy malherido!`);
+      e.prevPct = pct;
+    }
+    partyEl.classList.toggle('hidden', !mates.length);
+  }
+
+  // ---------- Volver con el grupo después de caer ----------
+  const rejoinBtn = document.createElement('button');
+  rejoinBtn.id = 'drejoin'; rejoinBtn.type = 'button'; rejoinBtn.className = 'btn big hidden';
+  rejoinBtn.textContent = '⚔️ VOLVER CON TU GRUPO';
+  document.body.appendChild(rejoinBtn);
+  let rejoinId = null, rejoinTimer = null;
+  rejoinBtn.onclick = () => { if (rejoinId) DD.net.send({ t: 'djoin', id: rejoinId }); rejoinBtn.classList.add('hidden'); };
+  function offerRejoin(id) {
+    rejoinId = id; rejoinBtn.classList.remove('hidden');
+    clearTimeout(rejoinTimer); rejoinTimer = setTimeout(() => rejoinBtn.classList.add('hidden'), 5 * 60000);
+  }
 
   // Tiempo del servidor (para las esperas de habilidades)
   const serverNow = () => (game.you ? game.you.now + (performance.now() - game.youAt) : Date.now());
@@ -443,13 +516,16 @@
     if (!game.active || DD.scene !== 'dungeon' || (document.activeElement && document.activeElement.tagName === 'INPUT')) return;
     if (document.querySelector('.overlay:not(.hidden)')) return;
     const k = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const K = DD.keys || {};
     if (/^[1-8]$/.test(k)) { const a = abilities()[Number(k) - 1]; if (a) castSkill(a); return; }
-    if (k === 'm') { game.showMap = !game.showMap; return; }
-    if (k === ' ') { e.preventDefault(); doRoll(); return; }
+    if (k === (K.map || 'm')) { game.showMap = !game.showMap; return; }
+    if (k === (K.ping || 'p') && game.mouse0) { const t = screenToTile(game.mouse0.x, game.mouse0.y); if (t.x >= 0) DD.net.send({ t: 'dping', x: t.x, y: t.y, k: e.shiftKey ? 'danger' : 'here' }); return; }
+    if (k === (K.roll || ' ')) { e.preventDefault(); doRoll(); return; }
     if (k === 'g') { DD.net.send({ t: 'dfish' }); return; }
-    if (k === 'i' || k === 'b') { DD.emit('open-char', 'equipo'); return; }
-    if (k === 'c') { /* C: pergamino de sanación si lo hay, si no la ficha */ if (!(DD.me && DD.me.cons['perg-sanacion'])) { DD.emit('open-char', 'ficha'); return; } }
-    const consKey = k.toUpperCase();
+    if (k === (K.inv || 'i') || k === 'b') { DD.emit('open-char', 'equipo'); return; }
+    if (k === (K.sheet || 'c')) { /* C: pergamino de sanación si lo hay, si no la ficha */ if (!(DD.me && DD.me.cons['perg-sanacion']) || K.sheet !== 'c') { DD.emit('open-char', 'ficha'); return; } }
+    // pociones: sus teclas se pueden cambiar en Ajustes
+    const consKey = k === (K.potion || 'q') ? 'Q' : k === (K.energy || 'e') ? 'E' : k === 'q' || k === 'e' ? '' : k.toUpperCase();
     const cons = consList().filter((c) => c.key === consKey);
     if (cons.length) { const pick = consKey === 'Q' && e.shiftKey ? cons[cons.length - 1] : cons[0]; useCons(pick.id); return; }
     if (k === 'Enter') { e.preventDefault(); $('#chat-input').focus(); return; }
@@ -507,10 +583,26 @@
     const en = stage && entUnder(e.clientX, e.clientY, ['enemy']);
     game.hoverEnemy = en ? en.id : null;
     if (en) game.hover = { x: en.x, y: en.y };
+    // cursor según lo que hay debajo: atacar, hablar, abrir o recoger
+    let cur = en ? 'attack' : '';
+    if (!cur && stage && entUnder(e.clientX, e.clientY, ['npc'])) cur = 'talk';
+    const h = game.hover;
+    if (!cur && h && game.map) {
+      const t = game.map.tiles[h.y * game.map.w + h.x];
+      if (t === '+' && !game.openDoors.has(h.y * game.map.w + h.x)) cur = 'use';
+      else if ((game.chests || []).some((c) => c.x === h.x && c.y === h.y && !c.open) || (game.loot || []).some((l) => l.x === h.x && l.y === h.y)) cur = 'use';
+    }
+    if (cv.dataset.cur !== cur) cv.dataset.cur = cur;
   });
   cv.addEventListener('pointerleave', () => { game.mouseOnMap = false; });
   cv.addEventListener('pointerdown', (e) => {
     if (!game.active || e.button === 2) return;
+    if (e.button === 1 || e.altKey) {
+      e.preventDefault();
+      const t = screenToTile(e.clientX, e.clientY);
+      if (t.x >= 0) DD.net.send({ t: 'dping', x: t.x, y: t.y, k: e.shiftKey ? 'danger' : 'here' });
+      return;
+    }
     game.hover = screenToTile(e.clientX, e.clientY);
     const r = clickAt(e.clientX, e.clientY, false);
     // mantener pulsado sobre el suelo: el héroe sigue al ratón
@@ -520,7 +612,8 @@
     }
   });
   window.addEventListener('pointerup', () => { clearInterval(holding); holding = null; });
-  cv.addEventListener('pointermove', (e) => { if (holding) game.mouse = { x: e.clientX, y: e.clientY }; });
+  cv.addEventListener('pointermove', (e) => { game.mouse0 = { x: e.clientX, y: e.clientY }; if (holding) game.mouse = game.mouse0; });
+  cv.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
 
 
   // ======================================================================
@@ -1081,8 +1174,29 @@
     g.fillStyle = vg; g.fillRect(0, 0, innerWidth, innerHeight);
     if (game.you && game.you.hp / game.you.maxHp < 0.3) { g.fillStyle = `rgba(150,0,0,${0.08 + Math.sin(now / 200) * 0.05})`; g.fillRect(0, 0, innerWidth, innerHeight); }
     drawOverlay(now);
+    drawPings(now);
     if (game.showMap) drawMinimap();
     updateBar();
+  }
+
+  // Marcas del grupo: anillos que laten durante 4 s
+  function drawPings(now) {
+    if (!game.pings || !game.pings.length) return;
+    game.pings = game.pings.filter((p) => now - p.start < 4000);
+    for (const p of game.pings) {
+      const s = stage.project(p.x + 0.5, 0, p.y + 0.5), t = (now - p.start) / 1000;
+      const col = p.k === 'danger' ? '255,80,60' : '255,215,90';
+      for (let r = 0; r < 2; r++) {
+        const ph = (t * 1.4 + r * 0.5) % 1;
+        g.strokeStyle = `rgba(${col},${(1 - ph) * Math.min(1, (4 - t))})`; g.lineWidth = 3;
+        g.beginPath(); g.ellipse(s.x, s.y, 12 + ph * 34, (12 + ph * 34) * 0.55, 0, 0, Math.PI * 2); g.stroke();
+      }
+      const bob = Math.sin(t * 6) * 4;
+      g.font = '26px sans-serif'; g.textAlign = 'center';
+      g.fillText(p.k === 'danger' ? '⚠️' : '📍', s.x, s.y - 30 + bob);
+      g.font = '600 12px "Pixelify Sans", sans-serif'; g.fillStyle = `rgb(${col})`;
+      g.fillText(who(p.id), s.x, s.y - 54 + bob);
+    }
   }
 
   // Clima según la zona (y la hora): el tiempo cambia cada pocos minutos, igual para todos
@@ -1287,6 +1401,11 @@
       g.fillRect(x0 + e.x * k - sz / 2, y0 + e.y * k - sz / 2, sz, sz);
     }
     if (game.portal) { g.fillStyle = '#7ad0ff'; g.fillRect(x0 + game.portal.x * k - 2, y0 + game.portal.y * k - 2, 5, 5); }
+    for (const p of game.pings || []) {
+      const ph = ((performance.now() - p.start) / 600) % 1;
+      g.strokeStyle = p.k === 'danger' ? '#ff5a3c' : '#ffd75a'; g.lineWidth = 2;
+      g.beginPath(); g.arc(x0 + (p.x + 0.5) * k, y0 + (p.y + 0.5) * k, 3 + ph * 7, 0, Math.PI * 2); g.stroke();
+    }
   }
 
   // ======================================================================
@@ -1323,7 +1442,7 @@
   window.addEventListener('keydown', (e) => {
     if (!game.active || DD.scene !== 'dungeon' || (document.activeElement && document.activeElement.tagName === 'INPUT')) return;
     if (e.key === 'f' || e.key === 'F') DD.net.send({ t: 'dmount' });
-    if ((e.key === 'm' || e.key === 'M') && game.map.kind === 'world') { game.bigMap = !game.bigMap; game.showMap = true; e.stopImmediatePropagation(); }
+    if (e.key.toLowerCase() === ((DD.keys && DD.keys.map) || 'm') && game.map.kind === 'world') { game.bigMap = !game.bigMap; game.showMap = true; e.stopImmediatePropagation(); }
   }, true);
 
   // ======================================================================

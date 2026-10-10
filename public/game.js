@@ -158,9 +158,9 @@
 
   // Trueno: ruido grave que se apaga
   function thunder() {
-    if (!sound) return;
+    const audio = !SFX.muted && SFX.ctx;
+    if (!audio || audio.state !== 'running') return;
     try {
-      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
       const len = audio.sampleRate * 1.6;
       const buf = audio.createBuffer(1, len, audio.sampleRate);
       const d = buf.getChannelData(0);
@@ -168,7 +168,7 @@
       for (let i = 0; i < len; i++) { v = (v + (Math.random() * 2 - 1) * 0.08) * 0.985; d[i] = v * Math.pow(1 - i / len, 2); }
       const src = audio.createBufferSource(), f = audio.createBiquadFilter(), g = audio.createGain();
       src.buffer = buf; f.type = 'lowpass'; f.frequency.value = 220; g.gain.value = 0.9;
-      src.connect(f).connect(g).connect(audio.destination); src.start();
+      src.connect(f).connect(g).connect(SFX.out); src.start();
     } catch { /* sin audio */ }
   }
 
@@ -628,6 +628,7 @@
     switch (m.t) {
       case 'welcome': {
         users.clear();
+        if (DD.scene !== 'dungeon') SFX.music('tavern');
         myId = m.id; roomName = m.room;
         roomNameEl.textContent = m.serverName || m.room;
         history.replaceState(null, '', `?sala=${encodeURIComponent(m.room)}`);
@@ -642,7 +643,7 @@
         renderHeroes();
         break;
       }
-      case 'join': users.set(m.user.id, makeUser(m.user)); renderHeroes(); blip(660, 0.08); break;
+      case 'join': users.set(m.user.id, makeUser(m.user)); renderHeroes(); sfx('join'); break;
       case 'backup': saveBackup(m.backup); break;
       case 'leave': users.delete(m.id); renderHeroes(); break;
       case 'move': {
@@ -667,9 +668,10 @@
         DD.emit('me', m);
         break;
       }
+      case 'toast': toast(m.text); break;
       case 'levelup': {
         toast(`⭐ ¡Subes a nivel ${m.level}! Pulsa el icono rojo bajo tu retrato para repartir ${m.points} puntos.`);
-        blip(990, 0.25); setTimeout(() => blip(1320, 0.2), 180);
+        sfx('levelup');
         DD.emit('levelup', m);
         break;
       }
@@ -695,7 +697,7 @@
         const u = users.get(m.id);
         if (u) u.bubble = { text: m.text, until: now + 4000 + m.text.length * 60 };
         logLine(m);
-        if (m.id !== myId) blip(520, 0.05);
+        if (m.id !== myId) sfx('chat');
         break;
       }
       case 'action': {
@@ -716,7 +718,7 @@
       }
       case 'roll': {
         floaters.push({ id: m.id, text: `d${m.sides}: ${m.value}`, start: now, dur: 2600, color: m.sides === 20 && m.value === 20 ? '#ffd23f' : m.sides === 20 && m.value === 1 ? '#ff6b6b' : '#9fe0ff' });
-        logLine(m); blip(880, 0.06); break;
+        logLine(m); sfx('dice'); break;
       }
       case 'gold': {
         const u = users.get(m.id);
@@ -851,6 +853,7 @@
     const text = chatInput.value.trim();
     if (!text) { chatInput.blur(); return; }
     if (text === '/ayuda' || text === '/help') { showHelp(); chatInput.value = ''; return; }
+    if (text === '/tutorial') { if (DD.restartTutorial) DD.restartTutorial(); chatInput.value = ''; return; }
     net.send({ t: 'chat', text });
     chatInput.value = '';
   });
@@ -893,7 +896,7 @@
     } else if (m === 'hero') { C.toTitle(); }
     else if (m === 'help') showHelp();
     else if (m === 'gfx') DD.emit('open-options');
-    else if (m === 'sound') { sound = !sound; $('#sound-state').textContent = sound ? 'sí' : 'no'; save('dd-sound', sound ? '1' : '0'); return; }
+    else if (m === 'sound') { SFX.setMuted(!SFX.muted); $('#sound-state').textContent = SFX.muted ? 'no' : 'sí'; return; }
     menuPop.classList.add('hidden');
   });
   $('#log-toggle').addEventListener('click', () => {
@@ -905,20 +908,10 @@
     logLine({ t: 'system', ts: Date.now(), text: 'Haz clic en el suelo para caminar y en una silla, taburete o el sofá para sentarte. Pulsa sobre los comerciantes para comprar y vender. Comandos: /dado 6, /d20, /me baila, /nombre Nuevo. Enter para escribir, WASD para moverte.' });
   }
 
-  // ---------- Sonido ----------
-  let sound = load('dd-sound') !== '0';
-  let audio = null;
-  function blip(freq, dur) {
-    if (!sound) return;
-    try {
-      audio = audio || new (window.AudioContext || window.webkitAudioContext)();
-      const o = audio.createOscillator(), g = audio.createGain();
-      o.type = 'square'; o.frequency.value = freq;
-      g.gain.setValueAtTime(0.04, audio.currentTime);
-      g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + dur);
-      o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + dur);
-    } catch { /* sin audio */ }
-  }
+  // ---------- Sonido (audio.js) ----------
+  $('#sound-state').textContent = SFX.muted ? 'no' : 'sí';
+  const blip = (freq, dur) => SFX.tone(freq, dur);
+  const sfx = (name, o) => SFX.play(name, o);
 
   // copia de seguridad firmada de la cuenta (la manda el servidor; se devuelve al entrar)
   function backup() { try { return JSON.parse(load('dd-backup')) || undefined; } catch { return undefined; } }
@@ -942,11 +935,11 @@
   Object.defineProperty(DD, 'myId', { get: () => myId });
   Object.defineProperty(DD, 'roomName', { get: () => roomName });
   Object.assign(DD, {
-    net, users, toast, logLine, blip, makeUser, portrait, drawHero: (c, x, y, l, o) => drawHero(c, x, y, l, o), me: null,
+    net, users, toast, logLine, blip, sfx, makeUser, portrait, drawHero: (c, x, y, l, o) => drawHero(c, x, y, l, o), me: null,
     heroImage: (look, w, h, mode) => VIEW3D.snapshot(look, w, h, mode),
     // modelos de verdad (KayKit): se cargan al empezar; mientras, se ven los low poly propios
     modelsReady: MODELS.loadAssets().then((ok) => { if (!ok) return; renderHeroes(); if (!C.loginEl.classList.contains('hidden')) C.buildPickers(); if (C.screen === 'slots') C.renderSlots(); DD.emit('models-ready'); if (DD.me) DD.emit('look', { id: myId, look: (users.get(myId) || {}).look }); }),
-    setScene(sc) { DD.scene = sc; document.body.classList.toggle('in-dungeon', sc !== 'tavern'); canvas.classList.toggle('hidden', sc !== 'tavern'); C.hover = null; if (sc !== 'tavern') C.setEditing(false); },
+    setScene(sc) { DD.scene = sc; if (sc === 'tavern') SFX.music('tavern'); document.body.classList.toggle('in-dungeon', sc !== 'tavern'); canvas.classList.toggle('hidden', sc !== 'tavern'); C.hover = null; if (sc !== 'tavern') C.setEditing(false); },
   });
 
 
