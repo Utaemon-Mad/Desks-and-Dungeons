@@ -225,7 +225,7 @@
         }
       },
       grade: null,
-      render() { present(scene, camera, stage.grade); },
+      render() { liquidTime.value = performance.now() / 1000; present(scene, camera, stage.grade); },
       project(x, y, z) {
         const v = new THREE.Vector3(x, y, z).project(camera);
         return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight, behind: v.z > 1 };
@@ -262,6 +262,27 @@
       '  gl_FragColor = vec4(color * (0.6 + m) * lit, a);',
       '}'].join('\n'),
   };
+  // Agua y lava que se mueven: ondas con brillos en el agua y costra que fluye sobre la lava
+  // (se inyecta en el material estándar, así sigue recibiendo las luces de la escena)
+  const liquidTime = { value: 0 };
+  const NOISE_GLSL = [
+    'float lh(vec2 p){ return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }',
+    'float ln(vec2 p){ vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f); return mix(mix(lh(i), lh(i + vec2(1.0, 0.0)), f.x), mix(lh(i + vec2(0.0, 1.0)), lh(i + vec2(1.0, 1.0)), f.x), f.y); }',
+    'float lf(vec2 p){ float v = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { v += a * ln(p); p = p * 2.1 + 3.7; a *= 0.5; } return v; }'].join('\n');
+  function liquidMaterial(kind, params) {
+    const m = new THREE.MeshStandardMaterial(params);
+    m.onBeforeCompile = (sh) => {
+      sh.uniforms.ltime = liquidTime;
+      sh.vertexShader = 'varying vec2 vLW;\n' + sh.vertexShader.replace('#include <project_vertex>', '#include <project_vertex>\n vec4 lw = vec4(transformed, 1.0);\n #ifdef USE_INSTANCING\n lw = instanceMatrix * lw;\n #endif\n vLW = (modelMatrix * lw).xz;');
+      const body = kind === 'lava'
+        ? ' float n = lf(vLW * 1.3 + vec2(ltime * 0.07, ltime * 0.05)); float crust = smoothstep(0.42, 0.62, n);\n diffuseColor.rgb *= mix(1.15, 0.25, crust);\n totalEmissiveRadiance *= mix(1.7 + 0.3 * sin(ltime * 2.0 + n * 9.0), 0.08, crust);'
+        : ' float w = sin(vLW.x * 3.1 + ltime * 1.4 + lf(vLW * 2.0) * 3.0) * sin(vLW.y * 2.7 - ltime * 1.1) * 0.5 + lf(vLW * 1.5 + ltime * 0.15) - 0.5;\n diffuseColor.rgb *= 0.85 + 0.35 * w;\n totalEmissiveRadiance += vec3(0.35, 0.5, 0.6) * pow(max(w, 0.0), 4.0) * 0.5;';
+      sh.fragmentShader = 'uniform float ltime; varying vec2 vLW;\n' + NOISE_GLSL + '\n' + sh.fragmentShader.replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n' + body);
+    };
+    m.customProgramCacheKey = () => 'liquid-' + kind;
+    return m;
+  }
+
   function mistLayer(map, color, opacity = 0.35, y = 0.14) {
     const mat = new THREE.ShaderMaterial({
       uniforms: { time: { value: 0 }, opacity: { value: opacity }, color: { value: new THREE.Color(color) }, hero: { value: new THREE.Vector2(-99, -99) } },
@@ -391,10 +412,10 @@
       (ch === 'l' || ch === '%' ? liquids.lava : ch === 'q' ? liquids.bog : liquids.water).push({ x: x + 0.5, z: y + 0.5, y: 0.02 });
     }
     const quad = new THREE.PlaneGeometry(1, 1); quad.rotateX(-Math.PI / 2);
-    if (liquids.water.length) group.add(instanced(quad, new THREE.MeshStandardMaterial({ color: world ? '#2a5a8a' : T.liquid, transparent: true, opacity: 0.78, roughness: 0.15, metalness: 0.3 }), liquids.water, { shadow: false }));
-    if (liquids.bog.length) group.add(instanced(quad, new THREE.MeshStandardMaterial({ color: '#3a4a26', transparent: true, opacity: 0.85, roughness: 0.3 }), liquids.bog, { shadow: false }));
+    if (liquids.water.length) group.add(instanced(quad, liquidMaterial('water', { color: world ? '#2a5a8a' : T.liquid, transparent: true, opacity: 0.8, roughness: 0.15, metalness: 0.3 }), liquids.water, { shadow: false }));
+    if (liquids.bog.length) group.add(instanced(quad, liquidMaterial('water', { color: '#3a4a26', transparent: true, opacity: 0.85, roughness: 0.3 }), liquids.bog, { shadow: false }));
     if (liquids.lava.length) {
-      const lava = instanced(quad, new THREE.MeshStandardMaterial({ color: '#ff5a10', emissive: '#ff3a00', emissiveIntensity: 1.3, roughness: 0.6 }), liquids.lava, { shadow: false });
+      const lava = instanced(quad, liquidMaterial('lava', { color: '#ff5a10', emissive: '#ff3a00', emissiveIntensity: 1.3, roughness: 0.6 }), liquids.lava, { shadow: false });
       lava.userData.lava = true;
       group.add(lava);
       liquids.lava.forEach((l, i) => { if (i % 6 === 0) lights.push({ x: l.x, y: 0.6, z: l.z, color: '#ff5a1a', intensity: 1.2, dist: 4 }); });
@@ -564,11 +585,46 @@
   //  Mazmorra con piezas KayKit: losas o tierra, muros de sillería con remate oscuro y manchas en el suelo
   // ======================================================================
   const GL_WALL_H = 1.3;
-  function decalTexture(map) {
+  // Suciedad del suelo: sombra junto a los muros, grietas, musgo, manchas y piedrecitas (todo al azar con semilla)
+  function grime(g, map, theme, px) {
+    const wallAt = (x, y) => x < 0 || y < 0 || x >= map.w || y >= map.h || map.tiles[y * map.w + x] === '#';
+    const hot = theme === 'volcan' || theme === 'abismo';
+    const mossy = theme === 'cripta' || theme === 'nido' || theme === 'cuevas';
+    for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+      if (wallAt(x, y)) continue;
+      const X = x * px, Y = y * px, seed = x * 7.31 + y * 13.17;
+      // sombra de contacto al pie de los muros (da profundidad)
+      for (const [dx, dy] of [[0, -1], [0, 1], [-1, 0], [1, 0]]) {
+        if (!wallAt(x + dx, y + dy)) continue;
+        const x0 = dx > 0 ? X + px : X, y0 = dy > 0 ? Y + px : Y;
+        const gr = g.createLinearGradient(x0, y0, x0 - dx * px * 0.45, y0 - dy * px * 0.45);
+        gr.addColorStop(0, 'rgba(0,0,0,.5)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+        g.fillStyle = gr; g.fillRect(X, Y, px, px);
+        // musgo que trepa desde la esquina del muro
+        if (mossy && rand(seed + dx * 3 + dy * 5) < 0.3) {
+          g.fillStyle = theme === 'nido' ? 'rgba(70,110,40,.45)' : 'rgba(50,80,45,.4)';
+          for (let i = 0; i < 5; i++) { const t = rand(seed + i * 1.7 + dx), r = 2 + rand(seed + i * 2.3) * 4; const cx = dx ? x0 - dx * r : X + t * px, cy = dy ? y0 - dy * r : Y + t * px; g.beginPath(); g.arc(cx, cy, r, 0, 7); g.fill(); }
+        }
+      }
+      // grietas (en el volcán, con brasas dentro)
+      if (rand(seed) < (hot ? 0.2 : 0.12)) {
+        g.strokeStyle = hot ? 'rgba(255,100,20,.55)' : 'rgba(0,0,0,.35)'; g.lineWidth = hot ? 1.5 : 1;
+        g.beginPath(); let cx = X + rand(seed + 1) * px, cy = Y + rand(seed + 2) * px; g.moveTo(cx, cy);
+        for (let i = 0; i < 4; i++) { cx += (rand(seed + 3 + i) - 0.5) * px * 0.5; cy += (rand(seed + 7 + i) - 0.5) * px * 0.5; g.lineTo(cx, cy); }
+        g.stroke();
+      }
+      // manchas de humedad o de hollín
+      if (rand(seed + 11) < 0.09) { g.fillStyle = hot ? 'rgba(10,4,2,.35)' : 'rgba(20,16,12,.22)'; g.beginPath(); g.ellipse(X + px / 2, Y + px / 2, px * (0.25 + rand(seed + 12) * 0.25), px * (0.15 + rand(seed + 13) * 0.2), rand(seed + 14) * 3, 0, 7); g.fill(); }
+      // piedrecitas
+      if (rand(seed + 21) < 0.25) for (let i = 0; i < 3; i++) { g.fillStyle = i % 2 ? 'rgba(0,0,0,.3)' : 'rgba(255,255,255,.12)'; g.fillRect(X + rand(seed + 22 + i) * px, Y + rand(seed + 25 + i) * px, 2, 2); }
+    }
+  }
+  function decalTexture(map, theme) {
     const px = 32;
     const c = document.createElement('canvas');
     c.width = map.w * px; c.height = map.h * px;
     const g = c.getContext('2d');
+    if (map.kind === 'dungeon' || map.kind === 'arena') grime(g, map, theme, px);
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
       const ch = map.tiles[y * map.w + x];
       const X = x * px, Y = y * px;
@@ -630,7 +686,7 @@
       group.add(im);
     }
     // manchas, alfombras, telarañas y puertas, sobre las losas
-    const decal = new THREE.Mesh(new THREE.PlaneGeometry(map.w, map.h), new THREE.MeshStandardMaterial({ map: decalTexture(map), transparent: true, roughness: 0.95, depthWrite: false }));
+    const decal = new THREE.Mesh(new THREE.PlaneGeometry(map.w, map.h), new THREE.MeshStandardMaterial({ map: decalTexture(map, theme), transparent: true, roughness: 0.95, depthWrite: false }));
     decal.rotation.x = -Math.PI / 2; decal.position.set(map.w / 2, 0.02, map.h / 2); decal.receiveShadow = true;
     group.add(decal);
     // muros: un segmento por cada cara que da a la sala, y un remate oscuro arriba

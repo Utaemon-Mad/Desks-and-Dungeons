@@ -124,6 +124,14 @@
           else if (ev.dodge) float(t.x, t.y, 'Esquiva', '#9ad8ff');
           else {
             t.hitUntil = now + 140;
+            t.flashAt = now;
+            if (by) {
+              const dx = Math.sign(t.x - by.x), dz = Math.sign(t.y - by.y);
+              if (t.kind !== 'hero') { t.kbAt = now; t.kbDx = dx; t.kbDy = dz; t.kbBig = !!ev.crit; }
+              const G = gore(t);
+              hitBurst((t.rx ?? t.x) + 0.5, (t.ry ?? t.y) + 0.5, dx, dz, G, ev.crit ? 18 : 8);
+              if ((ev.crit || ev.dmg > 12) && Math.random() < 0.6) splat((t.rx ?? t.x) + 0.5 + dx * 0.3, (t.ry ?? t.y) + 0.5 + dz * 0.3, G.splat, ev.crit ? 0.45 : 0.3);
+            }
             const col = t.kind === 'hero' && t.id === me ? '#ff5a5a' : ev.crit ? '#ffd23f' : ev.kind === 'dot' ? '#b08aff' : ev.kind === 'pet' ? '#ffd8a0' : '#ffffff';
             game.floaters.push({ x: t.x, y: t.y, text: String(ev.dmg) + (ev.block ? ' 🛡' : ''), color: col, big: ev.t === me || ev.crit, crit: !!ev.crit, start: now });
             for (let i = 0; i < (ev.crit ? 14 : 5); i++) spark(t.x + 0.5, t.y + 0.3, t.kind === 'hero' ? '#c83a3a' : (RULES.MONSTERS[t.k] || {}).undead ? '#d8d0b8' : '#9a1a1a');
@@ -133,6 +141,7 @@
         }
         if (by && t && !ev.dodge) {
           by.lunge = now; by.lungeDx = Math.sign(t.x - by.x); by.lungeDy = Math.sign(t.y - by.y);
+          if (!ev.kind || ev.kind === 'melee') slash(by, t, by.kind === 'hero' ? (ev.crit ? '#ffd23f' : '#fff0d0') : '#ff6a5a', now, ev.crit);
           if (ev.kind === 'ranged') game.fx.push({ kind: 'arrow', from: { x: by.x, y: by.y }, to: { x: t.x, y: t.y }, start: now, dur: 160 });
           if (ev.kind === 'magic') game.fx.push({ kind: 'bolt', from: { x: by.x, y: by.y }, to: { x: t.x, y: t.y }, start: now, dur: 220, color: '#9ad8ff' });
         }
@@ -152,7 +161,12 @@
       case 'fx': if (ev.kind === 'splash') { splash(ev.x, ev.y, 14); break; } game.fx.push({ ...ev, start: now + (ev.delay || 0), dur: ev.kind === 'aura' ? ev.until : ev.kind === 'blast' || ev.kind === 'nova' ? 420 : 260 }); if (ev.kind === 'aura') game.auras.push({ id: ev.id, until: now + ev.until, radius: ev.radius }); break;
       case 'die': {
         game.dying.set(ev.id, now);
-        for (let i = 0; i < (ev.boss ? 60 : 14); i++) spark(ev.x + 0.5, ev.y + 0.4, (RULES.MONSTERS[ev.k] || {}).undead ? '#d8d0b8' : ev.boss ? (i % 2 ? '#ffd23f' : '#ff6a2a') : '#8a1a1a', ev.boss);
+        const G = gore({ k: ev.k, kind: 'enemy' });
+        for (let i = 0; i < (ev.boss ? 60 : 14); i++) spark(ev.x + 0.5, ev.y + 0.4, G.bone ? '#d8d0b8' : ev.boss ? (i % 2 ? '#ffd23f' : '#ff6a2a') : G.col, ev.boss);
+        // estalla en huesos, ascuas o sangre según lo que sea, y deja su mancha en el suelo
+        for (let a = 0; a < 6; a++) hitBurst(ev.x + 0.5, ev.y + 0.5, Math.cos(a), Math.sin(a), G, ev.boss ? 10 : 5);
+        splat(ev.x + 0.5, ev.y + 0.5, G.splat, ev.boss ? 1.1 : 0.6);
+        if (G.ember) for (let i = 0; i < 20; i++) fxp.emit({ x: ev.x + 0.5 + (Math.random() - 0.5) * 0.6, y: 0.2 + Math.random() * 0.6, z: ev.y + 0.5 + (Math.random() - 0.5) * 0.6, vy: 1 + Math.random() * 1.5, vx: (Math.random() - 0.5) * 0.5, color: Math.random() < 0.5 ? '#ff7a2a' : '#ffd040', size: 0.07, life: 1.2 });
         puff(ev.x + 0.5, ev.y + 0.5, '#6a5a4a', ev.boss ? 20 : 6, 0.5);
         if (ev.boss && (!DD.gfx || DD.gfx.shake)) game.shake = now + 500;
         if (ev.xp) float(ev.x, ev.y, `+${ev.xp} PX`, '#9fe0ff', true);
@@ -406,7 +420,7 @@
   const lootObjs = new Map(), chestObjs = new Map(), teleObjs = new Map(), projObjs = new Map();
   let portalObj = null, fogDirty = true, seenCount = -1, mist = null;
   const fx3d = [];
-  let fxp = null, dustp = null, wx = null;     // chispas (aditivas), polvo/humo y clima
+  let fxp = null, dustp = null, wx = null, hoverRing = null;     // chispas (aditivas), polvo/humo y clima
   const herbObjs = new Map(), corpses = [];
 
   function ensureStage() {
@@ -416,6 +430,10 @@
     fxp = VIEW3D.particles(stage.scene, 1400, true);
     dustp = VIEW3D.particles(stage.scene, 800, false);
     wx = VIEW3D.weather(stage.scene);
+    // anillo bajo lo que hay debajo del ratón: rojo para enemigos, dorado para cofres y botín
+    hoverRing = new THREE.Mesh(new THREE.RingGeometry(0.36, 0.46, 32), new THREE.MeshBasicMaterial({ color: '#ff3a2a', transparent: true, opacity: 0.8, depthWrite: false, blending: THREE.AdditiveBlending }));
+    hoverRing.rotation.x = -Math.PI / 2; hoverRing.renderOrder = 6; hoverRing.layers.set(1); hoverRing.visible = false;
+    stage.scene.add(hoverRing);
     window.__stage = stage;
   }
 
@@ -428,6 +446,8 @@
     for (const m of [...models.values(), ...lootObjs.values(), ...chestObjs.values(), ...teleObjs.values(), ...projObjs.values()]) stage.scene.remove(m.obj || m);
     models.clear(); lootObjs.clear(); chestObjs.clear(); teleObjs.clear(); projObjs.clear();
     for (const f of fx3d) stage.scene.remove(f.obj);
+    for (const d of decals) stage.scene.remove(d.m);
+    decals.length = 0;
     fx3d.length = 0;
     fxp.clear(); dustp.clear(); wx.set('none');
     for (const o of herbObjs.values()) stage.scene.remove(o);
@@ -627,6 +647,93 @@
     if (!fxp) return;
     fxp.emit({ x, y: 0.5, z: y, vx: (Math.random() - 0.5) * 2.4, vy: up ? 1.5 + Math.random() * 2 : 0.5 + Math.random() * 2, vz: (Math.random() - 0.5) * 2.4, color, size: 0.08 + Math.random() * 0.06, life: 0.45 + Math.random() * 0.4, grav: 6 });
   }
+  // ---------- Golpes con peso ----------
+  // Qué suelta cada familia al recibir un golpe: sangre, huesos y polvo, o ascuas
+  function gore(e) {
+    const M = (e && RULES.MONSTERS[e.k]) || {};
+    if (!e || e.kind === 'hero') return { col: '#b02a2a', alt: '#6a0a0a', splat: '#4a0606' };
+    if (M.undead || M.fam === 'muerto') return { col: '#e8e0c8', alt: '#9a9080', bone: true, splat: '#2a2620' };
+    if (M.fam === 'demonio') return { col: '#ff8a2a', alt: '#ffd040', ember: true, splat: '#140604' };
+    if (/spider|arana|araña|slime|ooze/.test(e.k || '')) return { col: '#8aff4a', alt: '#3a8a1a', splat: '#1e3a0a' };
+    return { col: '#a01818', alt: '#5a0808', splat: '#3a0404' };
+  }
+  // Chorro de partículas que sale en la dirección del golpe (dx, dz)
+  function hitBurst(x, z, dx, dz, G, n) {
+    if (!dustp || !fxp) return;
+    for (let i = 0; i < n; i++) {
+      const sp = 1 + Math.random() * 2.2;
+      const o = { x: x + (Math.random() - 0.5) * 0.2, y: 0.45 + Math.random() * 0.4, z: z + (Math.random() - 0.5) * 0.2, vx: dx * sp + (Math.random() - 0.5) * 1.6, vy: 1 + Math.random() * 2.2, vz: dz * sp + (Math.random() - 0.5) * 1.6, color: Math.random() < 0.6 ? G.col : G.alt, size: G.bone ? 0.06 + Math.random() * 0.06 : 0.05 + Math.random() * 0.05, life: 0.5 + Math.random() * 0.5, grav: G.ember ? -1 : 9 };
+      (G.ember ? fxp : dustp).emit(o);
+    }
+  }
+  // Manchas en el suelo (sangre, huesos, quemaduras) que se borran poco a poco
+  const decals = [];
+  const decalGeo = new THREE.PlaneGeometry(1, 1);
+  // textura de salpicadura (blanca, se tiñe con el color de cada mancha)
+  let splatTex = null;
+  function splatTexture() {
+    if (splatTex) return splatTex;
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const x = c.getContext('2d');
+    x.fillStyle = '#fff';
+    const blob = (cx, cy, r) => { x.beginPath(); for (let a = 0; a <= 6.3; a += 0.35) { const rr = r * (0.75 + Math.random() * 0.4); x.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } x.fill(); };
+    blob(64, 64, 30);
+    for (let i = 0; i < 9; i++) { const a = Math.random() * 6.3, d = 30 + Math.random() * 26; blob(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, 3 + Math.random() * 7); }
+    splatTex = new THREE.CanvasTexture(c);
+    return splatTex;
+  }
+  function splat(x, z, color, size = 0.5) {
+    if (!stage || (DD.gfx && DD.gfx.weather === false)) return;
+    const m = new THREE.Mesh(decalGeo, new THREE.MeshBasicMaterial({ color, map: splatTexture(), transparent: true, opacity: 0.75, depthWrite: false }));
+    m.rotation.x = -Math.PI / 2; m.rotation.z = Math.random() * 6;
+    m.scale.set(size * (0.8 + Math.random() * 0.5), size * (0.6 + Math.random() * 0.5), 1);
+    m.position.set(x, built && built.gl ? 0.135 : 0.025, z);
+    m.renderOrder = 3; m.layers.set(1);
+    stage.scene.add(m);
+    decals.push({ m, start: performance.now() });
+    if (decals.length > 40) stage.scene.remove(decals.shift().m);
+  }
+  // Estela del arma: un arco de luz que barre delante del que golpea
+  const slashGeo = new THREE.RingGeometry(0.55, 0.8, 24, 1, -1.15, 2.3);
+  function slash(by, t, color, now, big) {
+    if (!stage) return;
+    const dx = t.x - by.x, dz = t.y - by.y, len = Math.hypot(dx, dz) || 1;
+    const grp = new THREE.Group();
+    const m = new THREE.Mesh(slashGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    m.rotation.x = -Math.PI / 2 + 0.35;
+    grp.add(m);
+    grp.position.set((by.rx ?? by.x) + 0.5, 0.62, (by.ry ?? by.y) + 0.5);
+    const base = Math.atan2(-dz / len, dx / len);
+    const side = Math.random() < 0.5 ? 1 : -1;
+    VIEW3D.fxLayer(grp);
+    stage.scene.add(grp);
+    fx3d.push({ f: { kind: 'slash' }, obj: grp, start: now, dur: big ? 260 : 200, upd(k) {
+      grp.rotation.y = base + side * (0.9 - k * 1.8) * 0.6;
+      grp.scale.setScalar((big ? 1.25 : 1) * (0.85 + k * 0.3));
+      m.material.opacity = 0.9 * (1 - k) * (1 - k);
+    } });
+  }
+  // Destello blanco del modelo al recibir un golpe (los materiales se copian la primera vez)
+  const WHITE = new THREE.Color('#ffffff');
+  const HOVER = new THREE.Color('#ff3a2a');
+  function setFlash(o, k, col = WHITE) {
+    if (!o.userData.flashMats) {
+      if (k <= 0) return;
+      const list = [];
+      o.traverse((c) => {
+        if (!c.isMesh || !c.material) return;
+        // clone() no copia los retoques del shader (teñido de pelo y ropa): se pasan a mano
+        const cl = (x) => { const y = x.clone(); y.onBeforeCompile = x.onBeforeCompile; if (x.customProgramCacheKey !== THREE.Material.prototype.customProgramCacheKey) y.customProgramCacheKey = x.customProgramCacheKey; return y; };
+        c.material = Array.isArray(c.material) ? c.material.map(cl) : cl(c.material);
+        for (const mm of [].concat(c.material)) if (mm.emissive) list.push({ m: mm, e0: mm.emissive.clone(), i0: mm.emissiveIntensity });
+      });
+      o.userData.flashMats = list;
+    }
+    if (!k && !o.userData.flashing) return;
+    for (const f of o.userData.flashMats) { f.m.emissive.copy(f.e0).lerp(col, k); f.m.emissiveIntensity = f.i0 + (1.4 - f.i0) * k; }
+    o.userData.flashing = k > 0;
+  }
+
   // Polvo o humo que se levanta del suelo
   function puff(x, z, color, n = 3, spread = 0.3) {
     if (!dustp) return;
@@ -745,7 +852,15 @@
       o.visible = true;
       let lx = 0, lz = 0, atk = 0;
       if (now - e.lunge < 260) { atk = (now - e.lunge) / 260; const f = Math.sin(atk * Math.PI) * 0.18; lx = (e.lungeDx || 0) * f; lz = (e.lungeDy || 0) * f; }
+      // retroceso al recibir un golpe
+      if (now - (e.kbAt || 0) < 180) { const f = Math.sin((now - e.kbAt) / 180 * Math.PI) * (e.kbBig ? 0.22 : 0.12); lx += e.kbDx * f; lz += e.kbDy * f; }
       o.position.set(e.rx + 0.5 + lx, 0, e.ry + 0.5 + lz);
+      // destello blanco al recibir un golpe; brillo rojo si el ratón está encima
+      const fk = e.flashAt ? Math.max(0, 1 - (now - e.flashAt) / 130) : 0;
+      if (fk > 0) setFlash(o, fk);
+      else if (e.id === game.hoverEnemy && game.mouseOnMap) setFlash(o, 0.22 + 0.06 * Math.sin(now / 120), HOVER);
+      else setFlash(o, 0);
+      o.userData.k = e.k;
       // hacia dónde mira: hacia donde anda, o hacia su objetivo al atacar
       let ang = o.userData.face;
       if (e.moving) ang = Math.atan2(e.x - e.fx, e.y - e.fy);
@@ -781,13 +896,16 @@
     for (const [id, m] of models) {
       if (game.ents.has(id)) continue;
       // al morir no desaparece: cae al suelo y se desvanece
-      if (game.dying.has(id) && m.obj.visible) corpses.push({ obj: m.obj, start: game.dying.get(id), y0: m.obj.rotation.y, side: Math.random() < 0.5 ? -1 : 1 });
+      if (game.dying.has(id) && m.obj.visible) corpses.push({ obj: m.obj, start: game.dying.get(id), y0: m.obj.rotation.y, side: Math.random() < 0.5 ? -1 : 1, G: gore({ k: m.obj.userData.k, kind: 'enemy' }) });
       else stage.scene.remove(m.obj);
       game.dying.delete(id);
       models.delete(id);
     }
     for (let i = corpses.length - 1; i >= 0; i--) {
       const c = corpses[i];
+      setFlash(c.obj, Math.max(0, 1 - (now - c.start) / 160));
+      // los demonios se deshacen en ascuas
+      if (c.G && c.G.ember && Math.random() < 0.6) fxp.emit({ x: c.obj.position.x + (Math.random() - 0.5) * 0.5, y: 0.2 + Math.random() * 0.8, z: c.obj.position.z + (Math.random() - 0.5) * 0.5, vy: 1.2, color: Math.random() < 0.5 ? '#ff7a2a' : '#ffb040', size: 0.06, life: 0.9 });
       if (c.obj.userData.gl) {
         // modelo animado: su animación de muerte, y luego se hunde en el suelo
         const k = (now - c.start) / 2600;
@@ -804,6 +922,20 @@
     }
     if (game.dying.size > 60) game.dying.clear();
 
+    // anillo bajo el ratón
+    {
+      let hx = null, hz = null, col = '#ff3a2a';
+      const he = game.mouseOnMap && game.hoverEnemy && game.ents.get(game.hoverEnemy);
+      if (he) { hx = he.rx + 0.5; hz = he.ry + 0.5; }
+      else if (game.mouseOnMap && game.hover && ((game.chests || []).some((c) => c.x === game.hover.x && c.y === game.hover.y && !c.open) || (game.loot || []).some((l) => l.x === game.hover.x && l.y === game.hover.y))) { hx = game.hover.x + 0.5; hz = game.hover.y + 0.5; col = '#ffd23f'; }
+      hoverRing.visible = hx !== null;
+      if (hoverRing.visible) {
+        hoverRing.position.set(hx, built.gl ? 0.15 : 0.05, hz);
+        hoverRing.material.color.set(col);
+        const k = 1 + 0.08 * Math.sin(now / 140); hoverRing.scale.set(k * (he && he.boss ? 1.6 : 1), k * (he && he.boss ? 1.6 : 1), 1);
+        hoverRing.rotation.z = now / 900;
+      }
+    }
     // botín
     const lootIds = new Set();
     for (const l of game.loot) {
@@ -914,10 +1046,16 @@
       F.obj.visible = true;
       const k = (now - F.start) / F.dur;
       if (k >= 1) { stage.scene.remove(F.obj); fx3d.splice(i, 1); continue; }
+      if (F.upd) { F.upd(k); continue; }
       if (f.kind === 'blast' || f.kind === 'nova') { F.obj.position.set(f.x + 0.5, 0.3, f.y + 0.5); F.obj.scale.setScalar(((f.radius || 1) + 0.5) * (0.3 + k * 0.7)); F.obj.material.opacity = 0.5 * (1 - k); }
       else if (f.kind === 'bolt' || f.kind === 'arrow') { const q = Math.min(1, k * 1.5); F.obj.position.set(f.from.x + 0.5 + (f.to.x - f.from.x) * q, 0.7, f.from.y + 0.5 + (f.to.y - f.from.y) * q); F.obj.lookAt(f.to.x + 0.5, 0.7, f.to.y + 0.5); }
       else if (f.kind === 'dash' || f.kind === 'blink') { const dx = f.to.x - f.from.x, dz = f.to.y - f.from.y; F.obj.position.set((f.from.x + f.to.x) / 2 + 0.5, 0.5, (f.from.y + f.to.y) / 2 + 0.5); F.obj.scale.z = Math.hypot(dx, dz); F.obj.lookAt(f.to.x + 0.5, 0.5, f.to.y + 0.5); F.obj.material.opacity = 0.7 * (1 - k); }
       else { const e = f.id && game.ents.get(f.id); const px = e ? e.rx : f.x, pz = e ? e.ry : f.y; F.obj.position.set(px + 0.5, 0.1 + k * (f.kind === 'heal' ? 1.2 : 0.3), pz + 0.5); F.obj.scale.setScalar(0.5 + k); F.obj.material.opacity = 0.9 * (1 - k); }
+    }
+    for (let i = decals.length - 1; i >= 0; i--) {
+      const d = decals[i], k = (now - d.start) / 9000;
+      if (k >= 1) { stage.scene.remove(d.m); decals.splice(i, 1); continue; }
+      d.m.material.opacity = 0.75 * Math.min(1, (1 - k) * 2.5);
     }
     // partículas y clima
     if (mist) mist.update(now / 1000, me ? me.rx + 0.5 : undefined, me ? me.ry + 0.5 : undefined);
@@ -1008,7 +1146,7 @@
 
   // Lo que comparten los archivos de public/dungeon/ (se cargan después de este);
   // las variables que cambian de valor se leen como D.nombre
-  const D = DD.dg = { $, WATER_T, entAt, g, game, herbUnder, models, monName, serverNow, viewEl, who,
+  const D = DD.dg = { $, WATER_T, entAt, g, game, herbUnder, models, monName, onEvent, serverNow, viewEl, who,
     get stage() { return stage; }, get seenCount() { return seenCount; } };
 
   // ======================================================================

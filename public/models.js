@@ -698,8 +698,21 @@
     // armaduras que se ven: petos, hombreras, yelmos, guanteletes, grebas… (armor3d.js)
     if (A3) A3.build(root, gear, { setTrim: set ? set[1] : null });
     if (gob) { const b = globalThis.GOBLIN3D.BUILD[gob.build] || 1; body.scale.x *= b; body.scale.z *= b; }
-    // aura de temporada (premio de los mejores): anillo que brilla a los pies y chispas que suben
-    const auraCol = look.aura && globalThis.PROG && PROG.AURAS[look.aura];
+    // brillo del equipo bueno: el arma destella de vez en cuando con el color de su calidad
+    const wcol = gear.wleg ? RULES.LEGENDARY_COLOR : ['raro', 'unico', 'conjunto'].includes(gear.wr) ? RARITY[gear.wr] : null;
+    const Pw = root.userData.parts.weapon;
+    if (wcol && Pw) {
+      const meshes = [];
+      Pw.traverse((c) => { if (c.isMesh && c.material && c.material.emissive) { c.material = c.material.clone(); c.material.emissive = new THREE.Color(wcol); meshes.push(c); } });
+      const base = gear.wleg || gear.wr === 'unico' || gear.wr === 'conjunto' ? 0.45 : 0.22;
+      if (meshes.length) meshes[0].onBeforeRender = () => {
+        const t = performance.now() / 1000;
+        const glint = Math.pow(Math.max(0, Math.sin(t * 1.6)), 14);
+        for (const c of meshes) c.material.emissiveIntensity = base + glint * 1.8;
+      };
+    }
+    // aura de temporada (premio de los mejores) o de quien lleva un legendario: anillo a los pies y chispas que suben
+    const auraCol = (look.aura && globalThis.PROG && PROG.AURAS[look.aura]) || (gear.leg && RULES.LEGENDARY_COLOR);
     if (auraCol) {
       const A = new THREE.Group(); A.name = 'aura';
       const ringM = new THREE.MeshBasicMaterial({ color: auraCol, transparent: true, opacity: 0.75, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending });
