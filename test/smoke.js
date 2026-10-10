@@ -671,6 +671,31 @@ async function instanceTests() {
   assert.ok(!meIn.where && meIn.x === 6 && meIn.y === 9, 'continúa en la taberna, donde estaba');
   d4.ws.close();
 
+  const mkAccU = (tok, name) => store.setPlayer(store.hash(tok), { slots: [{ name, xp: 0, gold: 10, rv: RULES.RULES_VERSION, char: RULES.newChar('mago', { species: 'elf', sex: 'f' }), equip: {}, bag: [], cons: {}, buffs: {} }, null, null], last: null });
+  // Usuario y contraseña: se guarda la cuenta y otro dispositivo entra en ella
+  const tokU = 'ab'.repeat(16), tokOther = 'cd'.repeat(16);
+  mkAccU(tokU, 'Viajera');
+  const lu = await client('Login1');
+  lu.send({ t: 'acct:register', token: tokU, user: 'x', pass: '123456' });
+  assert.match((await lu.next((m) => m.t === 'error')).text, /usuario/, 'usuario demasiado corto');
+  await sleep(1000);
+  lu.send({ t: 'acct:register', token: tokU, user: 'Viajera87', pass: 'secreta1' });
+  const reg = await lu.next((m) => m.t === 'account');
+  assert.ok(reg.registered === 'viajera87' && reg.login === 'viajera87', 'cuenta guardada (usuario en minúsculas)');
+  assert.ok(!JSON.stringify(reg).includes('secreta1'), 'la contraseña no viaja de vuelta');
+  const lu2 = await client('Login2');
+  lu2.send({ t: 'acct:login', token: tokOther, user: 'viajera87', pass: 'mala' });
+  assert.match((await lu2.next((m) => m.t === 'error')).text, /incorrectos/, 'contraseña mala');
+  await sleep(1000);
+  lu2.send({ t: 'acct:register', token: tokOther, user: 'viajera87', pass: 'otra123' });
+  assert.match((await lu2.next((m) => m.t === 'error')).text, /ya existe/, 'no se puede quitar el usuario a otro');
+  await sleep(1000);
+  lu2.send({ t: 'acct:login', token: tokOther, user: 'VIAJERA87', pass: 'secreta1' });
+  const lg = await lu2.next((m) => m.t === 'account');
+  assert.strictEqual(lg.token, tokU, 'el otro dispositivo recibe la llave de la cuenta');
+  assert.strictEqual(lg.slots[0].name, 'Viajera', 'y ve sus personajes');
+  lu.ws.close(); lu2.ws.close();
+
   // Dueño de la taberna: mensaje del día, silenciar y expulsar (el primero en entrar en un servidor nuevo es el dueño)
   const SRV3 = MAP.SERVERS[2].id;
   const mkAcc = (tok, name) => store.setPlayer(store.hash(tok), { slots: [{ name, xp: 0, gold: 10, rv: RULES.RULES_VERSION, char: RULES.newChar('guerrero', { species: 'human', sex: 'm' }), equip: {}, bag: [], cons: {}, buffs: {} }, null, null], last: null });

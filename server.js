@@ -229,7 +229,7 @@ function serversView(pid) {
 }
 
 function accountInfo(a, pid, extra) {
-  return { t: 'account', slots: a.slots.map(slotInfo), last: a.last && a.slots[a.last.slot] ? a.last : null, servers: serversView(pid), backup: makeBackup(pid), ...extra };
+  return { t: 'account', login: a.login ? a.login.user : null, slots: a.slots.map(slotInfo), last: a.last && a.slots[a.last.slot] ? a.last : null, servers: serversView(pid), backup: makeBackup(pid), ...extra };
 }
 
 // Copia de seguridad firmada de la cuenta, que guarda el navegador del jugador. Si el servidor se reinicia y pierde
@@ -252,9 +252,37 @@ function restoreBackup(pid, b) {
   try { a = JSON.parse(zlib.gunzipSync(Buffer.from(b.d, 'base64')).toString()); } catch { return false; }
   if (!a || !Array.isArray(a.slots)) return false;
   store.setPlayer(pid, a);
+  if (a.login && a.login.user) indexLogin(a.login.user, pid);
   console.log('Cuenta restaurada desde la copia del navegador');
   return true;
 }
+
+// ---------- Usuario y contraseña ----------
+// La cuenta sigue siendo la «llave» (token) del navegador. Al poner usuario y contraseña, la llave se guarda
+// cifrada en la propia cuenta; al entrar desde otro dispositivo con la contraseña, el servidor se la devuelve.
+const AUTH_KEY = crypto.createHash('sha256').update('dd-auth:' + SAVE_SECRET).digest();
+function sealToken(t) {
+  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', AUTH_KEY, iv);
+  const enc = Buffer.concat([c.update(t, 'utf8'), c.final()]);
+  return Buffer.concat([iv, c.getAuthTag(), enc]).toString('base64');
+}
+function openToken(s) {
+  try {
+    const b = Buffer.from(s, 'base64'), d = crypto.createDecipheriv('aes-256-gcm', AUTH_KEY, b.subarray(0, 12));
+    d.setAuthTag(b.subarray(12, 28));
+    return Buffer.concat([d.update(b.subarray(28)), d.final()]).toString('utf8');
+  } catch { return null; }
+}
+const passHash = (pass, salt) => crypto.scryptSync(pass, salt, 32, { N: 16384, r: 8, p: 1 }).toString('hex');
+const cleanUser = (u) => (typeof u === 'string' ? u.trim().toLowerCase() : '');
+const USER_RE = /^[a-z0-9ñ_.-]{3,20}$/;
+const loginFails = new Map(); // usuario -> { n, until }
+function indexLogin(user, pid) {
+  const ix = store.meta('logins') || {};
+  if (ix[user] !== pid) { ix[user] = pid; store.setMeta('logins', ix); }
+}
+// al arrancar, el índice se rehace con las cuentas guardadas
+for (const [pid, a] of Object.entries(store.players())) if (a && a.login && a.login.user) indexLogin(a.login.user, pid);
 
 // Cambia el nombre de un servidor: sólo su dueño (si aún no tiene, quien lo renombra pasa a serlo)
 function renameServer(pid, id, name) {
@@ -956,15 +984,44 @@ wss.on('connection', (ws) => {
 
     if (!user) {
       // Pantalla de inicio: ver, crear y borrar personajes de la cuenta antes de entrar
-      if (msg.t === 'hello' || msg.t === 'char:new' || msg.t === 'char:del' || msg.t === 'server:rename') {
+      if (msg.t === 'hello' || msg.t === 'char:new' || msg.t === 'char:del' || msg.t === 'server:rename' || msg.t === 'acct:register' || msg.t === 'acct:login') {
         if (!allow(1)) return;
         clearTimeout(joinTimer);
         joinTimer = setTimeout(() => { if (!user) ws.close(4000, 'join timeout'); }, 10 * 60 * 1000);
         const pid = tokenPid(msg.token);
         if (!pid) return;
         if (msg.t === 'hello') restoreBackup(pid, msg.backup);
+        if (msg.t === 'acct:login') {
+          const u = cleanUser(msg.user), pass = String(msg.pass || '').slice(0, 100);
+          const f = loginFails.get(u);
+          if (f && f.until > Date.now()) return err('Demasiados intentos fallidos. Espera unos minutos.');
+          const lp = (store.meta('logins') || {})[u], la = lp && store.player(lp);
+          const ok = la && la.login && la.login.user === u && crypto.timingSafeEqual(Buffer.from(passHash(pass, la.login.salt), 'hex'), Buffer.from(la.login.hash, 'hex'));
+          if (!ok) {
+            const n = ((f && f.n) || 0) + 1;
+            loginFails.set(u, { n, until: n >= 5 ? Date.now() + 5 * 60000 : 0 });
+            return err('Usuario o contraseña incorrectos.');
+          }
+          loginFails.delete(u);
+          const tok = openToken(la.login.tok);
+          if (!tok) return err('No se pudo abrir la cuenta. Avisa al dueño del juego.');
+          return send(ws, accountInfo(la, lp, { token: tok }));
+        }
         const a = account(pid);
         const slot = slotOf(msg.slot);
+        if (msg.t === 'acct:register') {
+          const u = cleanUser(msg.user), pass = String(msg.pass || '');
+          if (!USER_RE.test(u)) return err('El usuario debe tener de 3 a 20 letras o números, sin espacios.');
+          if (pass.length < 6 || pass.length > 100) return err('La contraseña debe tener al menos 6 caracteres.');
+          const ix = store.meta('logins') || {};
+          if (ix[u] && ix[u] !== pid) return err('Ese usuario ya existe. Elige otro.');
+          if (a.login && a.login.user !== u && ix[a.login.user] === pid) { delete ix[a.login.user]; store.setMeta('logins', ix); }
+          const salt = crypto.randomBytes(16).toString('hex');
+          a.login = { user: u, salt, hash: passHash(pass, salt), tok: sealToken(msg.token) };
+          store.setPlayer(pid, a);
+          indexLogin(u, pid);
+          return send(ws, accountInfo(a, pid, { registered: u }));
+        }
         if (msg.t === 'char:new') {
           if (slot === null || a.slots[slot]) return err('Esa casilla ya tiene un personaje.');
           const name = cleanText(msg.name, 16);

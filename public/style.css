@@ -767,3 +767,12 @@ body.cb .dlog-line.loot-conjunto { color: #cc79a7; }
 .motd { position: fixed; top: 10px; left: 50%; transform: translateX(-50%); z-index: 30; max-width: min(560px, calc(100% - 340px)); padding: 6px 14px; background: rgba(28, 18, 12, .88); color: #ffe39a; border: 1px solid #e0a93a; border-radius: 8px; font-size: 14px; cursor: pointer; text-align: center; }
 .motd.hidden, body.in-dungeon .motd { display: none; }
 @media (max-width: 820px) { .motd { top: auto; bottom: 150px; max-width: calc(100% - 24px); } }
+
+/* Mi cuenta */
+#acctwin { z-index: 70; }
+#acctwin .panel { width: min(440px, calc(100% - 24px)); }
+.acct-field { display: block; margin: 8px 0; text-align: left; }
+.acct-field span { display: block; font: 600 13px "Pixelify Sans", sans-serif; color: #e8d3a8; margin-bottom: 3px; }
+.acct-field input { width: 100%; padding: 8px 10px; font-size: 16px; border-radius: 6px; border: 2px solid #5a3418; background: #fbf4e2; color: #2b1d14; }
+#acct-body .btn.big { width: 100%; margin-top: 6px; }
+#acct-body .title-row { margin-bottom: 6px; }

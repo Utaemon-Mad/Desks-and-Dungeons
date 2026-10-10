@@ -49,6 +49,7 @@ function createStore(dir = DATA_DIR) {
     setDungeon(id, value) { data.dungeons[id] = value; save('dungeons'); },
     deleteDungeon(id) { delete data.dungeons[id]; save('dungeons'); },
     player(id) { return data.players[id] || null; },
+    players() { return data.players; },
     setPlayer(id, value) { data.players[id] = value; save('players'); },
     meta(key) { return data.meta[key] || null; },
     setMeta(key, value) { data.meta[key] = value; save('meta'); },

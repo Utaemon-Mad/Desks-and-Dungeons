@@ -154,6 +154,7 @@
         <button type="button" data-go="new"><span>Nuevo personaje</span><small id="mm-new">Tres casillas para tus héroes</small></button>
         <button type="button" data-go="continue"><span>Continuar</span><small id="mm-cont">Cargando…</small></button>
         <button type="button" data-go="server"><span>Elegir servidor</span><small id="mm-srv"></small></button>
+        <button type="button" data-go="account"><span>Mi cuenta</span><small id="mm-acct">Guárdala con usuario y contraseña</small></button>
       </nav>
     </div>
     <button type="button" class="btn alt fs-btn" data-fs>⛶ Pantalla completa</button>
@@ -215,6 +216,15 @@
         <button id="ed-submit" class="btn" type="submit">CREAR Y JUGAR</button>
       </div>
     </form>
+  </div>
+
+  <!-- Cuenta: usuario y contraseña para jugar desde cualquier dispositivo -->
+  <div id="acctwin" class="overlay hidden">
+    <div class="panel card">
+      <div class="panel-title">🔑 MI CUENTA</div>
+      <div id="acct-body"></div>
+      <div class="edit-row"><button id="acct-close" class="btn alt" type="button">VOLVER</button></div>
+    </div>
   </div>
 
   <!-- Mazmorras: crear una aleatoria con nivel o unirse a una partida -->
