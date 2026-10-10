@@ -57,6 +57,7 @@
   function show(el) { for (const e of SCREENS) e.classList.toggle('hidden', e !== el); document.body.classList.add('at-title'); }
 
   function toTitle(atMenu = true) {
+    SFX.music('menu');
     net.close(); users.clear(); DD.me = null; C.myId = null;
     DD.emit('to-title');
     C.setEditing(false);

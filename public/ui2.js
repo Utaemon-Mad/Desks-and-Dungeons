@@ -53,7 +53,7 @@
   let forgeTab = 'up', sel = null, multi = new Set(), lastMsg = '';
   function openForge() { if (DD.scene !== 'tavern') return DD.toast('La forja está en la taberna.'); sel = null; multi = new Set(); lastMsg = ''; openOverlay('forgewin'); renderForge(); }
   document.querySelectorAll('#forge-tabs button').forEach((b) => { b.onclick = () => { forgeTab = b.dataset.tab; sel = null; multi = new Set(); lastMsg = ''; renderForge(); }; });
-  DD.on('forge:result', (m) => { lastMsg = m.text; if (m.item) sel = m.item.id; DD.blip(m.ok ? 990 : 180, 0.15); if (isOpen('forgewin')) renderForge(); });
+  DD.on('forge:result', (m) => { lastMsg = m.text; if (m.item) sel = m.item.id; DD.sfx('forge', { ok: !!m.ok }); if (isOpen('forgewin')) renderForge(); });
 
   function allItems(p) {
     const eq = RULES.SLOT_IDS.map((s) => p.equip[s]).filter(Boolean).map((it) => ({ it, worn: true }));
@@ -245,7 +245,7 @@
   DD.on('ranks', (m) => { ranks = m; if (isOpen('famewin')) renderFame(); });
   DD.on('achievement', (m) => {
     DD.toast(`🏅 ¡Logro: ${m.name}!${m.title ? ` Nuevo título: «${m.title}» (Pueblo → Fama).` : ''} +${m.gold} 🪙`);
-    DD.blip(880, 0.2); setTimeout(() => DD.blip(1175, 0.2), 150); setTimeout(() => DD.blip(1568, 0.25), 300);
+    DD.sfx('quest');
   });
   function renderFame() {
     const p = me(); if (!p) return;

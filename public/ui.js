@@ -17,8 +17,8 @@
   const itemIcon = (it, size) => iconCanvas(DSPRITES.itemIcon(it), size);
   function consIcon(id, size = 32) { const C = RULES.CONSUMABLES[id]; return iconCanvas(C.spell ? DSPRITES.scroll(C.color) : DSPRITES.potion(C.color), size); }
 
-  function openOverlay(id) { document.querySelectorAll('.overlay.win').forEach((o) => { if (o.id !== id) o.classList.add('hidden'); }); $('#' + id).classList.remove('hidden'); hideTip(); }
-  function closeOverlay(id) { $('#' + id).classList.add('hidden'); hideTip(); }
+  function openOverlay(id) { if ($('#' + id).classList.contains('hidden')) DD.sfx('open'); document.querySelectorAll('.overlay.win').forEach((o) => { if (o.id !== id) o.classList.add('hidden'); }); $('#' + id).classList.remove('hidden'); hideTip(); }
+  function closeOverlay(id) { if (!$('#' + id).classList.contains('hidden')) DD.sfx('close'); $('#' + id).classList.add('hidden'); hideTip(); }
   document.querySelectorAll('.overlay.win').forEach((o) => {
     o.addEventListener('pointerdown', (e) => { if (e.target === o) closeOverlay(o.id); });
     const x = o.querySelector('.close-x'); if (x) x.onclick = () => { closeOverlay(o.id); if (o.id === 'tradewin') DD.net.send({ t: 'trade:cancel' }); };
@@ -510,7 +510,7 @@
   let shop = null;
   DD.on('open-shop', (npc) => { if (!inTavern() && npc !== 'bruja') return; shop = { npc }; openOverlay('shopwin'); $('#shop-body').innerHTML = '<p class="muted">…</p>'; DD.net.send({ t: 'shop:open', npc }); });
   DD.on('shop', (m) => { shop = m; if ($('#shopwin').classList.contains('hidden')) return; renderShop(); });
-  DD.on('sold', (m) => { DD.toast(`Vendido por ${m.gold} 🪙`); DD.blip(1046, 0.08); });
+  DD.on('sold', (m) => { DD.toast(`Vendido por ${m.gold} 🪙`); DD.sfx('buy'); });
 
   function renderShop() {
     const p = me();
