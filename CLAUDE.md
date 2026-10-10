@@ -23,6 +23,8 @@ public/portada.html     portada de presentación (/portada); guia.pdf es la guí
 public/rules/engine.js  reglas: stats, razas, clases, habilidades, objetos estilo Diablo 2, afijos, botín, monstruos
 public/rules/progress.js forja, misiones, logros, descenso semanal
 public/rules/items-data.js tabla de nombre y aspecto de las 192 armaduras y 156 armas/escudos (4 variantes por nivel)
+public/rules/monsters-data.js tablas de monstruos y temas de mazmorra
+public/rules/talents-data.js árbol de talentos de cada clase
 public/map.js           taberna, servidores, razas y aspecto, rasgos goblin (cleanLook)
 public/dungeon-data.js  tipos de casilla de las mazmorras
 public/models.js        personajes 3D (KayKit), enemigos, animales, muebles
@@ -41,7 +43,7 @@ public/polish.js        fundidos, celebración de nivel y cartel de objeto únic
 public/tutorial.js      tutorial de Alfonso para personajes nuevos
 public/ui.js, ui2.js    ventanas: ficha, inventario, tiendas, forja, guía; ajustes (volumen, tamaño, daltónico, teclas en DD.keys)
 public/sprites.js, dsprites.js  sprites 2D: iconos de objetos y reserva sin 3D
-public/style.css        estilos
+public/css/*.css        estilos por zonas (base, dungeon, windows, start, inventory, extras), en ese orden
 test/smoke.js           pruebas de reglas y de red (npm test)
 scripts/lint.js         comprobación de sintaxis (npm run lint)
 ```
