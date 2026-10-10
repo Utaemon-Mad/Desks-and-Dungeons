@@ -671,3 +671,40 @@ html, body { overscroll-behavior: none; -webkit-touch-callout: none; }
 #drejoin.hidden { display: none; }
 @keyframes rejoin-pulse { to { box-shadow: 0 0 30px rgba(224, 169, 58, .95); } }
 @media (max-width: 820px) { #dparty { top: 160px; left: 6px; width: 150px; } .pm-top { font-size: 11px; } }
+
+/* Cursores propios: flecha dorada, espada para atacar, bocadillo para hablar y mano para abrir o recoger */
+body, #scene { cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2232%22%20height%3D%2232%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M3%202%20L3%2025%20L9%2019%20L13%2029%20L17%2027%20L13%2017%20L21%2017%20Z%22%20fill%3D%22%23f3d27a%22%20stroke%3D%22%232b1609%22%20stroke-width%3D%222%22%20stroke-linejoin%3D%22round%22/%3E%3Cpath%20d%3D%22M6%208%20L6%2019%20L9%2016%22%20fill%3D%22none%22%20stroke%3D%22%23fff6d8%22%20stroke-width%3D%221.2%22/%3E%3C/svg%3E") 3 2, auto; }
+button, .btn, a, .tool, [onclick] { cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2232%22%20height%3D%2232%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M3%202%20L3%2025%20L9%2019%20L13%2029%20L17%2027%20L13%2017%20L21%2017%20Z%22%20fill%3D%22%23f3d27a%22%20stroke%3D%22%232b1609%22%20stroke-width%3D%222%22%20stroke-linejoin%3D%22round%22/%3E%3Cpath%20d%3D%22M6%208%20L6%2019%20L9%2016%22%20fill%3D%22none%22%20stroke%3D%22%23fff6d8%22%20stroke-width%3D%221.2%22/%3E%3C/svg%3E") 3 2, pointer; }
+#dcanvas { cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2232%22%20height%3D%2232%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M3%202%20L3%2025%20L9%2019%20L13%2029%20L17%2027%20L13%2017%20L21%2017%20Z%22%20fill%3D%22%23f3d27a%22%20stroke%3D%22%232b1609%22%20stroke-width%3D%222%22%20stroke-linejoin%3D%22round%22/%3E%3Cpath%20d%3D%22M6%208%20L6%2019%20L9%2016%22%20fill%3D%22none%22%20stroke%3D%22%23fff6d8%22%20stroke-width%3D%221.2%22/%3E%3C/svg%3E") 3 2, crosshair; }
+#dcanvas[data-cur=attack] { cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2232%22%20height%3D%2232%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M4%204%20L8%203%20L22%2017%20L19%2020%20L5%206%20Z%22%20fill%3D%22%23dfe6ee%22%20stroke%3D%22%232b1609%22%20stroke-width%3D%221.6%22%20stroke-linejoin%3D%22round%22/%3E%3Cpath%20d%3D%22M17%2023%20L23%2017%20M19%2025%20L25%2019%22%20stroke%3D%22%238a5a2a%22%20stroke-width%3D%223%22%20stroke-linecap%3D%22round%22/%3E%3Cpath%20d%3D%22M22%2022%20L28%2028%22%20stroke%3D%22%235a3418%22%20stroke-width%3D%223.4%22%20stroke-linecap%3D%22round%22/%3E%3Ccircle%20cx%3D%2228.5%22%20cy%3D%2228.5%22%20r%3D%222%22%20fill%3D%22%23e0a93a%22%20stroke%3D%22%232b1609%22/%3E%3C/svg%3E") 4 4, crosshair; }
+#dcanvas[data-cur=talk] { cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2232%22%20height%3D%2232%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M4%206%20Q4%203%207%203%20L25%203%20Q28%203%2028%206%20L28%2017%20Q28%2020%2025%2020%20L13%2020%20L7%2026%20L8%2020%20L7%2020%20Q4%2020%204%2017%20Z%22%20fill%3D%22%23fbf4e2%22%20stroke%3D%22%232b1609%22%20stroke-width%3D%222%22%20stroke-linejoin%3D%22round%22/%3E%3Ccircle%20cx%3D%2211%22%20cy%3D%2211.5%22%20r%3D%221.8%22%20fill%3D%22%232b1609%22/%3E%3Ccircle%20cx%3D%2216%22%20cy%3D%2211.5%22%20r%3D%221.8%22%20fill%3D%22%232b1609%22/%3E%3Ccircle%20cx%3D%2221%22%20cy%3D%2211.5%22%20r%3D%221.8%22%20fill%3D%22%232b1609%22/%3E%3C/svg%3E") 6 24, pointer; }
+#dcanvas[data-cur=use] { cursor: url("data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20width%3D%2232%22%20height%3D%2232%22%20viewBox%3D%220%200%2032%2032%22%3E%3Cpath%20d%3D%22M10%2014%20L10%206%20Q10%204%2012%204%20Q14%204%2014%206%20L14%2013%20L14%204.5%20Q14%203%2016%203%20Q18%203%2018%204.5%20L18%2013%20L18%205.5%20Q18%204%2020%204%20Q22%204%2022%205.5%20L22%2014%20L22%208%20Q22%206.5%2024%206.5%20Q26%206.5%2026%208%20L26%2019%20Q26%2027%2019%2028%20L16%2028%20Q11%2028%208%2023%20L4%2016%20Q3%2014%205%2013.5%20Q7%2013%208%2015%20Z%22%20fill%3D%22%23f0c89a%22%20stroke%3D%22%232b1609%22%20stroke-width%3D%221.8%22%20stroke-linejoin%3D%22round%22/%3E%3C/svg%3E") 12 4, pointer; }
+input, textarea { cursor: text; }
+
+/* Fundido entre escenas */
+.scene-fade { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; z-index: 900; }
+
+/* Subir de nivel */
+.lvlup { position: fixed; inset: 0; z-index: 800; display: flex; align-items: center; justify-content: center; pointer-events: auto; }
+.lvlup.hidden { display: none; }
+.lvl-rays { position: absolute; width: 900px; height: 900px; max-width: 160vw; max-height: 160vw; background: repeating-conic-gradient(rgba(255, 210, 90, .22) 0 8deg, transparent 8deg 22deg); border-radius: 50%; -webkit-mask: radial-gradient(circle, #000 15%, transparent 65%); mask: radial-gradient(circle, #000 15%, transparent 65%); }
+.lvlup.play .lvl-rays { animation: lvl-spin 3.6s linear, lvl-fade 3.6s ease-out forwards; }
+.lvl-card { position: relative; text-align: center; padding: 18px 40px 16px; background: radial-gradient(ellipse at 50% 30%, rgba(90, 46, 20, .95), rgba(30, 16, 8, .95)); border: 3px solid #e0a93a; border-radius: 12px; box-shadow: 0 0 40px rgba(255, 190, 60, .55); }
+.lvlup.play .lvl-card { animation: lvl-pop .55s cubic-bezier(.2, 1.6, .4, 1), lvl-fade 3.6s ease-in forwards; }
+.lvl-card small { display: block; font: 700 15px "Pixelify Sans", sans-serif; letter-spacing: 3px; color: #ffe39a; }
+.lvl-card b { display: block; font: 64px "Jacquard 12", serif; color: #ffd24a; text-shadow: 0 4px 0 #5b2a0c, 0 0 26px rgba(255, 160, 40, .8); line-height: 1.05; }
+.lvl-card span { display: block; color: #f4ead2; font-size: 15px; margin-top: 4px; }
+@keyframes lvl-spin { to { transform: rotate(60deg); } }
+@keyframes lvl-pop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+@keyframes lvl-fade { 0%, 80% { opacity: 1; } 100% { opacity: 0; } }
+
+/* Objeto único o de conjunto */
+.bigloot { --rc: #c8a46a; position: fixed; left: 50%; top: 26%; transform: translateX(-50%); z-index: 790; text-align: center; padding: 12px 34px 14px; pointer-events: none; background: linear-gradient(rgba(20, 12, 6, .92), rgba(40, 24, 12, .92)); border: 2px solid var(--rc); border-radius: 10px; box-shadow: 0 0 36px var(--rc); min-width: 300px; }
+.bigloot.hidden { display: none; }
+.bigloot.play { animation: loot-in .5s cubic-bezier(.2, 1.5, .4, 1), loot-out 4.2s ease-in forwards; }
+.bigloot small { display: block; font: 700 14px "Pixelify Sans", sans-serif; letter-spacing: 3px; color: #f4ead2; }
+.bigloot b { display: block; font: 38px "Jacquard 12", serif; color: var(--rc); text-shadow: 0 3px 0 #000, 0 0 18px var(--rc); }
+.bigloot span { display: block; font-size: 13px; color: #cdb894; }
+@keyframes loot-in { from { transform: translateX(-50%) scale(.4); opacity: 0; } to { transform: translateX(-50%) scale(1); opacity: 1; } }
+@keyframes loot-out { 0%, 85% { opacity: 1; } 100% { opacity: 0; } }
+@media (max-width: 820px) { .lvl-card b { font-size: 46px; } .bigloot b { font-size: 28px; } .bigloot { min-width: 0; width: calc(100% - 40px); } }

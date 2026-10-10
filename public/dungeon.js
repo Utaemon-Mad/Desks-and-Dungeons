@@ -223,6 +223,7 @@
       case 'loot': {
         if (ev.gold) float(ev.x, ev.y, `+${ev.gold} 🪙`, '#ffd23f', ev.id === me);
         if (ev.xp && ev.id === me) setTimeout(() => float(ev.x, ev.y, `+${ev.xp} PX`, '#9fe0ff', true), 300);
+        if (ev.item && ev.id === me && (ev.item.rarity === 'unico' || ev.item.rarity === 'conjunto')) DD.emit('bigloot', ev.item);
         if (ev.item) { float(ev.x, ev.y, ev.item.name, DSPRITES.RARITY[ev.item.rarity], true); log(`${who(ev.id)} recoge «${ev.item.name}» (${RULES.RARITIES[ev.item.rarity].name.toLowerCase()})`, 'loot-' + ev.item.rarity); }
         if (ev.cons) float(ev.x, ev.y, RULES.CONSUMABLES[ev.cons].name, '#ff8a8a');
         if (ev.mat) { const M = PROG.MATS[ev.mat]; float(ev.x, ev.y, `+${ev.n} ${M.icon}`, ev.mat === 'polvo' ? '#ffe27a' : ev.mat === 'esencia' ? '#7ad0ff' : '#c8c8d0', ev.id === me); }
@@ -580,6 +581,16 @@
     const en = stage && entUnder(e.clientX, e.clientY, ['enemy']);
     game.hoverEnemy = en ? en.id : null;
     if (en) game.hover = { x: en.x, y: en.y };
+    // cursor según lo que hay debajo: atacar, hablar, abrir o recoger
+    let cur = en ? 'attack' : '';
+    if (!cur && stage && entUnder(e.clientX, e.clientY, ['npc'])) cur = 'talk';
+    const h = game.hover;
+    if (!cur && h && game.map) {
+      const t = game.map.tiles[h.y * game.map.w + h.x];
+      if (t === '+' && !game.openDoors.has(h.y * game.map.w + h.x)) cur = 'use';
+      else if ((game.chests || []).some((c) => c.x === h.x && c.y === h.y && !c.open) || (game.loot || []).some((l) => l.x === h.x && l.y === h.y)) cur = 'use';
+    }
+    if (cv.dataset.cur !== cur) cv.dataset.cur = cur;
   });
   cv.addEventListener('pointerleave', () => { game.mouseOnMap = false; });
   cv.addEventListener('pointerdown', (e) => {
