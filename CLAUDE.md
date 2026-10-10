@@ -70,6 +70,8 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Recompensa diaria, logros, tareas, mejoras de la taberna, temporadas: `LOGIN_REWARDS`, `ACHIEVEMENTS`, `DAILY`, `TAVERN_LEVELS`, `SEASON_PTS` (progress.js).
 - Combate (daño, habilidades, muerte, botín al morir): `damageEnemy`, `tryPending`, `killEnemy`, `hurtPlayer` (server/dungeon.js).
 - Mensajes del cliente al servidor: `server/handlers/*.js` (`'nombre:accion'(cx, msg)`); los que quedan, en el `switch (msg.t)` de server.js.
+- Luz y ambiente de cada tema (luz ambiente, rebote, neblina): `THEME` (view3d.js); neblina `mistLayer`, agua y lava `liquidMaterial`, suciedad del suelo `grime`; luces de la escena en `renderGame` (dungeon.js).
+- Efectos de golpe y muerte: `gore`, `hitBurst`, `splat`, `slash`, `setFlash` (dungeon.js). Calidad automática por fps: `trackFps` (view3d.js).
 - Sonidos y música: `FX` y `TRACKS` (audio.js). Iconos: `P` (icons.js). Novedades: `NEWS` (admin.js).
 - Ventanas: ui.js (ficha, inventario, talentos, tiendas, guía) y ui2.js (pueblo, forja, fama, ajustes, asalto, taberna, mercado).
 

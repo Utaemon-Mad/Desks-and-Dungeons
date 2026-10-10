@@ -24,8 +24,12 @@
   const touch = typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
   const autoQuality = () => (touch || (navigator.hardwareConcurrency || 8) <= 4 ? 'media' : 'alta');
   let Q = QUALITY[autoQuality()];
+  let autoMode = true;
   function setQuality(q) {
-    const id = q === 'auto' || !QUALITY[q] ? autoQuality() : q;
+    autoMode = q === 'auto' || !QUALITY[q];
+    applyQuality(autoMode ? autoQuality() : q);
+  }
+  function applyQuality(id) {
     Q = QUALITY[id];
     if (!renderer) return;
     renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, Q.pr));
@@ -36,7 +40,25 @@
       for (const st of stages) st.scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
     }
   }
-  const qualityInfo = () => ({ ...Q, pr: Math.round(Math.min(window.devicePixelRatio || 1, Q.pr) * 100) / 100 });
+  const qualityInfo = () => ({ ...Q, pr: Math.round(Math.min(window.devicePixelRatio || 1, Q.pr) * 100) / 100, auto: autoMode, fps: Math.round(perf.fps) });
+  // Calidad automática: si el juego va a tirones (menos de 26 fps durante 4 s) baja un escalón;
+  // si va sobrado (más de 57 fps durante 30 s) y no está en la que le toca, sube uno
+  const ORDER = ['baja', 'media', 'alta'];
+  const perf = { last: 0, fps: 60, slow: 0, fast: 0, lastDown: 0 };
+  function trackFps() {
+    const now = performance.now(), dt = now - perf.last;
+    perf.last = now;
+    if (dt <= 0 || dt > 500 || document.hidden) return; // pausas y pestañas ocultas no cuentan
+    perf.fps += (1000 / dt - perf.fps) * 0.05;
+    if (!autoMode) return;
+    const i = ORDER.indexOf(Q.name);
+    perf.slow = perf.fps < 26 ? perf.slow + dt : 0;
+    perf.fast = perf.fps > 57 ? perf.fast + dt : 0;
+    if (perf.slow > 4000 && i > 0) {
+      applyQuality(ORDER[i - 1]); perf.slow = 0; perf.lastDown = now; perf.fps = 40;
+      if (root.DD && root.DD.toast) root.DD.toast(`Gráficos en calidad ${Q.name} para que vaya más fluido (Ajustes para cambiarlo).`);
+    } else if (perf.fast > 30000 && i < ORDER.indexOf(autoQuality()) && now - perf.lastDown > 120000) { applyQuality(ORDER[i + 1]); perf.fast = 0; }
+  }
   function getRenderer() {
     if (renderer) return renderer;
     renderer = legacy(new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' }));
@@ -127,6 +149,7 @@
   }
   // Pinta una escena con o sin posprocesado; grade: ajustes de color de ese escenario
   function present(scene, camera, g) {
+    trackFps();
     const r = getRenderer();
     const P = getPost();
     if (!P) { r.render(scene, camera); return; }
