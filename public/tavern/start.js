@@ -26,7 +26,8 @@
     ws: null, wait: [],
     call(msg) {
       return new Promise((resolve) => {
-        const go = () => { this.wait.push(resolve); this.ws.send(JSON.stringify({ ...msg, token: playerToken() })); };
+        // al saludar se manda la copia de seguridad de la cuenta (por si el servidor se reinició y la perdió)
+        const go = () => { this.wait.push(resolve); this.ws.send(JSON.stringify({ ...msg, token: playerToken(), backup: msg.t === 'hello' ? C.backup() : undefined })); };
         if (this.ws && this.ws.readyState === 1) return go();
         if (!this.ws || this.ws.readyState > 1) {
           const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -34,6 +35,7 @@
           ws.onmessage = (ev) => {
             let m; try { m = JSON.parse(ev.data); } catch { return; }
             if (m.t === 'error') toast(m.text);
+            if (m.backup) C.saveBackup(m.backup);
             if (m.t === 'account' || m.t === 'error') { const r = this.wait.shift(); if (r) r(m); }
           };
           ws.onclose = () => { for (const r of this.wait.splice(0)) r({ t: 'error' }); };

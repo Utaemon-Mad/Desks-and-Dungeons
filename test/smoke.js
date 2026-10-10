@@ -568,6 +568,18 @@ async function instanceTests() {
   assert.ok(gl && gl.ears === 2 && gl.hair === 4 && gl.marks === 3 && gl.nose === 0 && gl.rings === 0 && gl.build === 1, 'rasgos de goblin guardados y limpios');
   assert.strictEqual(eva.char.look.gob.ears, 2);
   assert.strictEqual(MAP.cleanLook({ species: 'human', gob: { ears: 1 } }).gob, undefined, 'solo los goblins llevan rasgos de goblin');
+  // copia de seguridad firmada: si el servidor pierde la cuenta, el navegador la devuelve y se restaura
+  assert.ok(ac.backup && ac.backup.d && ac.backup.sig, 'la cuenta llega con su copia de seguridad');
+  const bk = ac.backup, saved = store.player(store.hash(tokD));
+  store.setPlayer(store.hash(tokD), null);
+  lob.send({ t: 'hello', token: tokD, backup: { ...bk, d: bk.d.slice(0, -4) + 'AAAA' } });
+  let ac2 = await lob.next((m) => m.t === 'account');
+  assert.ok(!ac2.slots[1], 'una copia retocada no se acepta');
+  lob.send({ t: 'hello', token: tokD, backup: bk });
+  ac2 = await lob.next((m) => m.t === 'account');
+  assert.ok(ac2.slots[1] && ac2.slots[1].name === 'Eva', 'la copia buena restaura la cuenta');
+  assert.strictEqual(store.player(store.hash(tokD)).slots[1].char.look.gob.ears, saved.slots[1].char.look.gob.ears);
+  await sleep(2500); // el servidor limita los mensajes de la pantalla de inicio
   assert.deepStrictEqual([eva.char.alloc.des, eva.char.alloc.sue], [5, 0], 'puntos iniciales: como mucho 5 y nunca más de 20 natural');
   assert.ok(RULES.derive(eva).natural.des <= RULES.STAT_MAX);
   lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Otra', look: {} });
