@@ -60,3 +60,5 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Todos los personajes KayKit comparten esqueleto: cabezas, armaduras y armas se pegan a los huesos.
 - Cuentas por token del navegador: 3 personajes y 3 servidores (Lejano, Humbrio, Sangriento).
 - `RULES_VERSION` + `migrateProfile` adaptan las partidas guardadas cuando cambian las reglas.
+- Render gratis no guarda el disco: el servidor manda a cada navegador una copia firmada de su cuenta (`dd-backup`, HMAC con `SAVE_SECRET`) y la restaura al entrar si la ha perdido.
+- Los archivos estáticos se sirven con gzip y ETag; `assets/` y `vendor/` se guardan un día en el navegador.

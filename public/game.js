@@ -608,7 +608,7 @@
       ws.onopen = () => {
         this.retry = 0;
         connEl.classList.add('hidden');
-        ws.send(JSON.stringify({ t: 'join', room: profile.server, slot: profile.slot, token: playerToken() }));
+        ws.send(JSON.stringify({ t: 'join', room: profile.server, slot: profile.slot, token: playerToken(), backup: backup() }));
       };
       ws.onmessage = (ev) => { let m; try { m = JSON.parse(ev.data); } catch { return; } handle(m); };
       ws.onclose = () => {
@@ -643,6 +643,7 @@
         break;
       }
       case 'join': users.set(m.user.id, makeUser(m.user)); renderHeroes(); blip(660, 0.08); break;
+      case 'backup': saveBackup(m.backup); break;
       case 'leave': users.delete(m.id); renderHeroes(); break;
       case 'move': {
         const u = users.get(m.id);
@@ -919,6 +920,9 @@
     } catch { /* sin audio */ }
   }
 
+  // copia de seguridad firmada de la cuenta (la manda el servidor; se devuelve al entrar)
+  function backup() { try { return JSON.parse(load('dd-backup')) || undefined; } catch { return undefined; } }
+  function saveBackup(b) { if (b && b.d) save('dd-backup', JSON.stringify(b)); }
   function load(k) { try { return localStorage.getItem(k); } catch { return null; } }
   function save(k, v) { try { localStorage.setItem(k, v); } catch { /* sin almacenamiento */ } }
 
@@ -948,7 +952,7 @@
 
 
   // ---- lo que usan los demás archivos de la taberna ----
-  Object.assign(C, { $, EMOJI, OUT, WINDOWS, barkeep, bartenderLook, blip, canvas, chatInput, closePops, drawHero, drawStaffZone, flashLevel, floaters, heroesEl, iso, itemDrawables, load, mug, net, playerToken, poly, rand, resize, rrect, save, setTarget, toast, up, updateBarkeep, updateNight, updateUsers, users, withCtx, wrapText });
+  Object.assign(C, { $, backup, saveBackup, EMOJI, OUT, WINDOWS, barkeep, bartenderLook, blip, canvas, chatInput, closePops, drawHero, drawStaffZone, flashLevel, floaters, heroesEl, iso, itemDrawables, load, mug, net, playerToken, poly, rand, resize, rrect, save, setTarget, toast, up, updateBarkeep, updateNight, updateUsers, users, withCtx, wrapText });
   Object.defineProperty(C, 'ctx', { get: () => ctx, set: (v) => { ctx = v; } });
   Object.defineProperty(C, 'editDir', { get: () => editDir, set: (v) => { editDir = v; } });
   Object.defineProperty(C, 'editTool', { get: () => editTool, set: (v) => { editTool = v; } });

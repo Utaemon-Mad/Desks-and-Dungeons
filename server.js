@@ -5,6 +5,7 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+const zlib = require('zlib');
 const { WebSocketServer } = require('ws');
 const MAP = require('./public/map.js');
 const DUNGEON = require('./public/dungeon-data.js');
@@ -53,12 +54,43 @@ const server = http.createServer((req, res) => {
   if (urlPath === '/') urlPath = '/index.html';
   const file = path.normalize(path.join(PUBLIC_DIR, urlPath));
   if (!file.startsWith(PUBLIC_DIR + path.sep)) { res.writeHead(403); return res.end(); }
-  fs.readFile(file, (err, data) => {
-    if (err) { res.writeHead(404); return res.end('No encontrado'); }
-    res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream', 'Cache-Control': 'no-cache' });
-    res.end(data);
-  });
+  sendStatic(req, res, file);
 });
+
+// Archivos estáticos comprimidos (gzip) y con ETag: la primera visita baja todo comprimido y las siguientes
+// sólo preguntan si ha cambiado (304). Los modelos 3D y Three.js casi nunca cambian: se guardan un día.
+const staticCache = new Map(); // ruta -> { mtime, etag, raw, gz }
+const COMPRESS = new Set(['.html', '.js', '.css', '.json', '.svg', '.md', '.txt', '.webmanifest', '.glb']);
+function sendStatic(req, res, file) {
+  fs.stat(file, (err, st) => {
+    if (err || !st.isFile()) { res.writeHead(404); return res.end('No encontrado'); }
+    const ext = path.extname(file);
+    const hit = staticCache.get(file);
+    const ready = (c) => {
+      const headers = {
+        'Content-Type': MIME[ext] || 'application/octet-stream',
+        ETag: c.etag,
+        'Cache-Control': /[\\/](assets|vendor)[\\/]/.test(file) ? 'public, max-age=86400' : 'no-cache',
+        Vary: 'Accept-Encoding',
+      };
+      if (req.headers['if-none-match'] === c.etag) { res.writeHead(304, headers); return res.end(); }
+      const gzipOk = c.gz && /\bgzip\b/.test(req.headers['accept-encoding'] || '');
+      if (gzipOk) headers['Content-Encoding'] = 'gzip';
+      const body = gzipOk ? c.gz : c.raw;
+      headers['Content-Length'] = body.length;
+      res.writeHead(200, headers);
+      res.end(req.method === 'HEAD' ? undefined : body);
+    };
+    if (hit && hit.mtime === st.mtimeMs) return ready(hit);
+    fs.readFile(file, (err2, raw) => {
+      if (err2) { res.writeHead(404); return res.end('No encontrado'); }
+      const c = { mtime: st.mtimeMs, etag: '"' + crypto.createHash('sha1').update(raw).digest('base64').slice(0, 16) + '"', raw, gz: null };
+      if (COMPRESS.has(ext) && raw.length > 1024) c.gz = zlib.gzipSync(raw, { level: 6 });
+      staticCache.set(file, c);
+      ready(c);
+    });
+  });
+}
 
 // ---------- Salas ----------
 const rooms = new Map(); // nombre -> { name, users: Map<id, user>, history: [], map, instances: Map }
@@ -168,7 +200,31 @@ function serversView(pid) {
 }
 
 function accountInfo(a, pid, extra) {
-  return { t: 'account', slots: a.slots.map(slotInfo), last: a.last && a.slots[a.last.slot] ? a.last : null, servers: serversView(pid), ...extra };
+  return { t: 'account', slots: a.slots.map(slotInfo), last: a.last && a.slots[a.last.slot] ? a.last : null, servers: serversView(pid), backup: makeBackup(pid), ...extra };
+}
+
+// Copia de seguridad firmada de la cuenta, que guarda el navegador del jugador. Si el servidor se reinicia y pierde
+// los datos (Render gratis no guarda el disco), el navegador la devuelve al entrar y se restaura. La firma (HMAC)
+// impide editarla. Para más seguridad, define SAVE_SECRET en el servidor.
+const SAVE_SECRET = process.env.SAVE_SECRET || 'desks-and-dungeons:copia-de-seguridad';
+const backupSig = (pid, d) => crypto.createHmac('sha256', SAVE_SECRET).update(pid + '.' + d).digest('base64url');
+function makeBackup(pid) {
+  const a = store.player(pid);
+  if (!a) return null;
+  const d = zlib.gzipSync(JSON.stringify(a)).toString('base64');
+  return { pid, d, sig: backupSig(pid, d) };
+}
+// Sólo se restaura si el servidor no tiene esa cuenta (nunca pisa datos más nuevos)
+function restoreBackup(pid, b) {
+  if (!pid || store.player(pid) || !b || typeof b !== 'object' || b.pid !== pid || typeof b.d !== 'string' || typeof b.sig !== 'string' || b.d.length > 240000) return false;
+  const want = Buffer.from(backupSig(pid, b.d)), got = Buffer.from(b.sig);
+  if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) return false;
+  let a;
+  try { a = JSON.parse(zlib.gunzipSync(Buffer.from(b.d, 'base64')).toString()); } catch { return false; }
+  if (!a || !Array.isArray(a.slots)) return false;
+  store.setPlayer(pid, a);
+  console.log('Cuenta restaurada desde la copia del navegador');
+  return true;
 }
 
 // Cambia el nombre de un servidor: sólo su dueño (si aún no tiene, quien lo renombra pasa a serlo)
@@ -814,7 +870,7 @@ function endTrade(t, text) {
 
 // ---------- Conexiones ----------
 const EMOTES = new Set(['wave', 'dance', 'cheers', 'laugh', 'heart', 'fight', 'think', 'sleep']);
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 16384 });
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 262144 }); // cabe la copia de seguridad de la cuenta
 
 wss.on('connection', (ws) => {
   let user = null;
@@ -825,6 +881,13 @@ wss.on('connection', (ws) => {
   let gameRefill = Date.now();
   ws.isAlive = true;
   ws.on('pong', () => { ws.isAlive = true; });
+  // en partida, cada medio minuto se manda la copia de seguridad de la cuenta si ha cambiado
+  let lastBackup = '';
+  const backupTimer = setInterval(() => {
+    if (!user || ws.readyState !== 1) return;
+    const b = makeBackup(user.pid);
+    if (b && b.d !== lastBackup) { lastBackup = b.d; send(ws, { t: 'backup', backup: b }); }
+  }, 30000);
 
   // Sin entrar se cierra la conexión; en la pantalla de inicio (hello) hay más margen
   let joinTimer = setTimeout(() => { if (!user) ws.close(4000, 'join timeout'); }, 15000);
@@ -868,6 +931,7 @@ wss.on('connection', (ws) => {
         joinTimer = setTimeout(() => { if (!user) ws.close(4000, 'join timeout'); }, 10 * 60 * 1000);
         const pid = tokenPid(msg.token);
         if (!pid) return;
+        if (msg.t === 'hello') restoreBackup(pid, msg.backup);
         const a = account(pid);
         const slot = slotOf(msg.slot);
         if (msg.t === 'char:new') {
@@ -903,6 +967,7 @@ wss.on('connection', (ws) => {
       }
       const token = typeof msg.token === 'string' && /^[a-zA-Z0-9_-]{16,64}$/.test(msg.token) ? msg.token : crypto.randomBytes(16).toString('hex');
       const pid = store.hash(token);
+      restoreBackup(pid, msg.backup);
       const acc = account(pid);
       let slot = slotOf(msg.slot);
       // Sin casilla (clientes antiguos): el último personaje usado, o uno nuevo en la primera casilla
@@ -1568,6 +1633,7 @@ wss.on('connection', (ws) => {
   }
 
   ws.on('close', () => {
+    clearInterval(backupTimer);
     clearTimeout(joinTimer);
     if (!user) return;
     if (!user.kicked) rememberPlace(room, user);
