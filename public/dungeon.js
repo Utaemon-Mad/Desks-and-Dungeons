@@ -138,7 +138,9 @@
           const tx = Math.floor(x), ty = Math.floor(y);
           if (tx < 0 || ty < 0 || tx >= w || ty >= h) break;
           vis[ty * w + tx] = 1; game.seen[ty * w + tx] = 1;
-          if (OPAQUE.has(tiles[ty * w + tx]) && (tx !== cx || ty !== cy)) break;
+          const tt = tiles[ty * w + tx];
+          // las puertas cerradas tapan lo que hay detrás
+          if ((OPAQUE.has(tt) || (tt === '+' && !game.openDoors.has(ty * w + tx))) && (tx !== cx || ty !== cy)) break;
           x += dx; y += dy;
         }
       }
@@ -242,6 +244,7 @@
         break;
       }
       case 'join': if (ev.id !== me) log(`${who(ev.id)} entra.`); break;
+      case 'door': game.openDoors.add(ev.y * game.map.w + ev.x); updateVision(); fogDirty = true; break;
     }
   }
 
@@ -253,6 +256,7 @@
     game.log = []; game.statics = null; game.boss = null; game.camInit = false; game.keys.clear(); game.sentDir = '0,0';
     game.seen = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.vis = new Uint8Array(m.dungeon.w * m.dungeon.h);
+    game.openDoors = new Set(m.dungeon.doors || []);
     game.you = m.you; game.youAt = performance.now();
     game.miniImg = null;
     const th = RULES.THEMES[m.dungeon.theme];
@@ -525,6 +529,7 @@
   //  Dibujo en 3D (Three.js) + capa 2D con nombres, barras y números
   // ======================================================================
   let stage = null, built = null, fog = null;
+  const doorObjs = []; // puertas de la mazmorra: { obj, i, leaf }
   const models = new Map();   // id -> { obj, key, hitScale }
   const lootObjs = new Map(), chestObjs = new Map(), teleObjs = new Map(), projObjs = new Map();
   let portalObj = null, fogDirty = true, seenCount = -1;
@@ -544,6 +549,8 @@
 
   function clearScene() {
     if (built) { stage.scene.remove(built.group); built = null; }
+    for (const d of doorObjs) stage.scene.remove(d.obj);
+    doorObjs.length = 0;
     if (fog) { stage.scene.remove(fog.mesh); fog = null; }
     for (const m of [...models.values(), ...lootObjs.values(), ...chestObjs.values(), ...teleObjs.values(), ...projObjs.values()]) stage.scene.remove(m.obj || m);
     models.clear(); lootObjs.clear(); chestObjs.clear(); teleObjs.clear(); projObjs.clear();
@@ -576,8 +583,43 @@
     stage.hemi.groundColor.set(world ? '#2a2a1a' : '#140c0a');
     // los personajes del mundo
     for (const n of game.map.npcs || []) game.ents.set('npc:' + n.id, { id: 'npc:' + n.id, npc: n.id, kind: 'npc', name: n.name, look: n.look, x: n.x, y: n.y, rx: n.x, ry: n.y, fx: n.x, fy: n.y, t0: 0, dur: 1, dir: 'S', alive: true, static: true });
+    // puertas de madera en los umbrales: cerradas hasta que llega un héroe
+    doorObjs.length = 0;
+    const tl = game.map.tiles, W = game.map.w;
+    for (let i = 0; i < tl.length; i++) {
+      if (tl[i] !== '+') continue;
+      const x = i % W, y = (i / W) | 0;
+      const solid = (c) => c === '#' || c === undefined;
+      const alongX = solid(tl[i - 1]) && solid(tl[i + 1]); // paredes a izquierda y derecha: la puerta cruza en x
+      const d = doorModel(game.map.theme);
+      d.position.set(x + 0.5, 0, y + 0.5);
+      if (!alongX) d.rotation.y = Math.PI / 2;
+      stage.scene.add(d);
+      doorObjs.push({ obj: d, i, leaf: d.userData.leaf, open: game.openDoors.has(i) });
+      if (game.openDoors.has(i)) d.userData.leaf.rotation.y = -1.75;
+    }
     fogDirty = true; seenCount = -1;
     VIEW3D.show(true);
+  }
+
+  // Puerta con marco: hoja de tablones con herrajes que gira sobre la bisagra
+  function doorModel(theme) {
+    const g = new THREE.Group();
+    const lin = (h) => '#' + new THREE.Color(h).convertSRGBToLinear().getHexString();
+    const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: lin(c), roughness: o.r ?? 0.8, metalness: o.m || 0 });
+    const wood = M(theme === 'cripta' ? '#4a3a2e' : theme === 'volcan' ? '#3a2620' : '#6a4426'), dark = M('#3a2414'), iron = M('#3a3a40', { r: 0.45, m: 0.8 });
+    const stone = M(theme === 'cuevas' ? '#5e4c3a' : theme === 'nido' ? '#44523a' : '#6a6870');
+    const box = (w, h, d, m, x, y, z, par = g) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; par.add(o); return o; };
+    // marco de piedra
+    box(0.14, 1.32, 0.3, stone, -0.5, 0.66, 0); box(0.14, 1.32, 0.3, stone, 0.5, 0.66, 0); box(1.14, 0.16, 0.32, stone, 0, 1.3, 0);
+    // hoja: gira sobre la bisagra de la izquierda
+    const leaf = new THREE.Group(); leaf.position.set(-0.43, 0, 0); g.add(leaf);
+    for (let k = 0; k < 4; k++) box(0.215, 1.2, 0.07, k % 2 ? wood : dark, 0.11 + k * 0.215, 0.62, 0, leaf);
+    for (const y of [0.25, 1.0]) box(0.88, 0.07, 0.09, iron, 0.44, y, 0, leaf);
+    for (const y of [0.25, 1.0]) for (const x of [0.08, 0.8]) { const r = new THREE.Mesh(new THREE.SphereGeometry(0.022, 8, 6), iron); r.position.set(x, y, 0.05); leaf.add(r); }
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.012, 6, 14), iron); ring.position.set(0.72, 0.6, 0.06); leaf.add(ring);
+    g.userData.leaf = leaf;
+    return g;
   }
 
   // Gradación de color por tema: frío en la cripta, cálido en la guarida del dragón…
@@ -889,6 +931,12 @@
       if (Math.random() < 0.03) fxp.emit({ x: h.x + 0.5, y: 0.35, z: h.y + 0.5, vy: 0.4, color: o.userData.glow, size: 0.07, life: 0.9 });
     }
     for (const [id, o] of herbObjs) if (!herbIds.has(id)) { stage.scene.remove(o); herbObjs.delete(id); }
+    // puertas: se ven si la casilla se ha visto; al abrirse, la hoja gira
+    for (const d of doorObjs) {
+      d.obj.visible = !!game.seen[d.i];
+      const target = game.openDoors.has(d.i) ? -1.75 : 0;
+      d.leaf.rotation.y += (target - d.leaf.rotation.y) * Math.min(1, dt * 5);
+    }
     // cofres
     for (const c of game.chests) {
       let o = chestObjs.get(c.id);

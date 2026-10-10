@@ -48,6 +48,7 @@ class Instance {
     this.events = [];
     this.dirty = false;
     this.lastFlush = 0;
+    this.openDoors = new Set(); // puertas abiertas (índices de casilla): cerradas tapan la vista
     this.seq = 0;
     this.start = def.start || { x: 1, y: 1 };
     this.portal = null;
@@ -200,7 +201,7 @@ class Instance {
     const def = this.def;
     this.hooks.send(user, {
       t: 'dstart',
-      dungeon: { id: this.id, name: def.name, tiles: def.tiles, w: this.w, h: this.h, kind: this.kind, theme: def.theme || null, level: this.level, labels: def.labels || [], props: def.props || [], zones: def.zones || null, waystones: this.waystones, npcs: this.npcs.map(({ id, name, x, y, look, shop }) => ({ id, name, x, y, look, shop })), descent: def.descent || null, duel: this.duel ? { startAt: this.duel.startAt, bet: this.duel.bet } : null },
+      dungeon: { id: this.id, name: def.name, tiles: def.tiles, w: this.w, h: this.h, kind: this.kind, theme: def.theme || null, level: this.level, labels: def.labels || [], props: def.props || [], zones: def.zones || null, waystones: this.waystones, npcs: this.npcs.map(({ id, name, x, y, look, shop }) => ({ id, name, x, y, look, shop })), descent: def.descent || null, doors: [...this.openDoors], duel: this.duel ? { startAt: this.duel.startAt, bet: this.duel.bet } : null },
       ...this.snapshot(p), you: this.privateState(p),
     });
     this.event({ e: 'join', id: user.id });
@@ -491,6 +492,19 @@ class Instance {
   }
 
   event(ev) { this.events.push(ev); this.dirty = true; }
+  // Las puertas se abren solas cuando un héroe llega a su lado (y quedan abiertas para todos)
+  tickDoors() {
+    for (const p of this.players.values()) {
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const x = p.x + dx, y = p.y + dy;
+        if (x < 0 || y < 0 || x >= this.w || y >= this.h || this.tile(x, y) !== '+') continue;
+        const i = y * this.w + x;
+        if (this.openDoors.has(i)) continue;
+        this.openDoors.add(i);
+        this.event({ e: 'door', x, y });
+      }
+    }
+  }
   whisper(p, text) { this.hooks.send(p.user, { t: 'dwhisper', text }); }
 
   // ---------- Órdenes del jugador ----------
@@ -588,6 +602,7 @@ class Instance {
     }
     if (this.kind === 'arena') this.syncProxies(now);
     for (const p of [...this.players.values()]) this.tickPlayer(p, now, dt);
+    this.tickDoors();
     const pl = [...this.players.values()];
     this.tickWorldEvent(now);
     for (const e of [...this.enemies.values()]) {
