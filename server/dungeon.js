@@ -928,7 +928,8 @@ class Instance {
     p.nextAttack = Math.max(p.nextAttack, now + 350);
     if (point) p.dir = dirName(point.x - p.x, point.y - p.y) || p.dir;
     this.event({ e: 'cast', by: p.user.id, name: ab.name, id: ab.id });
-    const dmgFor = () => (ab.weapon || ab.kind === 'strike' ? this.weaponRoll(p) : this.spellRoll(p)) * (ab.mult || 1);
+    const boost = 1 + ((p.d.abBoost && p.d.abBoost[ab.id]) || 0) / 100; // talentos que mejoran esta habilidad
+    const dmgFor = () => (ab.weapon || ab.kind === 'strike' ? this.weaponRoll(p) : this.spellRoll(p)) * (ab.mult || 1) * boost;
     const magic = !(ab.weapon || ab.kind === 'strike');
     const color = { fire: '#ff7a2a', cold: '#9ad8ff', holy: '#fff2a0', void: '#a05aff', blood: '#ff3a4a', lightning: '#fff27a' }[ab.fx] || '#ffffff';
     switch (ab.kind) {
@@ -995,22 +996,23 @@ class Instance {
       }
       case 'heal': {
         const t = point && this.players.get(point.user ? point.user.id : '') || p;
-        this.heal(t, Math.round((t.d.hp * ab.pct + roll(p.d.spell) * 0.5) * p.d.healPow), ab.name);
+        this.heal(t, Math.round((t.d.hp * ab.pct + roll(p.d.spell) * 0.5) * p.d.healPow * boost), ab.name);
         this.event({ e: 'fx', kind: 'heal', x: t.x, y: t.y });
         break;
       }
       case 'healAll': {
-        for (const o of this.players.values()) if (cheb(o, p) <= ab.radius) { this.heal(o, Math.round(o.d.hp * ab.pct * p.d.healPow), ab.name); this.event({ e: 'fx', kind: 'heal', x: o.x, y: o.y }); }
+        for (const o of this.players.values()) if (cheb(o, p) <= ab.radius) { this.heal(o, Math.round(o.d.hp * ab.pct * p.d.healPow * boost), ab.name); this.event({ e: 'fx', kind: 'heal', x: o.x, y: o.y }); }
         this.event({ e: 'fx', kind: 'nova', x: p.x, y: p.y, radius: ab.radius, color: '#7dff8a' });
         break;
       }
       case 'buff': {
-        for (const o of this.players.values()) if (cheb(o, p) <= ab.radius) o.tbuffs[ab.id] = { ...ab.buff, until: now + ab.dur };
+        const bb = Object.fromEntries(Object.entries(ab.buff).map(([k, v]) => [k, typeof v === 'number' ? Math.round(v * boost) : v]));
+        for (const o of this.players.values()) if (cheb(o, p) <= ab.radius) o.tbuffs[ab.id] = { ...bb, until: now + ab.dur };
         this.event({ e: 'fx', kind: 'nova', x: p.x, y: p.y, radius: ab.radius, color: ab.buff.dr ? '#7ad0ff' : '#ff6a3a' });
         break;
       }
       case 'aura': {
-        this.auras.push({ owner: p.user.id, radius: ab.radius, mult: ab.mult, until: now + ab.dur, next: now + 1000, name: ab.name });
+        this.auras.push({ owner: p.user.id, radius: ab.radius, mult: ab.mult * boost, until: now + ab.dur, next: now + 1000, name: ab.name });
         this.event({ e: 'fx', kind: 'aura', id: p.user.id, until: ab.dur, radius: ab.radius });
         break;
       }

@@ -1264,6 +1264,26 @@ wss.on('connection', (ws) => {
         profileChanged(room, user);
         break;
       }
+      case 'talent:add': {
+        const c = user.profile.char;
+        const why = RULES.canTalent(c, levelOf(user), String(msg.id || ''));
+        if (why) return err(why);
+        c.talents = c.talents || {};
+        c.talents[msg.id] = (c.talents[msg.id] || 0) + 1;
+        profileChanged(room, user);
+        break;
+      }
+      case 'talent:reset': {
+        if (user.where) return err('Vuelve a la taberna para reiniciar tus talentos.');
+        const cost = 15 * levelOf(user);
+        if (!RULES.talentSpent(user.profile.char.talents)) return;
+        if (user.profile.gold < cost) return err(`Reiniciar los talentos cuesta ${cost} de oro.`);
+        user.profile.gold -= cost;
+        user.profile.char.talents = {};
+        profileChanged(room, user);
+        broadcast(room, { t: 'profile', id: user.id, xp: user.profile.xp, gold: user.profile.gold, level: levelOf(user) });
+        break;
+      }
       case 'char:respec': {
         if (user.where) return err('Vuelve a la taberna para reiniciar tus puntos.');
         const cost = 10 * levelOf(user);
@@ -1279,6 +1299,7 @@ wss.on('connection', (ws) => {
         if (user.where) return err('Vuelve a la taberna para cambiar de clase o de aspecto.');
         const look = MAP.cleanLook({ ...msg.look });
         const changed = changeChar(user.profile, look);
+        if (changed.cls) user.profile.char.talents = {}; // los talentos son de cada clase
         profileChanged(room, user, { look: true });
         if (changed.cls || changed.race) {
           const c = user.profile.char;

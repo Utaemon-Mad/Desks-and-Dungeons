@@ -769,6 +769,29 @@ async function instanceTests() {
   assert.strictEqual(store.player(store.hash(tokR)).slots[0].raidWeek, rinfo.week, 'cofre semanal entregado');
   rcl.ws.close();
 
+  // Talentos: se suben con las reglas de la rama, cuentan en la ficha y se guardan
+  const tokT = 'c3d4'.repeat(8);
+  store.setPlayer(store.hash(tokT), { slots: [{ name: 'Talentosa', xp: RULES.XP_TABLE[12], gold: 500, rv: RULES.RULES_VERSION, char: RULES.newChar('mago', { species: 'elf', sex: 'f' }), equip: {}, bag: [], cons: {}, buffs: {} }, null, null], last: null });
+  const tc = await client('Talentosa');
+  tc.send({ t: 'join', room: MAP.SERVERS[1].id, slot: 0, token: tokT });
+  await tc.next((m) => m.t === 'welcome');
+  tc.send({ t: 'talent:add', id: 'm-meteoro' });
+  assert.match((await tc.next((m) => m.t === 'error')).text, /Pon 9 puntos/, 'el último talento de la rama pide 9 puntos en ella');
+  tc.send({ t: 'talent:add', id: 'g-filo' });
+  assert.match((await tc.next((m) => m.t === 'error')).text, /no es de tu clase/, 'no se pueden coger talentos de otra clase');
+  for (let i = 0; i < 3; i++) tc.send({ t: 'talent:add', id: 'm-llama' });
+  tc.send({ t: 'talent:add', id: 'm-bola' });
+  await sleep(300);
+  const tcp = store.player(store.hash(tokT)).slots[0];
+  assert.deepStrictEqual(tcp.char.talents, { 'm-llama': 3, 'm-bola': 1 }, 'talentos guardados');
+  const tdv = RULES.derive(tcp);
+  assert.ok(tdv.abBoost.bola === 15 && tdv.talentPoints === RULES.talentPoints(12) - 4, 'cuentan en la ficha');
+  assert.deepStrictEqual(RULES.cleanChar(tcp.char, 12).talents, { 'm-llama': 3, 'm-bola': 1 }, 'cleanChar conserva los talentos válidos');
+  tc.send({ t: 'talent:reset' });
+  await sleep(300);
+  assert.ok(!RULES.talentSpent(store.player(store.hash(tokT)).slots[0].char.talents), 'se pueden reiniciar');
+  tc.ws.close();
+
   // Dueño de la taberna: mensaje del día, silenciar y expulsar (el primero en entrar en un servidor nuevo es el dueño)
   const SRV3 = MAP.SERVERS[2].id;
   const mkAcc = (tok, name) => store.setPlayer(store.hash(tok), { slots: [{ name, xp: 0, gold: 10, rv: RULES.RULES_VERSION, char: RULES.newChar('guerrero', { species: 'human', sex: 'm' }), equip: {}, bag: [], cons: {}, buffs: {} }, null, null], last: null });
