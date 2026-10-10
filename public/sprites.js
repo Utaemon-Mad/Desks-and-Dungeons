@@ -208,7 +208,7 @@
     if (look.beard && !back) { p.rect(9, 15, 7, 3, look.beard); p.row(18, 10, 14, look.beard); p.px(12, 16, skin); }
     if (species === 'elf') { p.px(6, 13, skin); p.px(5, 12, skin); p.px(4, 11, skin); p.px(17, 13, skin); p.px(18, 12, skin); p.px(19, 11, skin); }
     if (species === 'gnome') { p.px(6, 13, skin); p.px(5, 12, skin); p.px(17, 13, skin); p.px(18, 12, skin); }
-    if (species === 'goblin') { p.px(6, 13, skin); p.px(5, 13, skin); p.px(4, 12, skin); p.px(3, 12, skin); p.px(2, 11, skin); p.px(5, 12, skin); p.px(17, 13, skin); p.px(18, 13, skin); p.px(19, 12, skin); p.px(20, 12, skin); p.px(21, 11, skin); p.px(18, 12, skin); }
+    if (species === 'goblin') { p.px(6, 13, skin); p.px(5, 13, skin); p.px(4, 12, skin); p.px(3, 12, skin); p.px(2, 11, skin); p.px(5, 12, skin); p.px(17, 13, skin); p.px(18, 13, skin); p.px(19, 12, skin); p.px(20, 12, skin); p.px(21, 11, skin); p.px(18, 12, skin); p.px(5, 14, '#ffcf4a'); p.px(18, 14, '#ffcf4a'); }
     if (species === 'dragonborn' && !back) { p.rect(16, 13, 2, 3, skin); p.px(17, 13, skinD); p.row(16, 15, 17, skinD); }
 
     const helm = npc ? null : gear.casco || null;

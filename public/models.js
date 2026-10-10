@@ -26,6 +26,7 @@
   const box = (w, h, d) => geo(`b${w},${h},${d}`, () => new THREE.BoxGeometry(w, h, d));
   const sph = (r, ws = 8, hs = 6) => geo(`s${r},${ws},${hs}`, () => new THREE.SphereGeometry(r, ws, hs));
   const cone = (r, h, s = 7) => geo(`k${r},${h},${s}`, () => new THREE.ConeGeometry(r, h, s));
+  const torus = (r, t) => geo(`t${r},${t}`, () => new THREE.TorusGeometry(r, t, 6, 18));
   const psph = (r, t0, tl) => geo(`ps${r},${t0},${tl}`, () => new THREE.SphereGeometry(r, 9, 7, 0, Math.PI * 2, t0, tl));
   const halfSph = (r) => geo(`hs${r}`, () => new THREE.SphereGeometry(r, 9, 5, 0, Math.PI * 2, 0, Math.PI / 2));
 
@@ -215,7 +216,7 @@
     }
     if (look.beard || species === 'dwarf') { const bd = mesh(cone(0.11, 0.16, 6), mat(look.beard || hairHex), 0, -0.06, 0.07, head); bd.rotation.x = Math.PI; }
     // rasgos de especie
-    if (species === 'elf' || species === 'gnome' || species === 'goblin') for (const sx of [-1, 1]) { const big = species === 'goblin'; const e = mesh(cone(big ? 0.06 : 0.03, big ? 0.28 : 0.12, 4), skin, sx * (big ? 0.2 : 0.15), 0.1, 0, head); e.rotation.z = -sx * (big ? 1.35 : 1.2); }
+    if (species === 'elf' || species === 'gnome' || species === 'goblin') for (const sx of [-1, 1]) { const big = species === 'goblin'; const e = mesh(cone(big ? 0.06 : 0.03, big ? 0.28 : 0.12, 4), skin, sx * (big ? 0.2 : 0.15), 0.1, 0, head); e.rotation.z = -sx * (big ? 1.35 : 1.2); if (big) mesh(torus(0.022, 0.006), mat('#ffcf4a', { metal: 0.6, rough: 0.25 }), sx * 0.15, 0.06, 0, head).rotation.y = Math.PI / 2; }
     if (species === 'orc') for (const sx of [-1, 1]) mesh(cone(0.012, 0.04, 4), mat('#fff6dc'), sx * 0.04, -0.01, 0.13, head);
     if (species === 'tiefling' && helm !== 'placas') for (const sx of [-1, 1]) { const h = mesh(cone(0.025, 0.12, 5), mat('#3a2a2a'), sx * 0.08, 0.2, 0, head); h.rotation.z = -sx * 0.4; }
     if (species === 'dragonborn') { mesh(box(0.12, 0.08, 0.12), skin, 0, 0.02, 0.12, head); for (const sx of [-1, 1]) { const h = mesh(cone(0.02, 0.1, 4), mat('#d8c8a0'), sx * 0.06, 0.18, -0.06, head); h.rotation.x = -0.8; } }
@@ -1098,6 +1099,19 @@
   // Rasgos de raza sobre la cabeza del modelo: orejas de elfo y de goblin, colmillos de orco y barba
   // (se colocan con la caja de la cabeza y se pegan al hueso de la cabeza para que se muevan con ella)
   const linHex = (hex) => '#' + new THREE.Color(hex).convertSRGBToLinear().getHexString();
+  // Cabeza sin orejas redondas (para los goblins): los vértices de la oreja se meten en el cráneo
+  const earless = new Map();
+  function earlessHead(geo) {
+    if (earless.has(geo)) return earless.get(geo);
+    const g = geo.clone(), pos = g.attributes.position, uv = g.attributes.uv;
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+      if (Math.abs(x) > 0.455 && y > 1.36 && y < 1.68 && z > -0.08 && z < 0.06 && uv.getX(i) < 0.1) pos.setX(i, Math.sign(x) * 0.43);
+    }
+    pos.needsUpdate = true;
+    earless.set(geo, g);
+    return g;
+  }
   const GOBLIN_FACE = { Knight: { eye: -0.145, nose: -0.21 }, def: { eye: -0.06, nose: -0.13 } };
   function raceFeatures(root, species, o) {
     const P = root.userData.parts;
@@ -1118,6 +1132,8 @@
       for (const sx of [-1, 1]) mesh(cone(size.x * 0.035, size.y * 0.13, 5), mat('#f0e6c8'), c.x + sx * size.x * 0.14, box.min.y + size.y * 0.24, box.max.z - size.z * 0.06, g);
     }
     if (species === 'goblin') {
+      // fuera las orejas redondas del modelo: se aplastan contra el cráneo
+      P.headMesh.geometry = earlessHead(P.headMesh.geometry);
       // orejas enormes en forma de hoja, con el interior más oscuro
       const inner = mat(linHex(o.skin), { emissive: '#3a0a0a', ei: 0.35 });
       for (const sx of [-1, 1]) {
@@ -1129,6 +1145,14 @@
         outer.scale.z = 0.38;
         const inn = mesh(cone(size.x * 0.1, size.x * 0.6, 6), inner, 0, size.x * 0.34, size.z * 0.035, e);
         inn.scale.z = 0.22;
+      }
+      // pendientes de aro dorado (chicos y chicas): uno en el lóbulo y otro más arriba en la oreja
+      const gold = mat(linHex('#ffcf4a'), { metal: 0.6, rough: 0.25, emissive: linHex('#5a3c00'), ei: 0.5 });
+      for (const sx of [-1, 1]) {
+        const lobe = mesh(torus(size.x * 0.09, size.x * 0.022), gold, c.x + sx * size.x * 0.47, c.y - size.y * 0.22, c.z - size.z * 0.05, g);
+        lobe.rotation.y = Math.PI / 2;
+        const up = mesh(torus(size.x * 0.055, size.x * 0.017), gold, c.x + sx * size.x * 0.66, c.y - size.y * 0.025, c.z - size.z * 0.09, g);
+        up.rotation.set(0, Math.PI / 2, sx * 0.4);
       }
       // altura de los ojos pintados en la textura según el modelo de cabeza
       const F = GOBLIN_FACE[o.head] || GOBLIN_FACE.def;
