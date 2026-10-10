@@ -55,6 +55,50 @@
     else if (!seen) save('dd-news', String(NEWS[0].v)); // a los nuevos no se les enseña la lista
   });
 
+  // ---------- Recompensa diaria con racha ----------
+  const dwin = el('div', 'overlay win hidden');
+  dwin.id = 'dailywin';
+  dwin.innerHTML = '<div class="panel card"><div class="panel-title">🎁 RECOMPENSA DIARIA</div><p class="tag daily-sub"></p><div class="daily-row"></div><p class="daily-got hidden"></p><div class="edit-row"><button class="btn big daily-claim" type="button">RECOGER</button></div></div>';
+  document.body.appendChild(dwin);
+  let offer = null;
+  function renderDaily(claimedNow) {
+    const row = dwin.querySelector('.daily-row'); row.innerHTML = '';
+    for (const R of offer.rewards) {
+      const c = el('div', 'daily-day');
+      const past = R.day < offer.streak || (claimedNow && R.day === offer.streak);
+      if (past) c.classList.add('done');
+      if (R.day === offer.streak && !claimedNow) c.classList.add('today');
+      if (R.day === 7) c.classList.add('big');
+      c.append(el('small', '', `Día ${R.day}`), el('b', '', past ? '✔' : R.icon), el('span', '', R.text));
+      row.appendChild(c);
+    }
+    dwin.querySelector('.daily-sub').textContent = claimedNow ? `¡Racha de ${offer.streak} ${offer.streak === 1 ? 'día' : 'días'}! Vuelve mañana para el siguiente.` : `Entra cada día para mejorar el premio. Hoy toca el día ${offer.streak} de 7${offer.streak > 1 ? ' (¡no rompas la racha!)' : ''}.`;
+    const b = dwin.querySelector('.daily-claim');
+    b.textContent = claimedNow ? '¡A JUGAR!' : 'RECOGER';
+  }
+  function showDaily() {
+    if (!offer) return;
+    // si Alfonso está explicando el tutorial, se espera a que termine
+    const tut = document.querySelector('.tut');
+    if (tut && !tut.classList.contains('hidden')) return setTimeout(showDaily, 3000);
+    dwin.querySelector('.daily-got').classList.add('hidden');
+    renderDaily(false);
+    dwin.classList.remove('hidden');
+    DD.sfx && DD.sfx('open');
+  }
+  DD.on('login:offer', (m) => { if (m.claimed) return; offer = m; showDaily(); });
+  DD.on('login:claimed', (m) => {
+    if (!offer) return;
+    renderDaily(true);
+    const g = dwin.querySelector('.daily-got'); g.textContent = 'Recibes: ' + m.got.join(', '); g.classList.remove('hidden');
+    DD.sfx && DD.sfx(m.streak === 7 ? 'levelup' : 'chest');
+    offer.claimedNow = true;
+  });
+  dwin.querySelector('.daily-claim').onclick = () => {
+    if (offer && !offer.claimedNow) DD.net.send({ t: 'login:claim' });
+    else { dwin.classList.add('hidden'); offer = null; }
+  };
+
   // ---------- Mensaje del día ----------
   const motdEl = el('div', 'motd hidden');
   document.body.appendChild(motdEl);

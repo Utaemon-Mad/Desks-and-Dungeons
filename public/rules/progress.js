@@ -146,6 +146,24 @@
   const DAY = 86400000;
   const dayKey = (now = Date.now()) => Math.floor(now / DAY);
   const weekKey = (now = Date.now()) => Math.floor((now / DAY - 4) / 7); // las semanas empiezan en lunes
+  // Recompensa por entrar cada día (por cuenta): siete días seguidos y vuelta a empezar; si fallas un día, la racha se reinicia
+  const LOGIN_REWARDS = [
+    { day: 1, icon: '🪙', text: '50 de oro y 2 pociones de vida', gold: 50, cons: { 'pocion-vida-p': 2 } },
+    { day: 2, icon: '🔩', text: '100 de oro y materiales de forja', gold: 100, mats: { hierro: 6, esencia: 1 } },
+    { day: 3, icon: '🔵', text: 'Un objeto mágico de tu nivel', gold: 50, item: 'magico' },
+    { day: 4, icon: '🧪', text: '200 de oro, elixir y pociones', gold: 200, cons: { elixir: 1, 'pocion-energia': 2 } },
+    { day: 5, icon: '🟡', text: 'Un objeto raro de tu nivel', gold: 80, item: 'raro' },
+    { day: 6, icon: '📜', text: '300 de oro y pergaminos', gold: 300, cons: { 'perg-fuego': 1, 'perg-retorno': 1 }, mats: { esencia: 2 } },
+    { day: 7, icon: '🎁', text: 'Gran cofre: objeto raro o único (¡y puede ser legendario!) y polvo de estrella', gold: 500, item: 'cofre', mats: { polvo: 2 } },
+  ];
+  // ¿qué toca hoy? acct.daily = { last: día, streak }
+  function loginState(daily, now = Date.now()) {
+    const today = dayKey(now);
+    const d = daily || { last: -1, streak: 0 };
+    if (d.last === today) return { claimed: true, streak: d.streak, next: null };
+    const streak = d.last === today - 1 ? (d.streak % 7) + 1 : 1;
+    return { claimed: false, streak, next: LOGIN_REWARDS[streak - 1] };
+  }
   const FAM = { goblin: 'goblins', orco: 'orcos', muerto: 'no muertos', bestia: 'bestias', humano: 'bandidos y sectarios', demonio: 'demonios' };
   // ev: tipo de suceso que cuenta; f: filtro opcional
   const DAILY = {
@@ -282,7 +300,7 @@
     MATS, FISH_BY_ZONE, HERB_BY_ZONE, matDrops, catchFish,
     MAX_UP, upgradeCost, applyUpgrade, enchantCost, enchant, COMBINE_TO, combineCost, combine, salvage, baseName,
     RECIPES, COOK_PRICE, FOOD_MIN,
-    DAILY, WEEKLY, FAM, dayKey, weekKey, boardFor, taskDef, taskText, taskMatch, taskReward,
+    LOGIN_REWARDS, loginState, DAILY, WEEKLY, FAM, dayKey, weekKey, boardFor, taskDef, taskText, taskMatch, taskReward,
     ACHIEVEMENTS, MAX_STATS, STAT_NAMES, WORLD_BOSSES, WORLD_EVENT,
     WEEKLY_MODS, weekMod, descentTheme, descentLevel, BOARDS, ARENA, arenaTiles,
   };

@@ -726,6 +726,24 @@ async function instanceTests() {
   assert.strictEqual(lg.slots[0].name, 'Viajera', 'y ve sus personajes');
   lu.ws.close(); lu2.ws.close();
 
+  // Recompensa diaria: el día 1 da oro y pociones; no se puede recoger dos veces
+  const tokL = 'ef'.repeat(16);
+  mkAccU(tokL, 'Diaria');
+  const dl = await client('Diaria');
+  dl.send({ t: 'join', room: MAP.SERVERS[0].id, slot: 0, token: tokL });
+  await dl.next((m) => m.t === 'welcome');
+  const off = await dl.next((m) => m.t === 'login:offer', 5000);
+  assert.ok(!off.claimed && off.streak === 1 && off.rewards.length === 7, 'oferta del día 1');
+  dl.send({ t: 'login:claim' });
+  const cl = await dl.next((m) => m.t === 'login:claimed');
+  assert.ok(cl.got.some((g) => /50/.test(g)), 'recibe el oro del día 1');
+  const accL = store.player(store.hash(tokL));
+  assert.ok(accL.daily && accL.daily.streak === 1 && accL.slots[0].cons['pocion-vida-p'] >= 2, 'racha guardada y pociones en la mochila');
+  assert.deepStrictEqual(PROG.loginState({ last: PROG.dayKey() - 1, streak: 3 }).streak, 4, 'la racha sigue si entras al día siguiente');
+  assert.deepStrictEqual(PROG.loginState({ last: PROG.dayKey() - 2, streak: 5 }).streak, 1, 'y se reinicia si fallas un día');
+  assert.deepStrictEqual(PROG.loginState({ last: PROG.dayKey() - 1, streak: 7 }).streak, 1, 'tras el día 7 vuelve a empezar');
+  dl.ws.close();
+
   // Dueño de la taberna: mensaje del día, silenciar y expulsar (el primero en entrar en un servidor nuevo es el dueño)
   const SRV3 = MAP.SERVERS[2].id;
   const mkAcc = (tok, name) => store.setPlayer(store.hash(tok), { slots: [{ name, xp: 0, gold: 10, rv: RULES.RULES_VERSION, char: RULES.newChar('guerrero', { species: 'human', sex: 'm' }), equip: {}, bag: [], cons: {}, buffs: {} }, null, null], last: null });

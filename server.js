@@ -730,6 +730,33 @@ function ranksView(user) {
 }
 
 // ---------- Materiales, oficios y mascotas ----------
+// Recompensa diaria (por cuenta, la recoge el personaje que entra)
+function offerLogin(user) {
+  const st = PROG.loginState(user.account.daily);
+  send(user.ws, { t: 'login:offer', ...st, rewards: PROG.LOGIN_REWARDS });
+}
+function claimLogin(room, user) {
+  const acc = user.account, st = PROG.loginState(acc.daily);
+  if (st.claimed) return;
+  acc.daily = { last: PROG.dayKey(), streak: st.streak };
+  const R = st.next, p = user.profile, lvl = levelOf(user);
+  const got = [];
+  if (R.gold) { reward(room, user, 0, R.gold); got.push(`${R.gold} 🪙`); }
+  for (const [cid, n] of Object.entries(R.cons || {})) { p.cons[cid] = (p.cons[cid] || 0) + n; got.push(`${n}× ${RULES.CONSUMABLES[cid].name}`); }
+  if (R.mats) { giveMats(room, user, R.mats, true); for (const [k, n] of Object.entries(R.mats)) got.push(`${n} ${PROG.MATS[k].icon}`); }
+  if (R.item) {
+    const it = R.item === 'cofre'
+      ? (rnd() < 0.08 ? RULES.makeItem(rnd, { ilvl: lvl, rarity: 'unico', classes: [p.char.cls], leg: Object.keys(RULES.LEGENDARY)[crypto.randomInt(0, Object.keys(RULES.LEGENDARY).length)] })
+        : RULES.makeItem(rnd, { ilvl: lvl, rarity: rnd() < 0.3 ? 'unico' : 'raro', classes: [p.char.cls] }))
+      : RULES.makeItem(rnd, { ilvl: lvl, rarity: R.item, classes: [p.char.cls] });
+    if (give(room, user, it)) got.push(`«${it.name}»`); else { reward(room, user, 0, it.value); got.push(`${it.value} 🪙 (mochila llena)`); }
+  }
+  store.setPlayer(user.pid, acc);
+  saveUser(user); sendMe(user);
+  send(user.ws, { t: 'login:claimed', streak: st.streak, got });
+  if (st.streak === 7) system(room, `🎁 ${user.name} completa una racha de 7 días y abre el gran cofre.`);
+}
+
 function giveMats(room, user, mats, silent) {
   const p = user.profile;
   let forge = 0;
@@ -1103,6 +1130,7 @@ wss.on('connection', (ws) => {
         history: room.history,
       });
       sendMe(user);
+      setTimeout(() => { if (user.ws.readyState === 1) offerLogin(user); }, 2500);
       if (profile.statsReset) {
         delete profile.statsReset;
         store.setPlayer(pid, acc);
@@ -1472,6 +1500,7 @@ wss.on('connection', (ws) => {
         send(ws, { t: 'dwhisper', text: `📜 Nueva misión: ${RULES.QUESTS[id].name}` });
         break;
       }
+      case 'login:claim': claimLogin(room, user); break;
       case 'tut:done': {
         // regalo de Alfonso al acabar el tutorial (una vez por personaje)
         const p = user.profile;
