@@ -10,7 +10,11 @@ RPG de taberna multijugador en el navegador, todo en español. En producción en
 
 ## Estructura
 ```
-server.js               servidor HTTP/WebSocket, cuentas, inventario, tiendas, comercio, forja y reparto de mensajes
+server.js               servidor HTTP/WebSocket: conexión, perfiles, reparto de mensajes (HANDLERS y el switch que queda) y montaje de módulos
+server/handlers/       mensajes del cliente por zonas: char.js (ficha, talentos, equipo), craft.js (tiendas, comercio, forja, cocina), play.js (misiones, tablón, temporada, taberna, mercado, descenso, duelos)
+server/progress.js     materiales, tablón, clasificaciones, mascotas, pesca/hierbas y lo que pasa al matar
+server/modes.js        duelos, descenso infinito e información de salas
+server/trade.js        comercio entre jugadores (trades) y tiendas por jugador
 server/web.js           archivos estáticos (gzip, ETag), panel /admin y errores de los navegadores
 server/accounts.js      copias de seguridad firmadas y usuario/contraseña
 server/social.js        hazañas, mejoras de la taberna, mercado, temporadas, recompensa diaria y Asalto semanal
@@ -30,7 +34,9 @@ public/rules/monsters-data.js tablas de monstruos y temas de mazmorra
 public/rules/talents-data.js árbol de talentos de cada clase
 public/map.js           taberna, servidores, razas y aspecto, rasgos goblin (cleanLook)
 public/dungeon-data.js  tipos de casilla de las mazmorras
-public/models.js        personajes 3D (KayKit), enemigos, animales, muebles
+public/models.js        base de los modelos: materiales, héroes (bloques y KayKit), carga de modelos y animación; lo compartido en MODELS._
+public/models-creatures.js enemigos, mascotas y monturas (bloques y modelos de verdad), rasgos de monstruo
+public/models-props.js  muebles de la taberna, decorado de mazmorra, plantas, caña y jarra
 public/goblin.js        cabeza goblin hecha a mano con sus opciones
 public/armor3d.js       dibuja las armaduras en el personaje (piezas pegadas a los huesos)
 public/weapons3d.js     dibuja armas y escudos (un modelo por tipo y nivel, colores por variante)
@@ -41,7 +47,10 @@ public/tavern/editor.js editor de muebles de la taberna (dueño)
 public/tavern/screen.js zoom del juego y pantalla completa
 public/tavern/tavern3d.js taberna en 3D, bucle de dibujo y clics en la sala
 public/tavern/boot.js   arranque (se carga el último de la taberna)
-public/dungeon.js       mazmorra en el navegador: escena, controles, interfaz de combate y de grupo (marcas, volver con el grupo)
+public/dungeon.js       mazmorra en el navegador: estado, red, eventos, controles y escena 3D; comparte en DD.dg
+public/dungeon/menu.js  menú de mazmorras (tema, nivel, lista de partidas)
+public/dungeon/party.js vida del grupo, volver con el grupo, HUD y barra de habilidades
+public/dungeon/overlay.js marcas, nombres, bocadillos y minimapa dibujados encima; joystick táctil
 public/polish.js        fundidos, celebración de nivel y cartel de objeto único
 public/tutorial.js      tutorial de Alfonso para personajes nuevos
 public/ui.js, ui2.js    ventanas: ficha, inventario, tiendas, forja, guía; ajustes (volumen, tamaño, daltónico, teclas en DD.keys)
@@ -60,7 +69,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Dificultad de los monstruos por nivel: `monsterAt` (engine.js). Asalto: `RAID` (progress.js).
 - Recompensa diaria, logros, tareas, mejoras de la taberna, temporadas: `LOGIN_REWARDS`, `ACHIEVEMENTS`, `DAILY`, `TAVERN_LEVELS`, `SEASON_PTS` (progress.js).
 - Combate (daño, habilidades, muerte, botín al morir): `damageEnemy`, `tryPending`, `killEnemy`, `hurtPlayer` (server/dungeon.js).
-- Mensajes del cliente al servidor: el `switch (msg.t)` de server.js (`case 'nombre:accion'`).
+- Mensajes del cliente al servidor: `server/handlers/*.js` (`'nombre:accion'(cx, msg)`); los que quedan, en el `switch (msg.t)` de server.js.
 - Sonidos y música: `FX` y `TRACKS` (audio.js). Iconos: `P` (icons.js). Novedades: `NEWS` (admin.js).
 - Ventanas: ui.js (ficha, inventario, talentos, tiendas, guía) y ui2.js (pueblo, forja, fama, ajustes, asalto, taberna, mercado).
 
@@ -78,7 +87,8 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Antes de subir: `npm run lint && npm test`.
 - Rama de trabajo: `claude/social-room-game-ypkkqo`; a la web llega al fusionar con `main`.
 - Commits en español, descriptivos.
-- Los módulos de `server/` (web, accounts, social) reciben en `CTX` lo que necesitan de server.js y devuelven sus funciones.
+- Los módulos de `server/` reciben en `CTX`/`CTX2` lo que necesitan de server.js y devuelven sus funciones; lo que viene de otro módulo se envuelve (`const x = (...a) => ctx.x(...a)`). Los de `server/handlers/` devuelven `{ 'tipo'(cx, msg) }` y `cx` trae `ws, user, room, err, allow…`.
+- `public/dungeon/*.js` comparten con dungeon.js a través de `DD.dg` (`const D = DD.dg`), como `public/tavern/` con `DD.core`; `models-*.js` usan `MODELS._`.
 - Los archivos de `public/tavern/` comparten nombres a través de `DD.core` (`const C = DD.core`): cada archivo publica al final lo que usan los demás; las variables que cambian de valor se leen como `C.nombre`.
 
 ## Decisiones
