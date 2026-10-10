@@ -679,10 +679,100 @@
   // ======================================================================
   let snapR = null, snapScene = null, snapCam = null;
   const snapCache = new Map();
-  function snapshot(look, w, h, mode = 'full') {
-    const key = JSON.stringify(look) + w + 'x' + h + mode + (M().GL ? M().GL.version : 0);
+  // rot: giro del modelo (para el editor de personaje)
+  function ensureSnap() {
+    if (snapR) return;
+    snapR = legacy(new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }));
+    snapR.outputColorSpace = THREE.SRGBColorSpace;
+    snapR.toneMapping = THREE.ACESFilmicToneMapping;
+    snapScene = new THREE.Scene();
+    snapScene.add(new THREE.HemisphereLight('#c8c0d8', '#3a2a1a', 0.55));
+    const key1 = new THREE.DirectionalLight('#ffe0c0', 1.05); key1.position.set(1.5, 2.5, 3); snapScene.add(key1);
+    const rim = new THREE.DirectionalLight('#8aa0ff', 0.8); rim.position.set(-2, 1.5, -2); snapScene.add(rim);
+    snapCam = new THREE.PerspectiveCamera(30, 1, 0.05, 20);
+  }
+
+  // Dibujo 3D de un objeto para el inventario: el arma tal cual, la pieza de armadura sobre un maniquí invisible,
+  // anillos y amuletos con su gema del color de la rareza
+  const artCache = new Map();
+  const GEM = { inferior: '#8a8a8a', normal: '#c83a3a', superior: '#e8e4d8', magico: '#4a7aff', raro: '#ffd23a', unico: '#ff8a20', conjunto: '#3ac86a' };
+  function itemArt(it, w, h) {
+    if (!it || !M().GL || !M().GL.ready) return null;
+    const key = ['art', it.slot, it.base, it.type, it.tier || 0, it.sk ? 1 : 0, it.rarity, it.set || '', w, h, M().GL.version].join('|');
+    if (artCache.has(key)) return artCache.get(key);
+    ensureSnap();
+    const slot = it.slot, grp = new THREE.Group();
+    let obj = null;
+    if ((slot === 'arma' || slot === 'mano') && window.WEAPON3D) {
+      obj = WEAPON3D.build(it.base, it.tier || 0, it.rarity, { set: it.set });
+      if (obj) { obj.rotation.set(0.25, 0.5, slot === 'arma' && it.base !== 'arco' ? -0.78 : slot === 'mano' ? 0 : 0.2); grp.add(obj); }
+    } else if (['casco', 'pecho', 'guantes', 'botas'].includes(slot)) {
+      const gear = { [slot]: it.type, [slot + 'T']: it.tier || 0, [slot + 'S']: it.sk ? 1 : 0, [slot + 'R']: it.rarity };
+      const model = M().buildHero({ cls: 'guerrero', species: 'human', sex: 'm', hs: 'corto', skin: 0, hair: 0, gear });
+      const P = model.userData.parts || {};
+      const keep = new Set(P.armor || []);
+      // guantes y botas: sólo los de la derecha; el peto, con la ropa del torso
+      model.traverse((c) => {
+        if (!c.isMesh) return;
+        if (keep.has(c)) { if ((slot === 'guantes' || slot === 'botas') && c.parent && /l$/.test(c.parent.name)) c.visible = false; return; }
+        if (slot === 'pecho' && /_Body$/.test(c.name)) return;
+        c.visible = false;
+      });
+      model.rotation.y = slot === 'guantes' ? 0.35 : slot === 'botas' ? 0.7 : 0.45;
+      grp.add(model); obj = model;
+    } else if (slot === 'anillo' || slot === 'amuleto') {
+      const gold = new THREE.MeshStandardMaterial({ color: '#c89a3a', metalness: 0.9, roughness: 0.25 });
+      const gc = GEM[it.rarity] || '#c83a3a';
+      const gem = new THREE.MeshStandardMaterial({ color: gc, emissive: gc, emissiveIntensity: 0.6, roughness: 0.1 });
+      obj = new THREE.Group();
+      if (slot === 'anillo') {
+        obj.add(new THREE.Mesh(new THREE.TorusGeometry(0.1, 0.025, 12, 32), gold));
+        const g1 = new THREE.Mesh(new THREE.OctahedronGeometry(0.045), gem); g1.position.y = 0.12; obj.add(g1);
+        const s = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.02, 0.03, 8), gold); s.position.y = 0.1; obj.add(s);
+        obj.rotation.set(0.5, 0.4, 0);
+      } else {
+        const chain = new THREE.Mesh(new THREE.TorusGeometry(0.16, 0.008, 6, 40, Math.PI * 1.3), gold); chain.rotation.z = Math.PI * 1.35; chain.position.y = 0.06; obj.add(chain);
+        const set = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.014, 10, 24), gold); set.position.y = -0.12; obj.add(set);
+        const g1 = new THREE.Mesh(new THREE.OctahedronGeometry(0.05), gem); g1.position.y = -0.12; g1.scale.set(0.8, 1.2, 0.6); obj.add(g1);
+        obj.rotation.set(0.2, 0.3, 0);
+      }
+      grp.add(obj);
+    }
+    if (!obj) return null;
+    // encuadre: la caja de lo que se ve
+    grp.updateMatrixWorld(true);
+    const bb = new THREE.Box3();
+    grp.traverse((c) => {
+      if (!c.isMesh) return;
+      for (let o = c; o; o = o.parent) if (!o.visible) return;
+      c.geometry.computeBoundingBox();
+      bb.union(c.geometry.boundingBox.clone().applyMatrix4(c.matrixWorld));
+    });
+    if (bb.isEmpty()) return null;
+    const ctr = bb.getCenter(new THREE.Vector3()), size = bb.getSize(new THREE.Vector3());
+    snapR.setPixelRatio(1);
+    snapR.setSize(w, h, false);
+    snapCam.aspect = w / h;
+    const fit = Math.max(size.y, size.x / (w / h), size.z * 0.6) * 1.18;
+    const dist = fit / (2 * Math.tan(THREE.MathUtils.degToRad(snapCam.fov / 2)));
+    snapCam.position.set(ctr.x, ctr.y + size.y * 0.05, ctr.z + dist + size.z / 2);
+    snapCam.lookAt(ctr);
+    snapCam.updateProjectionMatrix();
+    snapScene.add(grp);
+    snapR.render(snapScene, snapCam);
+    snapScene.remove(grp);
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    c.getContext('2d').drawImage(snapR.domElement, 0, 0);
+    if (artCache.size > 300) artCache.clear();
+    artCache.set(key, c);
+    return c;
+  }
+
+  function snapshot(look, w, h, mode = 'full', rot) {
+    const key = JSON.stringify(look) + w + 'x' + h + mode + (rot || '') + (M().GL ? M().GL.version : 0);
     if (snapCache.has(key)) return snapCache.get(key);
-    if (!snapR) {
+    ensureSnap();
+    snapR.setPixelRatio(1);
       snapR = legacy(new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }));
       snapR.outputColorSpace = THREE.SRGBColorSpace;
       snapR.toneMapping = THREE.ACESFilmicToneMapping;
@@ -690,12 +780,9 @@
       snapScene.add(new THREE.HemisphereLight('#c8c0d8', '#3a2a1a', 0.55));
       const key1 = new THREE.DirectionalLight('#ffe0c0', 1.05); key1.position.set(1.5, 2.5, 3); snapScene.add(key1);
       const rim = new THREE.DirectionalLight('#8aa0ff', 0.8); rim.position.set(-2, 1.5, -2); snapScene.add(rim);
-      snapCam = new THREE.PerspectiveCamera(30, 1, 0.05, 20);
-    }
-    snapR.setPixelRatio(1);
     snapR.setSize(w, h, false);
     const model = M().buildHero(look);
-    model.rotation.y = mode === 'bust' ? 0.35 : 0.55;
+    model.rotation.y = rot !== undefined ? rot : mode === 'bust' ? 0.35 : 0.55;
     if (model.userData.gl) M().posePeek(model, 'Idle', 0.5); else M().animate(model, { t: 0 });
     snapScene.add(model);
     const sc = model.scale.x;
@@ -937,5 +1024,5 @@
     return { stop() { alive = false; cancelAnimationFrame(raf); r.dispose(); } };
   }
 
-  root.VIEW3D = { snapshot, makeStage, show, getRenderer, buildMap, fogLayer, THEME, WALL_H, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer, present };
+  root.VIEW3D = { snapshot, itemArt, makeStage, show, buildMap, fogLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
 })(this);

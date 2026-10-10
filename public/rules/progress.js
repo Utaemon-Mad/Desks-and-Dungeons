@@ -13,7 +13,7 @@
   const MATS = {
     hierro:   { name: 'Fragmento de hierro', icon: '🔩', kind: 'forja', desc: 'Lo sueltan casi todos los enemigos. Sirve para mejorar objetos.' },
     esencia:  { name: 'Esencia arcana', icon: '💠', kind: 'forja', desc: 'Magia condensada. La sueltan élites y jefes; también sale de desguazar objetos raros.' },
-    polvo:    { name: 'Polvo de estrella', icon: '✨', kind: 'forja', desc: 'Muy escaso: jefes, objetos legendarios y de conjunto.' },
+    polvo:    { name: 'Polvo de estrella', icon: '✨', kind: 'forja', desc: 'Muy escaso: jefes, objetos únicos y de conjunto.' },
     // peces (por zona del mundo)
     trucha:   { name: 'Trucha del valle', icon: '🐟', kind: 'pez', zone: 0, w: [0.4, 1.6] },
     carpa:    { name: 'Carpa dorada', icon: '🐠', kind: 'pez', zone: 0, w: [0.8, 3] },
@@ -80,17 +80,17 @@
 
   function enchantCost(it) {
     const ri = RULES.RARITY_ORDER.indexOf(it.rarity);
-    return { esencia: 2, polvo: ri >= 2 ? 1 : 0, gold: 20 + it.ilvl * 5 };
+    return { esencia: 2, polvo: ri >= RULES.RARITY_ORDER.indexOf('raro') ? 1 : 0, gold: 20 + it.ilvl * 5 };
   }
-  // Encantar: cambia una propiedad por otra al azar (nunca repetida)
+  // Encantar: cambia una propiedad por otra al azar del mismo tipo de objeto (nunca repetida), con un escalón de su nivel
   function enchant(rng, it, key) {
     if (!it.stats || it.stats[key] === undefined) return null;
-    const R = RULES.RARITIES[it.rarity] || RULES.RARITIES.comun;
-    const pool = RULES.SLOT_AFFIXES[it.slot].filter((k) => it.stats[k] === undefined);
+    const pool = RULES.affixPool(it, it.ilvl).filter((k) => it.stats[k] === undefined && !['ed', 'edDef', 'minDmg', 'maxDmg'].includes(k) && !RULES.AFFIXES[k].elem);
     if (!pool.length) return null;
     const k = pick(rng, pool);
     const A = RULES.AFFIXES[k];
-    let v = A.v(it.ilvl) * R.mult * (0.6 + rng() * 0.4) * (1 + (it.up || 0) * 0.03);
+    const T = RULES.affixTier(rng, A, it.ilvl, it.rarity === 'unico' || it.rarity === 'conjunto');
+    let v = RULES.rollAffixValue(rng, A, T) * (1 + (it.up || 0) * 0.03);
     v = A.dec ? round1(v) : Math.max(1, Math.round(v));
     const stats = {};
     for (const [kk, vv] of Object.entries(it.stats)) { if (kk === key) stats[k] = v; else stats[kk] = vv; }
@@ -99,10 +99,11 @@
     return { from: key, to: k, v };
   }
 
-  const COMBINE_TO = { comun: 'raro', raro: 'epico', epico: 'legendario' };
+  // Como el cubo de Diablo 2: tres objetos iguales dan uno de la calidad siguiente
+  const COMBINE_TO = { inferior: 'magico', normal: 'magico', superior: 'magico', magico: 'raro', raro: 'unico' };
   function combineCost(rarity, ilvl) {
-    const ri = RULES.RARITY_ORDER.indexOf(rarity);
-    return { gold: Math.round(ilvl * 8 * (ri + 1) + 10), esencia: rarity === 'epico' ? 3 : rarity === 'raro' ? 1 : 0, polvo: rarity === 'epico' ? 2 : 0 };
+    const ri = Math.max(0, RULES.RARITY_ORDER.indexOf(rarity) - 2);
+    return { gold: Math.round(ilvl * 8 * (ri + 1) + 10), esencia: rarity === 'raro' ? 3 : rarity === 'magico' ? 1 : 0, polvo: rarity === 'raro' ? 2 : 0 };
   }
   function combine(rng, items, classes) {
     const rarity = COMBINE_TO[items[0].rarity];
@@ -112,7 +113,7 @@
 
   function salvage(it) {
     const up = it.up || 0;
-    const t = { comun: { hierro: 1 + (it.ilvl > 10 ? 1 : 0) }, raro: { hierro: 2, esencia: 1 }, epico: { hierro: 3, esencia: 2 }, legendario: { esencia: 4, polvo: 2 }, conjunto: { esencia: 5, polvo: 3 } }[it.rarity] || { hierro: 1 };
+    const t = { inferior: { hierro: 1 }, normal: { hierro: 1 + (it.ilvl > 10 ? 1 : 0) }, superior: { hierro: 2 }, magico: { hierro: 2, esencia: 1 }, raro: { hierro: 3, esencia: 2 }, unico: { esencia: 4, polvo: 2 }, conjunto: { esencia: 5, polvo: 3 } }[it.rarity] || { hierro: 1 };
     const out = { ...t };
     if (up) out.hierro = (out.hierro || 0) + up * 2;
     if (up >= 5) out.esencia = (out.esencia || 0) + 1;
@@ -192,7 +193,7 @@
   }
   function taskReward(id, level) {
     const weekly = !!WEEKLY[id];
-    return { xp: Math.round((weekly ? 600 : 80) * level * (1 + level * 0.05)), gold: Math.round((weekly ? 140 : 20) * level), mats: weekly ? { esencia: 3, polvo: 1 } : { hierro: 3, esencia: 1 }, item: weekly ? 'epico' : null };
+    return { xp: Math.round((weekly ? 600 : 80) * level * (1 + level * 0.05)), gold: Math.round((weekly ? 140 : 20) * level), mats: weekly ? { esencia: 3, polvo: 1 } : { hierro: 3, esencia: 1 }, item: weekly ? 'raro' : null };
   }
 
   // ======================================================================
@@ -228,7 +229,7 @@
     { id: 'domador', name: 'Domador', stat: 'petlvl', n: 10, gold: 300, title: 'Domador de Bestias' },
   ];
   const MAX_STATS = new Set(['floor', 'upmax', 'level', 'petlvl']);
-  const STAT_NAMES = { kills: 'Monstruos derrotados', bosses: 'Jefes derrotados', worldboss: 'Jefes de mundo', dungeons: 'Mazmorras completadas', floor: 'Piso más hondo del Descenso', duels: 'Duelos ganados', fish: 'Peces pescados', goldfish: 'Peces dorados', herbs: 'Hierbas recogidas', cook: 'Platos cocinados', upmax: 'Mejor mejora en la forja', legend: 'Legendarios encontrados', level: 'Nivel', quests: 'Misiones de la historia', tasks: 'Tareas del tablón', petlvl: 'Nivel de tu mascota', bigfish: 'Pez más grande (kg)' };
+  const STAT_NAMES = { kills: 'Monstruos derrotados', bosses: 'Jefes derrotados', worldboss: 'Jefes de mundo', dungeons: 'Mazmorras completadas', floor: 'Piso más hondo del Descenso', duels: 'Duelos ganados', fish: 'Peces pescados', goldfish: 'Peces dorados', herbs: 'Hierbas recogidas', cook: 'Platos cocinados', upmax: 'Mejor mejora en la forja', legend: 'Únicos encontrados', level: 'Nivel', quests: 'Misiones de la historia', tasks: 'Tareas del tablón', petlvl: 'Nivel de tu mascota', bigfish: 'Pez más grande (kg)' };
 
   // ======================================================================
   //  Jefes de mundo: aparecen cada cierto tiempo en el mundo abierto para todo el servidor

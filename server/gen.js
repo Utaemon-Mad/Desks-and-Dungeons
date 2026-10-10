@@ -164,8 +164,10 @@ function generate(o) {
     for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
       if (get(x, y) !== '#' || !walk(get(x, y + 1)) || get(x, y - 1) !== '#') continue;
       const r = inRoom(x, y + 1);
-      if (r && rand() < (r.boss ? 0.3 : 0.16)) props.push({ k: pickR(TP.wall), x, y });
-      else if (!r && rand() < 0.05) props.push({ k: 'torch', x, y });
+      // antorchas cada tres casillas en el muro de cada sala (y alguna en los pasillos); entre medias, adornos
+      if (r && (x - r.x) % 3 === 1) props.push({ k: 'torch', x, y });
+      else if (r && rand() < (r.boss ? 0.3 : 0.16)) props.push({ k: pickR(TP.wall.filter((k) => k !== 'torch')), x, y });
+      else if (!r && rand() < 0.14) props.push({ k: 'torch', x, y });
     }
 
     // Lo que bloquea no puede romper la conexión: se quita si deja zonas aisladas

@@ -195,24 +195,28 @@ function onlineChar(cid) {
 
 function lookFrom(profile) {
   const l = profile.char.look || {};
-  return { ...MAP.cleanLook({ cls: profile.char.cls, species: l.species, skin: l.skin, hair: l.hair }), gear: RULES.gearLook(profile.equip) };
+  return { ...MAP.cleanLook({ cls: profile.char.cls, species: l.species, sex: l.sex, hs: l.hs, skin: l.skin, hair: l.hair, gob: l.gob }), gear: RULES.gearLook(profile.equip) };
 }
+const charLook = (look) => { const c = { species: look.species, sex: look.sex, hs: look.hs, skin: look.skin, hair: look.hair }; if (look.gob) c.gob = { ...look.gob }; return c; };
 
 function derive(profile) { return RULES.derive(profile); }
 
 // Prepara un perfil (nuevo, de una versión anterior o con otra clase elegida al entrar; sin look se queda como está)
 function setupProfile(profile, look) {
   const level = RULES.levelFromXp(profile.xp || 0);
+  RULES.migrateProfile(profile); // perfiles de reglas anteriores: clase, raza, puntos y objetos
   if (!profile.char || !RULES.CLASSES[profile.char.cls]) {
     look = look || MAP.cleanLook({});
-    profile.char = RULES.newChar(look.cls, {});
+    profile.char = RULES.newChar(look.cls, charLook(look));
+    profile.rv = RULES.RULES_VERSION;
     profile.equip = {}; profile.bag = []; profile.cons = { 'pocion-vida-p': 3 }; profile.buffs = {};
     for (const it of RULES.starterItems(profile.char.cls, rnd)) profile.equip[it.slot] = it;
     delete profile.sheet;
   }
-  profile.char = RULES.cleanChar(profile.char, level);
-  if (look) profile.char.look = { species: look.species, skin: look.skin, hair: look.hair };
   profile.equip = profile.equip || {}; profile.bag = Array.isArray(profile.bag) ? profile.bag : [];
+  if (look) changeChar(profile, look);
+  profile.char = RULES.cleanChar(profile.char, level);
+  profile.char.look = charLook(MAP.cleanLook({ ...profile.char.look, cls: profile.char.cls }));
   profile.cons = profile.cons || {}; profile.buffs = profile.buffs || {};
   profile.quests = profile.quests || {}; profile.questsDone = profile.questsDone || [];
   profile.waystones = profile.waystones || ['brumaverde'];
@@ -222,28 +226,28 @@ function setupProfile(profile, look) {
   if (profile.pet && !RULES.PETS[profile.pet.type]) profile.pet = null;
   if (profile.pet) { profile.pet.bag = Array.isArray(profile.pet.bag) ? profile.pet.bag : []; profile.pet.xp = profile.pet.xp || 0; }
   if (profile.mount && !RULES.MOUNTS[profile.mount]) profile.mount = null;
-  if (look) changeClasses(profile, look.cls);
-  // Ya no hay segunda clase: lo que sólo se podía llevar gracias a ella pasa a la mochila
-  for (const slot of RULES.SLOT_IDS) {
-    const it = profile.equip[slot];
-    if (it && !RULES.canEquip(it, profile.char, level).ok) { profile.bag.push(it); delete profile.equip[slot]; }
-  }
   for (const [id, until] of Object.entries(profile.buffs)) if (until <= Date.now()) delete profile.buffs[id];
 }
 
-// Cambio de clase: los puntos se devuelven, lo que ya no se puede llevar va a la mochila y se da el equipo inicial que falte
-function changeClasses(profile, cls) {
-  cls = RULES.classId(cls) || profile.char.cls;
-  if (cls === profile.char.cls) return false;
-  const level = RULES.levelFromXp(profile.xp || 0);
-  profile.char.cls = cls;
-  profile.char.alloc = Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0]));
-  for (const slot of RULES.SLOT_IDS) {
-    const it = profile.equip[slot];
-    if (it && !RULES.canEquip(it, profile.char, level).ok) { profile.bag.push(it); delete profile.equip[slot]; }
+// Cambio de clase o de raza: los puntos se devuelven (las características base cambian) y se da el equipo inicial
+// que falte de la clase nueva. El sexo, el peinado y los colores se cambian sin más.
+function changeChar(profile, look) {
+  const c = profile.char;
+  const cls = RULES.classId(look.cls) || c.cls;
+  const race = RULES.raceId(look.species);
+  const changed = { cls: cls !== c.cls, race: race !== RULES.raceId(c.look && c.look.species) };
+  c.look = charLook({ ...look, species: race });
+  if (changed.cls || changed.race) c.alloc = Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0]));
+  if (changed.cls) {
+    c.cls = cls;
+    for (const it of RULES.starterItems(cls, rnd)) if (!profile.equip[it.slot]) profile.equip[it.slot] = it;
   }
-  for (const it of RULES.starterItems(cls, rnd)) if (!profile.equip[it.slot]) profile.equip[it.slot] = it;
-  return true;
+  return changed;
+}
+
+// Características que tendría sin lo que lleva en un hueco (para comprobar requisitos al cambiar un objeto)
+function statsWithout(profile, slot) {
+  return RULES.derive({ ...profile, equip: { ...profile.equip, [slot]: undefined } }).stats;
 }
 
 function freeSpawn(room, except) {
@@ -325,9 +329,9 @@ function reward(room, user, xp, gold) {
 function give(room, user, item) {
   if (user.profile.bag.length >= RULES.BAG_SIZE) return false;
   user.profile.bag.push(item);
-  if (item.rarity === 'legendario') track(room, user, 'legend', {});
+  if (item.rarity === 'unico') track(room, user, 'legend', {});
   saveUser(user); sendMe(user);
-  if (item.rarity === 'legendario' || item.rarity === 'conjunto') system(room, `${item.rarity === 'conjunto' ? '🟢' : '🟠'} ${user.name} encuentra «${item.name}».`);
+  if (item.rarity === 'unico' || item.rarity === 'conjunto') system(room, `${item.rarity === 'conjunto' ? '🟢' : '🟡'} ${user.name} encuentra «${item.name}».`);
   return true;
 }
 
@@ -467,7 +471,11 @@ setInterval(() => {
 function petFor(user) {
   const pet = user.profile.pet;
   if (!pet || levelOf(user) < RULES.PET_LEVEL) return null;
-  return { type: pet.type, name: pet.name || RULES.PETS[pet.type].name, st: RULES.petStats(pet.type, levelOf(user), RULES.petLevelFromXp(pet.xp)) };
+  const st = RULES.petStats(pet.type, levelOf(user), RULES.petLevelFromXp(pet.xp));
+  const pw = derive(user.profile).petPow; // el Carisma hace más fuerte a la mascota
+  st.dmg = st.dmg.map((v) => Math.max(1, Math.round(v * pw)));
+  st.hp = Math.round(st.hp * (1 + (pw - 1) / 2));
+  return { type: pet.type, name: pet.name || RULES.PETS[pet.type].name, st };
 }
 
 function discoverWaystone(room, user, ws) {
@@ -668,9 +676,9 @@ function gotHerb(room, user, zone) {
 }
 
 function worldBossDown(room, users, m, killer) {
-  system(room, `🏆 ¡${m.name} ha caído a manos de ${killer.name}! ${users.length > 1 ? users.map((u) => u.name).join(', ') + ' se reparten' : 'Se lleva'} un botín legendario.`);
+  system(room, `🏆 ¡${m.name} ha caído a manos de ${killer.name}! ${users.length > 1 ? users.map((u) => u.name).join(', ') + ' se reparten' : 'Se lleva'} un botín raro o único.`);
   for (const u of users) {
-    const rarity = rnd() < 0.2 ? 'legendario' : 'epico';
+    const rarity = rnd() < 0.2 ? 'unico' : 'raro';
     const it = RULES.makeItem(rnd, { ilvl: m.level, rarity, classes: [u.profile.char.cls] });
     if (give(room, u, it)) send(u.ws, { t: 'dgot', item: it });
     else send(u.ws, { t: 'dwhisper', text: 'Tu mochila estaba llena: te quedas sin el objeto del jefe.' });
@@ -707,7 +715,7 @@ function nextFloor(room, user, desc, r) {
   track(room, user, 'floor', { value: floor });
   send(user.ws, { t: 'dwhisper', text: `🌀 Piso ${desc.floor} superado (+${r.xp} PX, +${r.gold} 🪙). Bajas al piso ${floor}…` });
   if (desc.floor % 5 === 0) {
-    const it = RULES.makeItem(rnd, { ilvl: PROG.descentLevel(desc.start, desc.floor), rarity: desc.floor % 10 === 0 ? 'legendario' : 'epico', classes: [user.profile.char.cls] });
+    const it = RULES.makeItem(rnd, { ilvl: PROG.descentLevel(desc.start, desc.floor), rarity: desc.floor % 10 === 0 ? 'unico' : 'raro', classes: [user.profile.char.cls] });
     if (give(room, user, it)) send(user.ws, { t: 'dgot', item: it });
     giveMats(room, user, { esencia: 2, polvo: 1 }, true);
     system(room, `🌀 ${user.name} supera el piso ${desc.floor} del Descenso y encuentra «${it.name}».`);
@@ -868,6 +876,8 @@ wss.on('connection', (ws) => {
           if (!name) return err('Ponle un nombre a tu héroe.');
           const p = { xp: 0, gold: START_GOLD, name };
           setupProfile(p, MAP.cleanLook(msg.look));
+          // el editor ya reparte los puntos iniciales (con el tope natural de 20)
+          if (msg.alloc && typeof msg.alloc === 'object') p.char.alloc = RULES.cleanChar({ ...p.char, alloc: msg.alloc }, 1).alloc;
           a.slots[slot] = p;
           store.setPlayer(pid, a);
           return send(ws, accountInfo(a, pid, { created: slot }));
@@ -933,6 +943,11 @@ wss.on('connection', (ws) => {
         history: room.history,
       });
       sendMe(user);
+      if (profile.statsReset) {
+        delete profile.statsReset;
+        store.setPlayer(pid, acc);
+        send(ws, { t: 'system', ts: Date.now(), text: `📜 Las características han cambiado (Fuerza, Destreza, Vigor, Inteligencia, Carisma y Suerte, hasta ${RULES.STAT_MAX} de forma natural). Tus puntos han vuelto: pulsa el icono rojo bajo tu retrato para repartirlos.` });
+      }
       broadcast(room, { t: 'join', user: publicUser(user) }, user.id);
       system(room, `${user.name} entra en la taberna.`);
       resumePlace(room, user);
@@ -1001,6 +1016,10 @@ wss.on('connection', (ws) => {
         for (const k of RULES.STAT_IDS) want += Math.max(0, Math.floor(Number(add[k]) || 0));
         if (!want) return;
         if (want > RULES.pointsFree(user.profile.char, lvl)) return err('No tienes tantos puntos.');
+        for (const k of RULES.STAT_IDS) {
+          const n = Math.max(0, Math.floor(Number(add[k]) || 0));
+          if (n > RULES.statRoom(user.profile.char, k)) return err(`${RULES.statName(k)} no puede pasar de ${RULES.STAT_MAX} de forma natural.`);
+        }
         for (const k of RULES.STAT_IDS) user.profile.char.alloc[k] += Math.max(0, Math.floor(Number(add[k]) || 0));
         profileChanged(room, user);
         break;
@@ -1019,12 +1038,11 @@ wss.on('connection', (ws) => {
         if (!allow(1)) return;
         if (user.where) return err('Vuelve a la taberna para cambiar de clase o de aspecto.');
         const look = MAP.cleanLook({ ...msg.look });
-        const changed = changeClasses(user.profile, look.cls);
-        user.profile.char.look = { species: look.species, skin: look.skin, hair: look.hair };
+        const changed = changeChar(user.profile, look);
         profileChanged(room, user, { look: true });
-        if (changed) {
+        if (changed.cls || changed.race) {
           const c = user.profile.char;
-          system(room, `📜 ${user.name} es ahora ${RULES.CLASSES[c.cls].name.toLowerCase()}.`);
+          system(room, `📜 ${user.name} es ahora ${RULES.RACES[RULES.raceId(c.look.species)].name.toLowerCase()} ${RULES.CLASSES[c.cls].name.toLowerCase()}. Sus puntos vuelven para repartirlos de nuevo.`);
         }
         break;
       }
@@ -1036,7 +1054,7 @@ wss.on('connection', (ws) => {
         const i = p.bag.findIndex((it) => it.id === msg.id);
         if (i < 0) return;
         const it = p.bag[i];
-        const ok = RULES.canEquip(it, p.char, levelOf(user));
+        const ok = RULES.canEquip(it, p.char, levelOf(user), statsWithout(p, it.slot));
         if (!ok.ok) return err(ok.reason);
         p.bag.splice(i, 1);
         const out = [];
@@ -1390,7 +1408,7 @@ wss.on('connection', (ws) => {
         const ids = [...new Set(Array.isArray(msg.ids) ? msg.ids : [])].slice(0, 3);
         const items = ids.map((id) => p.bag.find((x) => x.id === id)).filter(Boolean);
         if (items.length !== 3) return err('Elige tres objetos de la mochila.');
-        if (!PROG.COMBINE_TO[items[0].rarity] || items.some((x) => x.rarity !== items[0].rarity)) return err('Los tres tienen que ser de la misma rareza (común, raro o épico).');
+        if (!PROG.COMBINE_TO[items[0].rarity] || items.some((x) => x.rarity !== items[0].rarity)) return err('Los tres tienen que ser de la misma calidad (normal, superior, inferior, mágico o raro).');
         const ilvl = Math.round(items.reduce((t, x) => t + x.ilvl, 0) / 3);
         const c = PROG.combineCost(items[0].rarity, ilvl);
         if (p.gold < c.gold) return err(`Necesitas ${c.gold} 🪙.`);
@@ -1400,7 +1418,7 @@ wss.on('connection', (ws) => {
         const out = PROG.combine(rnd, items, [p.char.cls]);
         p.bag.push(out);
         track(room, user, 'forge', { value: 0 });
-        if (out.rarity === 'legendario') track(room, user, 'legend', {});
+        if (out.rarity === 'unico') track(room, user, 'legend', {});
         profileChanged(room, user);
         broadcast(room, { t: 'profile', id: user.id, xp: p.xp, gold: p.gold, level: levelOf(user) });
         send(ws, { t: 'forge:result', ok: true, item: out, text: `🔥 Los tres objetos se funden en «${out.name}».` });

@@ -45,28 +45,71 @@ function client(name) {
 // ---------- Reglas ----------
 function rulesTests() {
   const rng = RULES.seeded('pruebas');
-  // probabilidades de las cuatro rarezas: 50%, 20%, 5% y 1%
+  // calidades de Diablo 2: inferior 8%, normal 30%, superior 10%, mágico 20%, raro 5%, único 1%
   const count = {};
   for (let i = 0; i < 40000; i++) { const r = RULES.rollRarity(rng, 0); count[r] = (count[r] || 0) + 1; }
   const pct = (k) => count[k] / 400;
-  assert.ok(Math.abs(pct('comun') - 50) < 1.5 && Math.abs(pct('raro') - 20) < 1.2 && Math.abs(pct('epico') - 5) < 0.6 && Math.abs(pct('legendario') - 1) < 0.3, 'rarezas 50/20/5/1');
-  // cuanto más rara, mejor: el mismo arma a nivel 5
-  const dmg = (r) => RULES.makeItem(rng, { ilvl: 5, rarity: r, slot: 'arma', base: 'espada' }).dmg[1];
-  assert.ok(dmg('comun') < dmg('raro') && dmg('raro') < dmg('epico') && dmg('epico') < dmg('legendario'));
+  assert.ok(Math.abs(pct('normal') - 30) < 1.5 && Math.abs(pct('magico') - 20) < 1.2 && Math.abs(pct('raro') - 5) < 0.6 && Math.abs(pct('unico') - 1) < 0.3 && Math.abs(pct('inferior') - 8) < 0.8, 'calidades');
+  // el hallazgo mágico cuenta menos para únicos que para mágicos (rendimientos decrecientes)
+  const c2 = {};
+  for (let i = 0; i < 40000; i++) { const r = RULES.rollRarity(rng, 300); c2[r] = (c2[r] || 0) + 1; }
+  assert.ok(c2.magico / count.magico > c2.unico / count.unico, 'hallazgo mágico con rendimientos decrecientes');
+  // armas: tres niveles (normal, excepcional, élite) que pegan más y piden más
+  const t = [0, 1, 2].map((tier) => RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'arma', base: 'espada', tier }));
+  assert.ok(t[0].dmg[1] < t[1].dmg[1] && t[1].dmg[1] < t[2].dmg[1], 'el élite pega más');
+  assert.ok(t[0].reqStats.fue < t[2].reqStats.fue && t[2].req >= RULES.TIERS[2].lvl, 'y pide más Fuerza y nivel');
+  assert.ok(/Hoja fásica/.test(t[2].name) && /élite/i.test(RULES.typeLine(t[2])), 'nombre del tipo élite');
+  // mágico: prefijo y/o sufijo; raro: de 3 a 6 propiedades; el daño mejorado sube el daño del arma
+  for (let i = 0; i < 50; i++) {
+    const m = RULES.makeItem(rng, { ilvl: 30, rarity: 'magico', slot: 'anillo' });
+    assert.ok(Object.keys(m.stats).length >= 1 && Object.keys(m.stats).length <= 2, 'mágico: 1 o 2 propiedades');
+    const rr = RULES.makeItem(rng, { ilvl: 45, rarity: 'raro', slot: 'amuleto' });
+    assert.ok(Object.keys(rr.stats).length >= 3 && Object.keys(rr.stats).length <= 6, 'raro: de 3 a 6');
+  }
+  const plain = RULES.makeItem(RULES.seeded('ed'), { ilvl: 30, rarity: 'normal', slot: 'arma', base: 'hacha', tier: 1 });
+  let ed = null;
+  for (let i = 0; i < 200 && !ed; i++) { const it = RULES.makeItem(rng, { ilvl: 30, rarity: 'magico', slot: 'arma', base: 'hacha', tier: 1 }); if (it.ed && !it.addMin && !it.addMax) ed = it; }
+  assert.ok(ed && ed.dmg[1] > plain.dmg[1] * 0.95 * (1 + ed.ed / 100) * 0.9, 'el daño mejorado se aplica al daño base');
+  // anillos y amuletos: nunca normales
+  assert.strictEqual(RULES.makeItem(rng, { ilvl: 5, rarity: 'normal', slot: 'anillo' }).rarity, 'magico');
   // conjunto de clase con su característica principal
   const set = RULES.makeItem(rng, { ilvl: 8, rarity: 'conjunto', set: 'mago' });
-  assert.ok(set.set === 'mago' && set.stats.car > 0 && set.name.includes('Archimago'));
-  // una sola clase: sus cuatro habilidades, la primera lista desde el nivel 1 (ya no hay segunda clase)
-  const ch = RULES.newChar('guerrero');
+  assert.ok(set.set === 'mago' && set.stats.int > 0 && set.name.includes('Archimago'));
+  // los únicos con el mismo nombre tienen las mismas propiedades
+  const u1 = RULES.makeItem(RULES.seeded('u'), { ilvl: 40, rarity: 'unico', slot: 'arma', base: 'espada' });
+  const u2 = RULES.makeItem(RULES.seeded('u'), { ilvl: 40, rarity: 'unico', slot: 'arma', base: 'espada' });
+  assert.deepStrictEqual(Object.keys(u1.stats).sort(), Object.keys(u2.stats).sort(), 'único: siempre las mismas propiedades');
+  // personaje: 6 características, raza + clase, tope natural de 20 y puntos hasta el nivel 50
+  const ch = RULES.newChar('guerrero', { species: 'orc' });
   const d = RULES.derive({ xp: 0, char: ch, equip: {}, buffs: {} });
-  assert.ok(d.abilities.length === 4 && d.abilities.some((a) => a.id === 'golpe' && a.ready) && !d.abilities.some((a) => a.id === 'curar'));
-  assert.strictEqual(RULES.cleanChar({ cls: 'mago', cls2: 'paladin' }).cls2, undefined, 'la segunda clase desaparece');
+  assert.deepStrictEqual(Object.keys(d.stats), ['fue', 'des', 'vig', 'int', 'car', 'sue']);
+  assert.strictEqual(d.base.fue, 5 + 4 + 4, 'Fuerza = 5 + orco 4 + guerrero 4');
+  assert.ok(d.abilities.length === 4 && d.abilities.some((a) => a.id === 'golpe' && a.ready));
   assert.strictEqual(d.points, RULES.POINTS_START);
-  assert.deepStrictEqual(Object.keys(d.stats), ['fue', 'des', 'con', 'vit', 'res', 'car', 'sue']);
-  // no se puede llevar placas siendo mago
-  const plate = RULES.makeItem(rng, { ilvl: 1, slot: 'pecho', base: 'placas' });
-  assert.strictEqual(RULES.canEquip(plate, RULES.newChar('mago'), 1).ok, false);
-  assert.strictEqual(RULES.canEquip(plate, { ...RULES.newChar('mago'), cls2: 'paladin' }, 1).ok, false, 'una segunda clase guardada ya no cuenta');
+  assert.strictEqual(RULES.pointsTotal(50), 5 + 49 + 10, 'puntos a nivel 50');
+  assert.strictEqual(RULES.statRoom(ch, 'fue'), 7, 'la Fuerza sólo puede subir 7 puntos más (hasta 20)');
+  assert.strictEqual(RULES.cleanChar({ cls: 'guerrero', look: { species: 'orc' }, alloc: { fue: 30 } }, 50).alloc.fue, 7, 'tope natural de 20');
+  const big = RULES.derive({ xp: 0, char: { ...ch, alloc: { ...ch.alloc, fue: 7 } }, equip: { anillo: { slot: 'anillo', stats: { fue: 6 } } }, buffs: {} });
+  assert.ok(big.natural.fue === 20 && big.stats.fue === 26, 'el equipo sí pasa de 20');
+  assert.ok(RULES.MAX_LEVEL === 50 && RULES.levelFromXp(1e12) === 50, 'nivel máximo 50');
+  for (const r of RULES.RACE_IDS) assert.strictEqual(Object.values(RULES.RACES[r].mods).reduce((a, b) => a + b, 0), 6, 'todas las razas suman +6');
+  for (const c of RULES.CLASS_IDS) assert.strictEqual(Object.values(RULES.CLASSES[c].base).reduce((a, b) => a + b, 0), 8, 'todas las clases suman +8');
+  assert.ok(RULES.ABILITIES.druida.length === 4 && RULES.ABILITIES.sacerdote.length === 4 && !RULES.ABILITIES.brujo && !RULES.ABILITIES.clerigo);
+  // la Fuerza sube el daño un 5% por punto (como en Diablo 2)
+  const sw = RULES.makeItem(rng, { ilvl: 1, rarity: 'normal', slot: 'arma', base: 'espada', tier: 0 });
+  const dA = RULES.derive({ xp: 0, char: RULES.newChar('guerrero', { species: 'goblin' }), equip: { arma: sw }, buffs: {} });
+  const dB = RULES.derive({ xp: 0, char: RULES.newChar('guerrero', { species: 'orc' }), equip: { arma: sw }, buffs: {} });
+  assert.ok(dB.statPct - dA.statPct === (dB.stats.fue - dA.stats.fue) * 5, '+5% de daño por punto de Fuerza');
+  // requisitos: un mago enclenque no puede con unas placas de élite
+  const plate = RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'pecho', base: 'placas', tier: 2 });
+  const mage = RULES.newChar('mago', { species: 'elf' });
+  assert.strictEqual(RULES.canEquip(plate, mage, 40, RULES.derive({ xp: RULES.XP_TABLE[40], char: mage, equip: {}, buffs: {} }).stats).ok, false, 'requisito de Fuerza');
+  // perfiles antiguos: clases, razas, rarezas y características viejas se convierten
+  const old = { xp: 0, char: { cls: 'brujo', alloc: { fue: 9 }, look: { species: 'dragonborn' } }, equip: { anillo: { slot: 'anillo', rarity: 'epico', ilvl: 10, req: 10, stats: { car: 12, vit: 8, hp: 30 } } }, bag: [{ slot: 'arma', base: 'maza', rarity: 'raro', ilvl: 3, dmg: [5, 9], stats: {} }] };
+  RULES.migrateProfile(old);
+  assert.ok(old.char.cls === 'mago' && old.char.look.species === 'human' && old.char.alloc.fue === 0 && old.statsReset, 'perfil antiguo');
+  assert.ok(old.equip.anillo.rarity === 'raro' && old.equip.anillo.stats.int === 3 && old.equip.anillo.stats.vig === 2 && old.equip.anillo.stats.hp === 30, 'objeto antiguo');
+  assert.ok(old.bag[0].rarity === 'magico' && old.bag[0].tier === 0 && old.bag[0].reqStats.fue === 4);
   // la mazmorra escala con el nivel
   assert.ok(RULES.monsterAt('orc', 10).hp > RULES.monsterAt('orc', 1).hp * 4);
   // mazmorras aleatorias: siempre jugables
@@ -80,7 +123,7 @@ function rulesTests() {
 // ---------- Progresión: forja, tablón, mascotas, pesca ----------
 function progressTests() {
   const rng = RULES.seeded('forja');
-  const sword = RULES.makeItem(rng, { ilvl: 5, rarity: 'raro', slot: 'arma', base: 'espada' });
+  const sword = RULES.makeItem(rng, { ilvl: 12, rarity: 'raro', slot: 'arma', base: 'espada' });
   const before = sword.dmg[1];
   PROG.applyUpgrade(sword);
   assert.ok(sword.up === 1 && sword.dmg[1] > before && /\+1$/.test(sword.name), 'mejora +1');
@@ -90,9 +133,9 @@ function progressTests() {
   const key = Object.keys(sword.stats)[0];
   const r = PROG.enchant(rng, sword, key);
   assert.ok(r && sword.stats[key] === undefined && sword.stats[r.to] > 0, 'encantar cambia una propiedad');
-  const commons = [1, 2, 3].map(() => RULES.makeItem(rng, { ilvl: 4, rarity: 'comun' }));
-  assert.strictEqual(PROG.combine(rng, commons, ['guerrero']).rarity, 'raro', 'tres comunes → un raro');
-  assert.ok(PROG.salvage(RULES.makeItem(rng, { ilvl: 4, rarity: 'epico' })).esencia >= 2, 'desguazar da materiales');
+  const commons = [1, 2, 3].map(() => RULES.makeItem(rng, { ilvl: 4, rarity: 'normal', slot: 'pecho' }));
+  assert.strictEqual(PROG.combine(rng, commons, ['guerrero']).rarity, 'magico', 'tres normales → un mágico');
+  assert.ok(PROG.salvage(RULES.makeItem(rng, { ilvl: 4, rarity: 'raro' })).esencia >= 2, 'desguazar da materiales');
   const b1 = PROG.boardFor(100, 14), b2 = PROG.boardFor(100, 14);
   assert.deepStrictEqual(b1, b2, 'el tablón es igual para todos el mismo día');
   assert.ok(b1.daily.length === 3 && b1.weekly.length === 2);
@@ -297,11 +340,14 @@ async function instanceTests() {
   assert.ok(r.value >= 1 && r.value <= 6 && r.sides === 6);
 
   // Puntos de características: 5 al empezar
-  b.send({ t: 'char:points', alloc: { fue: 3, vit: 2 } });
+  b.send({ t: 'char:points', alloc: { fue: 3, vig: 2 } });
   meB = await b.next((m) => m.t === 'me');
   assert.strictEqual(meB.char.alloc.fue, 3);
   b.send({ t: 'char:points', alloc: { fue: 1 } });
   assert.match((await b.next((m) => m.t === 'error')).text, /puntos/);
+  // tope natural de 20: un enano guerrero con 18 de Vigor no puede subirlo a 21 aunque tuviera puntos
+  const vigRoom = RULES.statRoom({ cls: 'guerrero', look: { species: 'dwarf' }, alloc: { vig: 2 } }, 'vig');
+  assert.strictEqual(vigRoom, 20 - (5 + 4 + 3) - 2, 'hueco hasta 20');
 
   // Tiendas: la bruja vende pociones, Takeshi armas y armaduras, el de la túnica pergaminos y bufos
   b.send({ t: 'shop:open', npc: 'bruja' });
@@ -336,9 +382,12 @@ async function instanceTests() {
   await a.next((m) => m.t === 'trade:end' && /Trato/.test(m.text));
   const meA3 = await a.next((m) => m.t === 'me' && m.bag.some((it) => it.id === shield.id));
   assert.ok(meA3, 'Ana recibe el escudo');
-  // Ana no puede ponerse un escudo (mago); Beto se pone otro objeto
-  a.send({ t: 'inv:equip', id: shield.id });
-  assert.match((await a.next((m) => m.t === 'error')).text, /no sabe usar/);
+  // Requisitos al estilo Diablo 2: Ana (maga, poca Fuerza) no puede con unas placas de élite
+  const elitePlate = RULES.makeItem(RULES.seeded('placas'), { ilvl: 1, rarity: 'normal', slot: 'pecho', base: 'placas', tier: 2 });
+  elitePlate.req = 1; // sólo cuenta la Fuerza
+  store.player(store.hash(tokA)).slots[0].bag.push(elitePlate);
+  a.send({ t: 'inv:equip', id: elitePlate.id });
+  assert.match((await a.next((m) => m.t === 'error')).text, /Fuerza/, 'requisito de Fuerza');
   a.send({ t: 'shop:sell', id: shield.id });
   const sold = await a.next((m) => m.t === 'sold');
   assert.ok(sold.gold > 0);
@@ -410,7 +459,11 @@ async function instanceTests() {
   // Forja, cocina, tablón, fama, habitación, Descenso y duelos (Cris trae materiales de casa)
   const tokC = 'c'.repeat(32);
   const crng = RULES.seeded('cris');
-  store.setPlayer(store.hash(tokC), { xp: RULES.XP_TABLE[6], gold: 5000, char: RULES.newChar('guerrero'), equip: Object.fromEntries(RULES.starterItems('guerrero', crng).map((it) => [it.slot, it])), cons: {}, buffs: {}, mats: { hierro: 30, esencia: 10, polvo: 3, trucha: 2, menta: 1 }, bag: [1, 2, 3, 4].map(() => RULES.makeItem(crng, { ilvl: 3, rarity: 'comun', classes: ['guerrero'] })) });
+  store.setPlayer(store.hash(tokC), { xp: RULES.XP_TABLE[6], gold: 5000, char: RULES.newChar('guerrero'), equip: Object.fromEntries(RULES.starterItems('guerrero', crng).map((it) => [it.slot, it])), cons: {}, buffs: {}, mats: { hierro: 30, esencia: 10, polvo: 3, trucha: 2, menta: 1 }, bag: [1, 2, 3, 4].map(() => RULES.makeItem(crng, { ilvl: 3, rarity: 'normal', slot: 'pecho', classes: ['guerrero'] })) });
+  // su espada es mágica (las normales no tienen propiedades que encantar)
+  const cp = store.player(store.hash(tokC));
+  cp.equip.arma = RULES.makeItem(crng, { ilvl: 5, rarity: 'magico', slot: 'arma', base: 'espada', tier: 0 });
+  cp.equip.arma.stats.fue = cp.equip.arma.stats.fue || 1;
   const c = await client('Cris');
   c.send({ t: 'join', room: SRV, name: 'Cris', look: { cls: 'guerrero' }, token: tokC });
   const wc = await c.next((m) => m.t === 'welcome');
@@ -428,7 +481,7 @@ async function instanceTests() {
   const ids = meC.bag.slice(0, 3).map((it) => it.id);
   c.send({ t: 'forge:combine', ids });
   const cr = await c.next((m) => m.t === 'forge:result');
-  assert.strictEqual(cr.item.rarity, 'raro', 'combinar 3 comunes');
+  assert.strictEqual(cr.item.rarity, 'magico', 'combinar 3 normales');
   meC = await c.next((m) => m.t === 'me' && m.bag.length === 2);
   c.send({ t: 'forge:salvage', ids: [meC.bag[0].id] });
   assert.match((await c.next((m) => m.t === 'forge:result')).text, /Desguazado/);
@@ -485,7 +538,7 @@ async function instanceTests() {
 
   // ----- Pantalla de inicio: cuenta con tres casillas, servidores y «continuar» -----
   const tokD = 'd'.repeat(32);
-  // perfil de la versión anterior con multiclase: pasa a la casilla 1 y la armadura de placas (del paladín) va a la mochila
+  // perfil de la versión anterior con multiclase: pasa a la casilla 1, sin segunda clase y con las reglas nuevas
   const drng = RULES.seeded('dani');
   const plateD = RULES.makeItem(drng, { ilvl: 1, slot: 'pecho', base: 'placas' });
   store.setPlayer(store.hash(tokD), { name: 'Dani', xp: 0, gold: 77, char: { cls: 'mago', cls2: 'paladin', alloc: {}, look: {} }, equip: { pecho: plateD }, bag: [], cons: {}, buffs: {} });
@@ -495,10 +548,20 @@ async function instanceTests() {
   assert.strictEqual(ac.slots.length, 3, 'tres casillas');
   assert.ok(ac.slots[0] && ac.slots[0].name === 'Dani' && !ac.slots[1] && !ac.slots[2], 'el perfil antiguo va a la casilla 1');
   assert.deepStrictEqual(ac.servers.map((x) => x.id), MAP.SERVERS.map((x) => x.id), 'tres servidores');
-  lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Eva', look: { cls: 'picaro', cls2: 'mago' } });
+  // el editor manda raza, sexo, peinado y el reparto de los 5 primeros puntos (el servidor recorta lo que pase de 20)
+  lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Eva', look: { cls: 'picaro', cls2: 'mago', species: 'goblin', sex: 'f', hs: 'capucha', skin: 12, gob: { ears: 2, hair: 4, marks: 3, nose: 99, rings: 'x' } }, alloc: { des: 9, sue: 3 } });
   ac = await lob.next((m) => m.t === 'account');
   assert.strictEqual(ac.created, 1);
   assert.ok(ac.slots[1].name === 'Eva' && ac.slots[1].cls === 'picaro' && ac.slots[1].level === 1, 'personaje nuevo en la casilla 2');
+  assert.ok(ac.slots[1].look.species === 'goblin' && ac.slots[1].look.sex === 'f' && ac.slots[1].look.hs === 'capucha', 'raza, sexo y peinado');
+  const eva = store.player(store.hash(tokD)).slots[1];
+  // rasgos de goblin: se guardan los válidos y los raros vuelven a su valor de partida
+  const gl = ac.slots[1].look.gob;
+  assert.ok(gl && gl.ears === 2 && gl.hair === 4 && gl.marks === 3 && gl.nose === 0 && gl.rings === 0 && gl.build === 1, 'rasgos de goblin guardados y limpios');
+  assert.strictEqual(eva.char.look.gob.ears, 2);
+  assert.strictEqual(MAP.cleanLook({ species: 'human', gob: { ears: 1 } }).gob, undefined, 'solo los goblins llevan rasgos de goblin');
+  assert.deepStrictEqual([eva.char.alloc.des, eva.char.alloc.sue], [5, 0], 'puntos iniciales: como mucho 5 y nunca más de 20 natural');
+  assert.ok(RULES.derive(eva).natural.des <= RULES.STAT_MAX);
   lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Otra', look: {} });
   assert.match((await lob.next((m) => m.t === 'error')).text, /ya tiene/, 'no se pisa una casilla ocupada');
   lob.send({ t: 'char:new', token: tokD, slot: 3, name: 'Cuarta', look: {} });
@@ -535,7 +598,9 @@ async function instanceTests() {
   const wdani = await d1.next((m) => m.t === 'welcome');
   assert.ok(wdani.room === SRV2 && wdani.slot === 0);
   const meD = await d1.next((m) => m.t === 'me');
-  assert.ok(!meD.char.cls2 && !meD.equip.pecho && meD.bag.some((it) => it.id === plateD.id), 'las placas del paladín pasan a la mochila');
+  assert.ok(!meD.char.cls2 && meD.char.cls === 'mago' && meD.equip.pecho.id === plateD.id && meD.equip.pecho.v === RULES.RULES_VERSION, 'sin segunda clase; el equipo se convierte a las reglas nuevas');
+  assert.ok(Object.values(meD.char.alloc).every((v) => v === 0), 'los puntos vuelven para repartirlos');
+  assert.ok(await d1.next((m) => m.t === 'system' && /características han cambiado/.test(m.text)), 'se avisa del cambio de características');
   assert.strictEqual(meD.gold, 77, 'conserva su oro');
   // se mueve en la taberna y sale al mundo; al salir, se recuerda dónde estaba
   d1.send({ t: 'wenter' });
