@@ -51,6 +51,23 @@ test/smoke.js           pruebas de reglas y de red (npm test)
 scripts/lint.js         comprobación de sintaxis (npm run lint)
 ```
 
+## Dónde tocar para… (busca el nombre con grep, no leas el archivo entero)
+- Enemigo nuevo o cambiar sus números: fila en `MONSTERS` (rules/monsters-data.js); su modelo en `ENEMY_GL` + `monsterFeatures` (models.js).
+- Mazmorra/tema nuevo: `THEMES` (monsters-data.js) + colores en view3d.js (`volcan`/`abismo` como ejemplo) + decorado en server/gen.js.
+- Cuánto botín cae: `DROP` y `legChance` en `rollLoot` (engine.js). Poderes legendarios: `LEGENDARY` (engine.js) y su efecto en server/dungeon.js (`p.d.leg`).
+- Clases, razas, habilidades: `CLASSES`, `RACES`, `ABILITIES` (engine.js). Talentos: rules/talents-data.js.
+- Afijos, únicos, conjuntos, pociones: `AFFIXES`, `UNIQUE_NAMES`, `SETS`, `CONSUMABLES` (engine.js).
+- Dificultad de los monstruos por nivel: `monsterAt` (engine.js). Asalto: `RAID` (progress.js).
+- Recompensa diaria, logros, tareas, mejoras de la taberna, temporadas: `LOGIN_REWARDS`, `ACHIEVEMENTS`, `DAILY`, `TAVERN_LEVELS`, `SEASON_PTS` (progress.js).
+- Combate (daño, habilidades, muerte, botín al morir): `damageEnemy`, `tryPending`, `killEnemy`, `hurtPlayer` (server/dungeon.js).
+- Mensajes del cliente al servidor: el `switch (msg.t)` de server.js (`case 'nombre:accion'`).
+- Sonidos y música: `FX` y `TRACKS` (audio.js). Iconos: `P` (icons.js). Novedades: `NEWS` (admin.js).
+- Ventanas: ui.js (ficha, inventario, talentos, tiendas, guía) y ui2.js (pueblo, forja, fama, ajustes, asalto, taberna, mercado).
+
+## Probar
+- Siempre: `npm run lint && npm test` (test/smoke.js arranca el servidor y prueba reglas, red y combate).
+- En el navegador sólo si cambia algo visual: Playwright con Chromium en /opt/pw-browsers (`--use-gl=angle --use-angle=swiftshader`); ver scripts de ejemplo en el scratchpad si existen.
+
 ## No leer (no aportan y gastan contexto)
 `node_modules/`, `package-lock.json`, `data/`, `public/assets/` (modelos .glb), `public/vendor/`, imágenes (`*.png`), `.git/`.
 
