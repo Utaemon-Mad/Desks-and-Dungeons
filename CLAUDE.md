@@ -11,6 +11,9 @@ RPG de taberna multijugador en el navegador, todo en español. En producción en
 ## Estructura
 ```
 server.js               servidor HTTP/WebSocket, cuentas, inventario, tiendas, comercio, forja y reparto de mensajes
+server/web.js           archivos estáticos (gzip, ETag), panel /admin y errores de los navegadores
+server/accounts.js      copias de seguridad firmadas y usuario/contraseña
+server/social.js        hazañas, mejoras de la taberna, mercado, temporadas, recompensa diaria y Asalto semanal
 server/dungeon.js       instancia de mazmorra/mundo/arena: combate, IA, botín, mascotas, puertas
 server/gen.js           generador de mazmorras (salas, puertas, decorado, antorchas)
 server/world.js         mundo abierto y NPC
@@ -23,6 +26,8 @@ public/portada.html     portada de presentación (/portada); guia.pdf es la guí
 public/rules/engine.js  reglas: stats, razas, clases, habilidades, objetos estilo Diablo 2, afijos, botín, monstruos
 public/rules/progress.js forja, misiones, logros, descenso semanal
 public/rules/items-data.js tabla de nombre y aspecto de las 192 armaduras y 156 armas/escudos (4 variantes por nivel)
+public/rules/monsters-data.js tablas de monstruos y temas de mazmorra
+public/rules/talents-data.js árbol de talentos de cada clase
 public/map.js           taberna, servidores, razas y aspecto, rasgos goblin (cleanLook)
 public/dungeon-data.js  tipos de casilla de las mazmorras
 public/models.js        personajes 3D (KayKit), enemigos, animales, muebles
@@ -41,7 +46,7 @@ public/polish.js        fundidos, celebración de nivel y cartel de objeto únic
 public/tutorial.js      tutorial de Alfonso para personajes nuevos
 public/ui.js, ui2.js    ventanas: ficha, inventario, tiendas, forja, guía; ajustes (volumen, tamaño, daltónico, teclas en DD.keys)
 public/sprites.js, dsprites.js  sprites 2D: iconos de objetos y reserva sin 3D
-public/style.css        estilos
+public/css/*.css        estilos por zonas (base, dungeon, windows, start, inventory, extras), en ese orden
 test/smoke.js           pruebas de reglas y de red (npm test)
 scripts/lint.js         comprobación de sintaxis (npm run lint)
 ```
@@ -56,6 +61,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Antes de subir: `npm run lint && npm test`.
 - Rama de trabajo: `claude/social-room-game-ypkkqo`; a la web llega al fusionar con `main`.
 - Commits en español, descriptivos.
+- Los módulos de `server/` (web, accounts, social) reciben en `CTX` lo que necesitan de server.js y devuelven sus funciones.
 - Los archivos de `public/tavern/` comparten nombres a través de `DD.core` (`const C = DD.core`): cada archivo publica al final lo que usan los demás; las variables que cambian de valor se leen como `C.nombre`.
 
 ## Decisiones

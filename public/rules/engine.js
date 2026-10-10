@@ -5,7 +5,10 @@
 (function (root) {
   'use strict';
   // nombre y aspecto de cada base de armadura y de arma (4 variantes por nivel)
-  const ITEMDATA = typeof module !== 'undefined' && module.exports ? require('./items-data.js') : root.ITEMDATA;
+  const node = typeof module !== 'undefined' && module.exports;
+  const ITEMDATA = node ? require('./items-data.js') : root.ITEMDATA;
+  const MONSTERDATA = node ? require('./monsters-data.js') : root.MONSTERDATA;
+  const TALENTDATA = node ? require('./talents-data.js') : root.TALENTDATA;
 
   const MAX_LEVEL = 50;
   const BAG_SIZE = 36;
@@ -858,44 +861,7 @@
   //  Para abrir el escalón n de una rama hay que haber puesto 3·(n−1) puntos en ella.
   //  e: bonificaciones por punto (las mismas claves que el equipo; ab:<habilidad> = % de daño o curación)
   // ======================================================================
-  const T = (id, name, icon, desc, e, max = 3) => ({ id, name, icon, desc, e, max });
-  const TALENTS = {
-    guerrero: [
-      { name: 'Armas', icon: '⚔️', t: [T('g-filo', 'Filo templado', '🗡️', '+5% de daño por punto', { dmgPct: 5 }), T('g-golpe', 'Golpe demoledor', '💥', '+15% de daño de Golpe brutal por punto', { 'ab:golpe': 15 }), T('g-critico', 'Ojo del verdugo', '🎯', '+2% de crítico por punto', { crit: 2 }), T('g-torbellino', 'Tormenta de acero', '🌀', 'Torbellino hace un 50% más de daño', { 'ab:torbellino': 50 }, 1)] },
-      { name: 'Defensa', icon: '🛡️', t: [T('g-vida', 'Aguante', '❤️', '+6% de vida por punto', { hpPct: 6 }), T('g-armadura', 'Piel de hierro', '🪨', '+8% de armadura por punto', { armorPct: 8 }), T('g-res', 'Voluntad férrea', '🔮', '+5% de resistencia mágica por punto', { resAll: 5 }), T('g-muro', 'Muro viviente', '🏰', '+15% de vida y +10% de armadura', { hpPct: 15, armorPct: 10 }, 1)] },
-      { name: 'Furia', icon: '🔥', t: [T('g-rapidez', 'Brazo rápido', '⚡', '+5% de velocidad de ataque por punto', { speed: 5 }), T('g-sangre', 'Sed de batalla', '🩸', '+1% de robo de vida por punto', { lifesteal: 1 }), T('g-carga', 'Embestida', '🐂', '+20% de daño de Carga por punto', { 'ab:carga': 20 }), T('g-berserk', 'Berserker', '😡', '+12% de daño y +10% de velocidad de ataque', { dmgPct: 12, speed: 10 }, 1)] },
-    ],
-    mago: [
-      { name: 'Fuego', icon: '🔥', t: [T('m-llama', 'Llama interior', '🕯️', '+5% de poder de hechizos por punto', { spellPct: 5 }), T('m-bola', 'Bola ardiente', '☄️', '+15% de daño de Bola de fuego por punto', { 'ab:bola': 15 }), T('m-ignicion', 'Ignición', '💥', '+10% de daño crítico por punto', { critDmg: 10 }), T('m-meteoro', 'Lluvia de meteoros', '🌋', 'Meteoro hace un 50% más de daño', { 'ab:meteoro': 50 }, 1)] },
-      { name: 'Escarcha', icon: '❄️', t: [T('m-escarcha', 'Frío glacial', '🧊', '+15% de daño de Nova de escarcha por punto', { 'ab:escarcha': 15 }), T('m-armadura', 'Armadura de hielo', '🛡️', '+10% de armadura por punto', { armorPct: 10 }), T('m-esquiva', 'Paso helado', '💨', '+2% de esquiva por punto', { dodge: 2 }), T('m-ventisca', 'Corazón de invierno', '❄️', '+10% de vida y +10% de resistencia mágica', { hpPct: 10, resAll: 10 }, 1)] },
-      { name: 'Arcano', icon: '🔮', t: [T('m-energia', 'Pozo arcano', '💠', '+10 de energía por punto', { en: 10 }), T('m-regen', 'Mente clara', '🌀', '+1 de energía por segundo por punto', { enRegen: 1 }), T('m-misiles', 'Proyectiles afilados', '✨', '+15% de daño de Proyectiles mágicos por punto', { 'ab:misiles': 15 }), T('m-prisa', 'Prisa arcana', '⏳', '-10% de tiempo de espera de las habilidades', { cdr: 10 }, 1)] },
-    ],
-    explorador: [
-      { name: 'Puntería', icon: '🎯', t: [T('e-ojo', 'Ojo de halcón', '🦅', '+2% de crítico por punto', { crit: 2 }), T('e-letal', 'Disparo letal', '💀', '+10% de daño crítico por punto', { critDmg: 10 }), T('e-perforante', 'Punta de acero', '➶', '+15% de daño de Flecha perforante por punto', { 'ab:perforante': 15 }), T('e-francotirador', 'Francotirador', '🏹', '+15% de daño', { dmgPct: 15 }, 1)] },
-      { name: 'Supervivencia', icon: '🌲', t: [T('e-esquiva', 'Reflejos', '💨', '+2% de esquiva por punto', { dodge: 2 }), T('e-vida', 'Curtido', '❤️', '+5% de vida por punto', { hpPct: 5 }), T('e-paso', 'Paso ligero', '👣', '+5% de velocidad al andar por punto', { move: 5 }), T('e-sombra', 'Fantasma del bosque', '🌫️', '+5% de esquiva y +10% de resistencia mágica', { dodge: 5, resAll: 10 }, 1)] },
-      { name: 'Andanada', icon: '🌧️', t: [T('e-lluvia', 'Cielo de flechas', '🌧️', '+15% de daño de Lluvia de flechas por punto', { 'ab:lluvia': 15 }), T('e-multiple', 'Abanico', '🏹', '+15% de daño de Disparo múltiple por punto', { 'ab:multiple': 15 }), T('e-rapidez', 'Mano rápida', '⚡', '+5% de velocidad de ataque por punto', { speed: 5 }), T('e-tormenta', 'Tormenta de flechas', '⛈️', '+10% de velocidad de ataque y -10% de espera', { speed: 10, cdr: 10 }, 1)] },
-    ],
-    picaro: [
-      { name: 'Asesinato', icon: '🗡️', t: [T('p-critico', 'Punto débil', '🎯', '+2% de crítico por punto', { crit: 2 }), T('p-letal', 'Golpe mortal', '💀', '+12% de daño crítico por punto', { critDmg: 12 }), T('p-punalada', 'Puñalada trapera', '🔪', '+15% de daño de Puñalada por punto', { 'ab:punalada': 15 }), T('p-asesino', 'Asesino', '☠️', '+12% de daño y +4% de crítico', { dmgPct: 12, crit: 4 }, 1)] },
-      { name: 'Venenos', icon: '🧪', t: [T('p-veneno', 'Toxinas', '🐍', '+15% de daño de Hoja envenenada por punto', { 'ab:veneno': 15 }), T('p-abanico', 'Lluvia de cuchillos', '🔪', '+15% de daño de Abanico de cuchillos por punto', { 'ab:abanico': 15 }), T('p-daño', 'Filos untados', '🗡️', '+5% de daño por punto', { dmgPct: 5 }), T('p-plaga', 'Maestro envenenador', '☣️', '+2% de robo de vida y +10% de daño', { lifesteal: 2, dmgPct: 10 }, 1)] },
-      { name: 'Sombras', icon: '🌑', t: [T('p-esquiva', 'Escurridizo', '💨', '+2% de esquiva por punto', { dodge: 2 }), T('p-paso', 'Pies silenciosos', '👣', '+5% de velocidad al andar por punto', { move: 5 }), T('p-sombra', 'Paso sombrío', '🌑', '-5% de espera de las habilidades por punto', { cdr: 5 }), T('p-niebla', 'Uno con la noche', '🌫️', '+6% de esquiva y +10% de velocidad de ataque', { dodge: 6, speed: 10 }, 1)] },
-    ],
-    paladin: [
-      { name: 'Justicia', icon: '⚖️', t: [T('pa-daño', 'Brazo justo', '⚔️', '+5% de daño por punto', { dmgPct: 5 }), T('pa-sagrado', 'Golpe bendito', '☀️', '+15% de daño de Golpe sagrado por punto', { 'ab:sagrado': 15 }), T('pa-critico', 'Juicio certero', '🎯', '+2% de crítico por punto', { crit: 2 }), T('pa-juicio', 'Martillo de los cielos', '🔨', 'Martillo del juicio hace un 50% más de daño', { 'ab:juicio': 50 }, 1)] },
-      { name: 'Protección', icon: '🛡️', t: [T('pa-armadura', 'Fe de acero', '🪨', '+8% de armadura por punto', { armorPct: 8 }), T('pa-vida', 'Corazón noble', '❤️', '+6% de vida por punto', { hpPct: 6 }), T('pa-aura', 'Aura poderosa', '🛡️', '+20% de efecto del Aura de protección por punto', { 'ab:aura': 20 }), T('pa-baluarte', 'Baluarte', '🏰', '+15% de resistencia mágica y +10% de armadura', { resAll: 15, armorPct: 10 }, 1)] },
-      { name: 'Luz', icon: '✨', t: [T('pa-cura', 'Manos sanadoras', '🙌', '+8% de curación por punto', { healPct: 8 }), T('pa-manos', 'Imposición mayor', '💛', '+15% de curación de Imposición de manos por punto', { 'ab:manos': 15 }), T('pa-energia', 'Devoción', '💠', '+8 de energía por punto', { en: 8 }), T('pa-santo', 'Santo', '😇', '+15% de curación y -10% de espera', { healPct: 15, cdr: 10 }, 1)] },
-    ],
-    sacerdote: [
-      { name: 'Sanación', icon: '💚', t: [T('s-cura', 'Toque sanador', '🤲', '+8% de curación por punto', { healPct: 8 }), T('s-curar', 'Curación mayor', '💚', '+15% de curación de Curar heridas por punto', { 'ab:curar': 15 }), T('s-plegaria', 'Coro celestial', '🙏', '+15% de curación de Plegaria de sanación por punto', { 'ab:plegaria': 15 }), T('s-milagro', 'Milagro', '🌟', '+20% de curación', { healPct: 20 }, 1)] },
-      { name: 'Castigo', icon: '🔥', t: [T('s-poder', 'Ira sagrada', '☀️', '+5% de poder de hechizos por punto', { spellPct: 5 }), T('s-llama', 'Llama purificadora', '🔥', '+15% de daño de Llama sagrada por punto', { 'ab:llama': 15 }), T('s-espiritus', 'Espíritus feroces', '👻', '+15% de daño de Espíritus guardianes por punto', { 'ab:espiritus': 15 }), T('s-castigo', 'Castigo divino', '⚡', '+15% de poder de hechizos y +3% de crítico', { spellPct: 15, crit: 3 }, 1)] },
-      { name: 'Disciplina', icon: '📿', t: [T('s-energia', 'Meditación', '💠', '+10 de energía por punto', { en: 10 }), T('s-regen', 'Calma', '🌀', '+1 de energía por segundo por punto', { enRegen: 1 }), T('s-res', 'Fe inquebrantable', '🔮', '+5% de resistencia mágica por punto', { resAll: 5 }), T('s-presteza', 'Presteza', '⏳', '-12% de espera de las habilidades', { cdr: 12 }, 1)] },
-    ],
-    druida: [
-      { name: 'Naturaleza', icon: '🌿', t: [T('d-poder', 'Savia', '🌱', '+5% de poder de hechizos por punto', { spellPct: 5 }), T('d-zarzas', 'Espinas', '🌵', '+15% de daño de Zarzas venenosas por punto', { 'ab:zarzas': 15 }), T('d-raices', 'Raíces profundas', '🌳', '+15% de daño de Raíces del bosque por punto', { 'ab:raices': 15 }), T('d-bosque', 'Ira del bosque', '🌲', '+15% de poder de hechizos', { spellPct: 15 }, 1)] },
-      { name: 'Tormenta', icon: '⛈️', t: [T('d-tormenta', 'Ojo del huracán', '🌪️', '+15% de daño de Tormenta por punto', { 'ab:tormenta': 15 }), T('d-critico', 'Relámpago', '⚡', '+2% de crítico por punto', { crit: 2 }), T('d-trueno', 'Trueno', '🌩️', '+10% de daño crítico por punto', { critDmg: 10 }), T('d-cielo', 'Señor del cielo', '☁️', '-10% de espera y +10% de daño crítico', { cdr: 10, critDmg: 10 }, 1)] },
-      { name: 'Vida', icon: '🍃', t: [T('d-cura', 'Bálsamo', '🍃', '+8% de curación por punto', { healPct: 8 }), T('d-rejuvenecer', 'Florecer', '🌸', '+15% de curación de Rejuvenecer por punto', { 'ab:rejuvenecer': 15 }), T('d-vida', 'Corteza', '🪵', '+6% de vida por punto', { hpPct: 6 }), T('d-arbol', 'Espíritu del roble', '🌳', '+15% de vida y +10% de curación', { hpPct: 15, healPct: 10 }, 1)] },
-    ],
-  };
+  const TALENTS = TALENTDATA;
   const TALENT_BY_ID = {};
   for (const [cls, trees] of Object.entries(TALENTS)) trees.forEach((tr, ti) => tr.t.forEach((tl, i) => { TALENT_BY_ID[tl.id] = { ...tl, cls, tree: ti, tier: i }; }));
   const talentPoints = (level) => Math.max(0, Math.floor((level - 1) / 2));
@@ -1086,73 +1052,10 @@
   // ======================================================================
   // hp/dmg/armor a nivel 1; ms = milisegundos por casilla; atk = ms entre ataques; range > 1 = a distancia (proyectil)
   // ai: melee | ranged | healer | summoner | boss; magic = daño mágico (lo reduce la Resistencia)
-  const MONSTERS = {
-    'goblin-minion':   { name: 'Goblin enclenque', fam: 'goblin', sprite: 'goblin', scale: 0.85, hp: 14, dmg: [1, 3], armor: 1, ms: 330, atk: 1300, xp: 6, gold: [1, 3] },
-    'goblin-warrior':  { name: 'Goblin', fam: 'goblin', sprite: 'goblin', hp: 20, dmg: [2, 4], armor: 2, ms: 330, atk: 1300, xp: 8, gold: [1, 4] },
-    'goblin-archer':   { name: 'Goblin arquero', fam: 'goblin', sprite: 'goblin', weapon: 'bow', hp: 15, dmg: [2, 4], armor: 1, ms: 330, atk: 2100, range: 6, proj: 'arrow', ai: 'ranged', xp: 9, gold: [1, 4] },
-    'goblin-shaman':   { name: 'Chamán goblin', fam: 'goblin', sprite: 'shaman', hp: 18, dmg: [2, 5], armor: 1, ms: 360, atk: 2400, range: 5, proj: 'bolt', magic: true, ai: 'healer', xp: 12, gold: [2, 6] },
-    'hobgoblin-warrior': { name: 'Hobgoblin', fam: 'goblin', sprite: 'hobgoblin', hp: 34, dmg: [3, 6], armor: 5, ms: 340, atk: 1400, xp: 14, gold: [2, 6], minLevel: 2 },
-    'bugbear-warrior': { name: 'Osgo', fam: 'goblin', sprite: 'bugbear', hp: 46, dmg: [4, 8], armor: 3, ms: 320, atk: 1600, xp: 18, gold: [3, 8], minLevel: 3 },
-    'orc':             { name: 'Orco', fam: 'orco', sprite: 'orc', hp: 38, dmg: [3, 7], armor: 4, ms: 330, atk: 1450, xp: 15, gold: [2, 7] },
-    'orc-archer':      { name: 'Orco lanzador', fam: 'orco', sprite: 'orc', weapon: 'spear', tint: '#6a5a3a', hp: 28, dmg: [3, 6], armor: 2, ms: 340, atk: 2200, range: 6, proj: 'javelin', ai: 'ranged', xp: 15, gold: [2, 7] },
-    'orc-shaman':      { name: 'Chamán orco', fam: 'orco', sprite: 'warchief', scale: 0.9, tint: '#3a5a8a', hp: 30, dmg: [3, 6], armor: 2, ms: 360, atk: 2400, range: 5, proj: 'bolt', magic: true, ai: 'healer', xp: 18, gold: [3, 9], minLevel: 2 },
-    'orc-war-chief':   { name: 'Jefe de guerra orco', fam: 'orco', sprite: 'warchief', hp: 110, dmg: [6, 11], armor: 7, ms: 330, atk: 1500, xp: 60, gold: [15, 30] },
-    'ogre':            { name: 'Ogro', fam: 'orco', sprite: 'ogre', hp: 105, dmg: [7, 12], armor: 4, ms: 430, atk: 1900, xp: 40, gold: [6, 14], minLevel: 4 },
-    'troll':           { name: 'Trol', fam: 'orco', sprite: 'troll', hp: 95, dmg: [5, 10], armor: 3, ms: 360, atk: 1500, regen: 2, xp: 45, gold: [6, 14], minLevel: 6 },
-    'skeleton':        { name: 'Esqueleto', fam: 'muerto', sprite: 'skeleton', hp: 22, dmg: [2, 5], armor: 3, ms: 340, atk: 1400, xp: 8, gold: [1, 4], undead: true },
-    'skeleton-archer': { name: 'Esqueleto arquero', fam: 'muerto', sprite: 'skeleton', weapon: 'bow', tint: '#5a5040', hp: 16, dmg: [2, 4], armor: 2, ms: 340, atk: 2100, range: 6, proj: 'arrow', ai: 'ranged', xp: 9, gold: [1, 4], undead: true },
-    'zombi-hinchado':  { name: 'Zombi hinchado', fam: 'muerto', sprite: 'zombie', bloated: true, scale: 1.1, hp: 52, dmg: [3, 6], armor: 1, ms: 560, atk: 1700, xp: 14, gold: [2, 5], undead: true, explode: true, minLevel: 2 },
-    'zombie':          { name: 'Zombi', fam: 'muerto', sprite: 'zombie', hp: 38, dmg: [3, 5], armor: 1, ms: 500, atk: 1600, xp: 9, gold: [1, 4], undead: true },
-    'ghoul':           { name: 'Necrófago', fam: 'muerto', sprite: 'ghoul', hp: 30, dmg: [3, 6], armor: 2, ms: 270, atk: 1300, xp: 12, gold: [2, 5], undead: true, minLevel: 2 },
-    'specter':         { name: 'Espectro', fam: 'muerto', sprite: 'specter', hp: 26, dmg: [3, 6], armor: 0, ms: 290, atk: 1500, magic: true, xp: 14, gold: [2, 6], undead: true, minLevel: 2 },
-    'wight':           { name: 'Tumulario', fam: 'muerto', sprite: 'wight', hp: 44, dmg: [4, 7], armor: 4, ms: 340, atk: 1450, xp: 18, gold: [3, 8], undead: true, minLevel: 3 },
-    'mummy':           { name: 'Momia', fam: 'muerto', sprite: 'mummy', hp: 70, dmg: [5, 9], armor: 3, ms: 460, atk: 1700, xp: 24, gold: [4, 10], undead: true, minLevel: 4 },
-    'necromancer':     { name: 'Nigromante', fam: 'muerto', sprite: 'necromancer', hp: 48, dmg: [4, 8], armor: 2, ms: 380, atk: 2300, range: 6, proj: 'necro', magic: true, ai: 'summoner', summons: 'skeleton', xp: 40, gold: [8, 18], minLevel: 5 },
-    'wolf':            { name: 'Lobo', fam: 'bestia', sprite: 'wolf', hp: 18, dmg: [2, 4], armor: 1, ms: 230, atk: 1200, xp: 7, gold: [0, 2] },
-    'dire-wolf':       { name: 'Huargo', fam: 'bestia', sprite: 'wolf', scale: 1.25, tint: '#4a4a52', hp: 40, dmg: [4, 7], armor: 2, ms: 230, atk: 1300, xp: 16, gold: [1, 4], minLevel: 3 },
-    'giant-spider':    { name: 'Araña gigante', fam: 'bestia', sprite: 'spider', hp: 24, dmg: [2, 5], armor: 2, ms: 260, atk: 1300, poison: true, xp: 10, gold: [1, 3] },
-    'brown-bear':      { name: 'Oso pardo', fam: 'bestia', sprite: 'bear', hp: 60, dmg: [4, 8], armor: 3, ms: 320, atk: 1600, xp: 22, gold: [2, 6], minLevel: 2 },
-    'owlbear':         { name: 'Osolechuza', fam: 'bestia', sprite: 'owlbear', hp: 115, dmg: [6, 11], armor: 4, ms: 330, atk: 1600, xp: 50, gold: [8, 16], minLevel: 5 },
-    'bandit':          { name: 'Bandido', fam: 'humano', sprite: 'hero:picaro', hp: 24, dmg: [2, 5], armor: 2, ms: 310, atk: 1300, xp: 9, gold: [3, 8] },
-    'bandit-archer':   { name: 'Bandido arquero', fam: 'humano', sprite: 'hero:explorador', hp: 18, dmg: [2, 5], armor: 1, ms: 310, atk: 2000, range: 6, proj: 'arrow', ai: 'ranged', xp: 10, gold: [3, 8] },
-    'bandit-captain':  { name: 'Capitán bandido', fam: 'humano', sprite: 'hero:guerrero', hp: 70, dmg: [5, 9], armor: 5, ms: 310, atk: 1400, xp: 30, gold: [12, 25] },
-    'cultist':         { name: 'Sectario', fam: 'humano', sprite: 'hero:mago', hp: 22, dmg: [3, 6], armor: 1, ms: 330, atk: 2200, range: 5, proj: 'fire', magic: true, ai: 'ranged', xp: 11, gold: [3, 8] },
-    'kobold':          { name: 'Kóbold', fam: 'dragon', sprite: 'goblin', tint: '#a0402a', scale: 0.8, hp: 14, dmg: [2, 4], armor: 2, ms: 280, atk: 1200, xp: 7, gold: [1, 4] },
-    // Mundo abierto: ciénaga, yermo, picos y erial
-    'ahogado':         { name: 'Ahogado', fam: 'muerto', sprite: 'zombie', tint: '#3a6a6a', hp: 42, dmg: [3, 6], armor: 2, ms: 460, atk: 1500, xp: 11, gold: [1, 5], undead: true },
-    'hombre-lagarto':  { name: 'Hombre lagarto', fam: 'bestia', sprite: 'hobgoblin', tint: '#3a7a3a', hp: 36, dmg: [3, 6], armor: 4, ms: 320, atk: 1350, xp: 13, gold: [2, 6] },
-    'escorpion':       { name: 'Escorpión gigante', fam: 'bestia', sprite: 'spider', tint: '#a8642a', scale: 1.2, hp: 40, dmg: [3, 7], armor: 6, ms: 280, atk: 1300, poison: true, xp: 14, gold: [1, 4] },
-    'bandido-desierto': { name: 'Saqueador del desierto', fam: 'humano', sprite: 'hero:picaro', hp: 30, dmg: [3, 6], armor: 3, ms: 300, atk: 1300, xp: 13, gold: [4, 10] },
-    'lobo-escarcha':   { name: 'Lobo de escarcha', fam: 'bestia', sprite: 'wolf', tint: '#b8d0e8', scale: 1.1, hp: 34, dmg: [3, 6], armor: 3, ms: 220, atk: 1200, xp: 13, gold: [1, 4] },
-    'yeti':            { name: 'Yeti', fam: 'bestia', sprite: 'owlbear', tint: '#e8eef4', hp: 90, dmg: [6, 10], armor: 4, ms: 340, atk: 1600, xp: 32, gold: [4, 10] },
-    'troll-hielo':     { name: 'Trol de hielo', fam: 'orco', sprite: 'troll', tint: '#8ab0d8', hp: 100, dmg: [5, 10], armor: 5, ms: 360, atk: 1500, regen: 2, xp: 40, gold: [5, 12] },
-    'elemental-fuego': { name: 'Elemental de fuego', fam: 'dragon', sprite: 'specter', tint: '#ff6a1a', hp: 40, dmg: [4, 8], armor: 2, ms: 300, atk: 2000, range: 5, proj: 'fire', magic: true, ai: 'ranged', xp: 18, gold: [2, 6] },
-    // Abismo infernal: diablillos, canes del infierno, gárgolas y demonios
-    'diablillo':       { name: 'Diablillo', fam: 'demonio', sprite: 'imp', scale: 0.62, hp: 15, dmg: [2, 4], armor: 1, ms: 240, atk: 1800, range: 5, proj: 'fire', magic: true, ai: 'ranged', xp: 8, gold: [1, 4] },
-    'can-infernal':    { name: 'Can infernal', fam: 'demonio', sprite: 'hellhound', tint: '#3a1410', eyes: '#ff5a1a', scale: 1.15, hp: 30, dmg: [3, 6], armor: 2, ms: 210, atk: 1200, xp: 12, gold: [1, 3], minLevel: 2 },
-    'gargola':         { name: 'Gárgola', fam: 'demonio', sprite: 'gargoyle', scale: 1.05, hp: 52, dmg: [4, 7], armor: 9, ms: 360, atk: 1500, xp: 20, gold: [3, 8], minLevel: 3 },
-    'brujo-infernal':  { name: 'Brujo del abismo', fam: 'demonio', sprite: 'hero:mago', tint: '#3a0808', hp: 40, dmg: [4, 7], armor: 2, ms: 360, atk: 2300, range: 6, proj: 'fire', magic: true, ai: 'summoner', summons: 'diablillo', xp: 34, gold: [6, 14], minLevel: 3 },
-    'demonio':         { name: 'Demonio', fam: 'demonio', sprite: 'demon', scale: 1.3, hp: 80, dmg: [6, 10], armor: 5, ms: 320, atk: 1500, xp: 32, gold: [5, 12], minLevel: 4 },
-    'rufo':            { name: 'Rufo, el jefe bandido', fam: 'humano', sprite: 'hero:guerrero', scale: 1.3, boss: true, hp: 180, dmg: [4, 7], armor: 4, ms: 320, atk: 1400, xp: 70, gold: [30, 50], specials: ['charge', 'summon'], summons: 'bandit', sets: ['picaro', 'explorador'] },
-    'huargo-alfa':     { name: 'El Huargo Alfa', fam: 'bestia', sprite: 'wolf', tint: '#3a3a42', scale: 1.7, boss: true, hp: 260, dmg: [5, 9], armor: 4, ms: 230, atk: 1300, xp: 110, gold: [40, 70], specials: ['slam', 'summon'], summons: 'wolf', sets: ['explorador', 'guerrero'] },
-    'bruja-pantano':   { name: 'Ortiga, la Bruja del Pantano', fam: 'muerto', sprite: 'necromancer', tint: '#3a8a3a', scale: 1.35, boss: true, hp: 280, dmg: [5, 9], armor: 3, ms: 360, atk: 1900, range: 6, proj: 'bolt', magic: true, xp: 140, gold: [50, 90], specials: ['nova', 'summon', 'volley'], summons: 'ahogado', sets: ['druida', 'mago', 'sacerdote'] },
-    'rey-escorpion':   { name: 'El Rey Escorpión', fam: 'bestia', sprite: 'spider', tint: '#d8a030', scale: 2.3, boss: true, hp: 340, dmg: [6, 11], armor: 8, ms: 280, atk: 1300, poison: true, xp: 170, gold: [60, 110], specials: ['slam', 'summon', 'volley'], summons: 'escorpion', sets: ['picaro', 'guerrero', 'paladin'] },
-    'gigante-escarcha': { name: 'El Gigante de Escarcha', fam: 'orco', sprite: 'ogre', tint: '#9ac0e8', scale: 1.8, boss: true, hp: 420, dmg: [8, 13], armor: 8, ms: 420, atk: 1800, xp: 210, gold: [80, 130], specials: ['slam', 'nova', 'charge'], sets: ['guerrero', 'paladin', 'sacerdote'] },
-    // Jefes de mazmorra: botín de conjuntos de varias clases
-    'rey-goblin':      { name: 'Grubnak, el Rey Goblin', fam: 'goblin', sprite: 'shaman', scale: 1.55, tint: '#c8a030', boss: true, hp: 240, dmg: [4, 8], armor: 5, ms: 340, atk: 1400, xp: 90, gold: [40, 70], specials: ['slam', 'summon'], summons: 'goblin-warrior', sets: ['explorador', 'picaro', 'guerrero'] },
-    'gorthak':         { name: 'Gorthak, Señor de la Guerra', fam: 'orco', sprite: 'warchief', scale: 1.45, boss: true, hp: 320, dmg: [6, 11], armor: 7, ms: 330, atk: 1500, xp: 120, gold: [50, 90], specials: ['slam', 'charge', 'summon'], summons: 'orc', sets: ['guerrero', 'paladin', 'sacerdote'] },
-    'lich':            { name: 'Malakar, el Liche', fam: 'muerto', sprite: 'lich', scale: 1.4, boss: true, hp: 260, dmg: [5, 9], armor: 4, ms: 380, atk: 1900, range: 6, proj: 'necro', magic: true, xp: 120, gold: [50, 90], undead: true, specials: ['nova', 'volley', 'summon'], summons: 'skeleton', sets: ['mago', 'druida', 'sacerdote'] },
-    'reina-arana':     { name: 'Arakhna, la Reina Araña', fam: 'bestia', sprite: 'spider', scale: 2, tint: '#5a2a6a', boss: true, hp: 280, dmg: [5, 10], armor: 5, ms: 280, atk: 1300, poison: true, xp: 110, gold: [45, 80], specials: ['volley', 'summon', 'slam'], summons: 'giant-spider', sets: ['picaro', 'explorador', 'druida'] },
-    // jefes de mundo (aparecen en el mundo abierto cada cierto tiempo; mucha vida, para pelear en grupo)
-    'coloso-runas':    { name: 'El Coloso de las Runas', fam: 'orco', sprite: 'ogre', tint: '#7a8aa8', scale: 2.3, boss: true, world: true, hp: 900, dmg: [7, 12], armor: 10, ms: 430, atk: 1800, xp: 500, gold: [150, 260], specials: ['slam', 'nova', 'charge'], sets: CLASS_IDS },
-    'nyxara':          { name: 'Nyxara, Dragona de las Sombras', fam: 'dragon', sprite: 'dragon', tint: '#3a2a7a', scale: 1.7, boss: true, world: true, hp: 820, dmg: [7, 12], armor: 8, ms: 360, atk: 1600, xp: 520, gold: [160, 280], specials: ['breath', 'nova', 'summon'], summons: 'specter', sets: CLASS_IDS },
-    'rey-espectral':   { name: 'El Rey Espectral', fam: 'muerto', sprite: 'lich', tint: '#2a6aff', scale: 2, boss: true, world: true, hp: 760, dmg: [6, 11], armor: 6, ms: 380, atk: 1800, range: 6, proj: 'necro', magic: true, undead: true, xp: 500, gold: [150, 260], specials: ['nova', 'volley', 'summon'], summons: 'wight', sets: CLASS_IDS },
-    'behemot':         { name: 'Behemot del Bosque Viejo', fam: 'bestia', sprite: 'bear', tint: '#2e4a1e', scale: 2.4, boss: true, world: true, hp: 950, dmg: [7, 13], armor: 9, ms: 300, atk: 1500, xp: 520, gold: [150, 260], specials: ['slam', 'charge', 'summon'], summons: 'dire-wolf', sets: CLASS_IDS },
-    'azaroth':         { name: 'Azaroth, Señor del Abismo', fam: 'demonio', sprite: 'demon', scale: 1.85, boss: true, hp: 360, dmg: [6, 11], armor: 7, ms: 330, atk: 1500, xp: 150, gold: [60, 110], specials: ['slam', 'nova', 'summon'], summons: 'diablillo', sets: ['mago', 'picaro', 'paladin'] },
-    'young-red-dragon': { name: 'Ignaroth, el Dragón Rojo', fam: 'dragon', sprite: 'dragon', scale: 1.3, boss: true, hp: 400, dmg: [7, 12], armor: 8, ms: 360, atk: 1600, xp: 160, gold: [80, 140], specials: ['breath', 'slam', 'summon'], summons: 'kobold', sets: CLASS_IDS },
-  };
-  // Claves de versiones anteriores
-  const LEGACY_MONSTER = { 'goblin-boss': 'goblin-shaman', goblin: 'goblin-warrior', shaman: 'goblin-shaman', warchief: 'orc-war-chief', ghast: 'ghoul', 'ogre-zombie': 'zombie', wraith: 'specter', 'hobgoblin-captain': 'hobgoblin-warrior' };
+  const MONSTERS = MONSTERDATA.MONSTERS;
+  // los jefes de mundo sueltan piezas de conjunto de todas las clases
+  for (const M of Object.values(MONSTERS)) if (M.sets === 'todas') M.sets = CLASS_IDS;
+  const LEGACY_MONSTER = MONSTERDATA.LEGACY_MONSTER;
 
   // Estadísticas de un monstruo a un nivel (élite: más vida, daño y botín)
   function monsterAt(k, level, elite) {
@@ -1174,14 +1077,7 @@
   }
 
   // Temas de las mazmorras aleatorias
-  const THEMES = {
-    cuevas:    { name: 'Cuevas goblin', icon: '🪓', mobs: ['goblin-warrior', 'goblin-warrior', 'goblin-minion', 'goblin-archer', 'goblin-archer', 'goblin-shaman', 'hobgoblin-warrior', 'bugbear-warrior', 'wolf'], boss: 'rey-goblin', names: ['Madriguera', 'Cuevas', 'Túneles', 'Guarida'], of: ['de los Dientes Rotos', 'del Rey Goblin', 'de la Oreja Cortada', 'del Hongo Negro'] },
-    cripta:    { name: 'Cripta de los no muertos', icon: '💀', mobs: ['skeleton', 'skeleton', 'skeleton-archer', 'zombie', 'zombie', 'zombie', 'zombi-hinchado', 'ghoul', 'specter', 'wight', 'mummy', 'necromancer'], boss: 'lich', names: ['Cripta', 'Catacumbas', 'Osario', 'Mausoleo'], of: ['del Liche', 'de los Olvidados', 'de la Plaga', 'del Último Rezo'] },
-    fortaleza: { name: 'Fortaleza orca', icon: '🏰', mobs: ['orc', 'orc', 'orc-archer', 'orc-shaman', 'hobgoblin-warrior', 'ogre', 'troll'], boss: 'gorthak', names: ['Fortaleza', 'Bastión', 'Fuerte', 'Ciudadela'], of: ['de la Mano Roja', 'de Gorthak', 'del Cráneo Partido', 'de Hierro Negro'] },
-    nido:      { name: 'Nido de bestias', icon: '🕷️', mobs: ['giant-spider', 'giant-spider', 'wolf', 'wolf', 'dire-wolf', 'brown-bear', 'owlbear'], boss: 'reina-arana', names: ['Nido', 'Cubil', 'Madriguera', 'Bosque Hueco'], of: ['de la Reina Araña', 'de las Mil Patas', 'de la Seda Negra'] },
-    volcan:    { name: 'Guarida del dragón', icon: '🐉', mobs: ['kobold', 'kobold', 'cultist', 'cultist', 'bandit', 'bandit-archer', 'ogre'], boss: 'young-red-dragon', names: ['Guarida', 'Forja', 'Caldera', 'Templo'], of: ['de Ignaroth', 'de Ceniza', 'de la Llama Eterna'] },
-    abismo:    { name: 'Abismo infernal', icon: '😈', mobs: ['diablillo', 'diablillo', 'diablillo', 'can-infernal', 'can-infernal', 'gargola', 'brujo-infernal', 'demonio', 'zombie'], boss: 'azaroth', names: ['Abismo', 'Sima', 'Fosa', 'Puerta'], of: ['de Azaroth', 'del Fuego Negro', 'de los Condenados', 'del Averno'] },
-  };
+  const THEMES = MONSTERDATA.THEMES;
 
   // ======================================================================
   //  Mascotas (desde nivel 5) y monturas (desde nivel 12)

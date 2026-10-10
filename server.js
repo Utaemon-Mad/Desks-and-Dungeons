@@ -29,21 +29,6 @@ const SHOP_REFRESH_MS = 10 * 60 * 1000;
 const store = createStore();
 const rnd = () => crypto.randomInt(0, 1e9) / 1e9;
 
-const MIME = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'text/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.json': 'application/json; charset=utf-8',
-  '.md': 'text/markdown; charset=utf-8',
-  '.png': 'image/png',
-  '.jpg': 'image/jpeg',
-  '.pdf': 'application/pdf',
-  '.ico': 'image/x-icon',
-  '.glb': 'model/gltf-binary',
-  '.txt': 'text/plain; charset=utf-8',
-  '.webmanifest': 'application/manifest+json; charset=utf-8',
-};
 
 const server = http.createServer((req, res) => {
   let urlPath;
@@ -62,65 +47,6 @@ const server = http.createServer((req, res) => {
   sendStatic(req, res, file);
 });
 
-// Panel de administración (solo con ADMIN_KEY en el entorno): gente conectada y errores de los navegadores
-const ADMIN_KEY = process.env.ADMIN_KEY || '';
-const esc = (t) => String(t == null ? '' : t).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-function adminPage(req, res) {
-  const key = new URL(req.url, 'http://x').searchParams.get('key') || '';
-  const ok = ADMIN_KEY && key.length === ADMIN_KEY.length && crypto.timingSafeEqual(Buffer.from(key), Buffer.from(ADMIN_KEY));
-  if (!ok) { res.writeHead(404); return res.end(); }
-  const errors = (store.meta('clientErrors') || []).slice().reverse();
-  const online = [...rooms.values()].map((r) => `<li><b>${esc(serverName(r.name))}</b>: ${[...r.users.values()].map((u) => esc(u.name) + (u.where ? ` <i>(${esc(u.where.name)})</i>` : '')).join(', ') || 'nadie'}${r.motd ? ` · 📌 ${esc(r.motd)}` : ''}</li>`).join('');
-  const rows = errors.map((e) => `<tr><td>${new Date(e.ts).toLocaleString('es-ES')}</td><td>${esc(e.who)}</td><td>${esc(e.msg)}</td><td>${esc(e.src)}:${e.line || ''}</td><td><small>${esc(e.ua)}</small></td></tr>`).join('');
-  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
-  res.end(`<!doctype html><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Administración · Desks & Dungeons</title>
-<style>body{font:14px system-ui,sans-serif;background:#1c120c;color:#f3e6c8;margin:20px}h1{color:#e2493a}table{border-collapse:collapse;width:100%}td,th{border-bottom:1px solid #4a3020;padding:4px 6px;text-align:left;vertical-align:top}th{color:#e0a93a}i{color:#b99a72}</style>
-<h1>Desks & Dungeons · administración</h1><p>Arrancado: ${new Date(Date.now() - process.uptime() * 1000).toLocaleString('es-ES')} · memoria ${Math.round(process.memoryUsage().rss / 1048576)} MB</p>
-<h2>Conectados</h2><ul>${online || '<li>Nadie conectado</li>'}</ul>
-<h2>Errores en los navegadores (${errors.length})</h2><table><tr><th>Cuándo</th><th>Quién</th><th>Error</th><th>Dónde</th><th>Navegador</th></tr>${rows || '<tr><td colspan=5>Sin errores 🎉</td></tr>'}</table>`);
-}
-function logClientError(user, msg) {
-  const list = store.meta('clientErrors') || [];
-  list.push({ ts: Date.now(), who: user ? user.name : '?', msg: cleanText(String(msg.msg || ''), 300), src: cleanText(String(msg.src || ''), 120), line: Number(msg.line) || 0, ua: cleanText(String(msg.ua || ''), 120) });
-  while (list.length > 200) list.shift();
-  store.setMeta('clientErrors', list);
-  console.warn('[navegador]', user ? user.name : '?', msg.msg, msg.src, msg.line);
-}
-
-// Archivos estáticos comprimidos (gzip) y con ETag: la primera visita baja todo comprimido y las siguientes
-// sólo preguntan si ha cambiado (304). Los modelos 3D y Three.js casi nunca cambian: se guardan un día.
-const staticCache = new Map(); // ruta -> { mtime, etag, raw, gz }
-const COMPRESS = new Set(['.html', '.js', '.css', '.json', '.svg', '.md', '.txt', '.webmanifest', '.glb']);
-function sendStatic(req, res, file) {
-  fs.stat(file, (err, st) => {
-    if (err || !st.isFile()) { res.writeHead(404); return res.end('No encontrado'); }
-    const ext = path.extname(file);
-    const hit = staticCache.get(file);
-    const ready = (c) => {
-      const headers = {
-        'Content-Type': MIME[ext] || 'application/octet-stream',
-        ETag: c.etag,
-        'Cache-Control': /[\\/](assets|vendor)[\\/]/.test(file) ? 'public, max-age=86400' : 'no-cache',
-        Vary: 'Accept-Encoding',
-      };
-      if (req.headers['if-none-match'] === c.etag) { res.writeHead(304, headers); return res.end(); }
-      const gzipOk = c.gz && /\bgzip\b/.test(req.headers['accept-encoding'] || '');
-      if (gzipOk) headers['Content-Encoding'] = 'gzip';
-      const body = gzipOk ? c.gz : c.raw;
-      headers['Content-Length'] = body.length;
-      res.writeHead(200, headers);
-      res.end(req.method === 'HEAD' ? undefined : body);
-    };
-    if (hit && hit.mtime === st.mtimeMs) return ready(hit);
-    fs.readFile(file, (err2, raw) => {
-      if (err2) { res.writeHead(404); return res.end('No encontrado'); }
-      const c = { mtime: st.mtimeMs, etag: '"' + crypto.createHash('sha1').update(raw).digest('base64').slice(0, 16) + '"', raw, gz: null };
-      if (COMPRESS.has(ext) && raw.length > 1024) c.gz = zlib.gzipSync(raw, { level: 6 });
-      staticCache.set(file, c);
-      ready(c);
-    });
-  });
-}
 
 // ---------- Salas ----------
 const rooms = new Map(); // nombre -> { name, users: Map<id, user>, history: [], map, instances: Map }
@@ -240,54 +166,6 @@ function accountInfo(a, pid, extra) {
 // Copia de seguridad firmada de la cuenta, que guarda el navegador del jugador. Si el servidor se reinicia y pierde
 // los datos (Render gratis no guarda el disco), el navegador la devuelve al entrar y se restaura. La firma (HMAC)
 // impide editarla. Para más seguridad, define SAVE_SECRET en el servidor.
-const SAVE_SECRET = process.env.SAVE_SECRET || 'desks-and-dungeons:copia-de-seguridad';
-const backupSig = (pid, d) => crypto.createHmac('sha256', SAVE_SECRET).update(pid + '.' + d).digest('base64url');
-function makeBackup(pid) {
-  const a = store.player(pid);
-  if (!a) return null;
-  const d = zlib.gzipSync(JSON.stringify(a)).toString('base64');
-  return { pid, d, sig: backupSig(pid, d) };
-}
-// Sólo se restaura si el servidor no tiene esa cuenta (nunca pisa datos más nuevos)
-function restoreBackup(pid, b) {
-  if (!pid || store.player(pid) || !b || typeof b !== 'object' || b.pid !== pid || typeof b.d !== 'string' || typeof b.sig !== 'string' || b.d.length > 240000) return false;
-  const want = Buffer.from(backupSig(pid, b.d)), got = Buffer.from(b.sig);
-  if (want.length !== got.length || !crypto.timingSafeEqual(want, got)) return false;
-  let a;
-  try { a = JSON.parse(zlib.gunzipSync(Buffer.from(b.d, 'base64')).toString()); } catch { return false; }
-  if (!a || !Array.isArray(a.slots)) return false;
-  store.setPlayer(pid, a);
-  if (a.login && a.login.user) indexLogin(a.login.user, pid);
-  console.log('Cuenta restaurada desde la copia del navegador');
-  return true;
-}
-
-// ---------- Usuario y contraseña ----------
-// La cuenta sigue siendo la «llave» (token) del navegador. Al poner usuario y contraseña, la llave se guarda
-// cifrada en la propia cuenta; al entrar desde otro dispositivo con la contraseña, el servidor se la devuelve.
-const AUTH_KEY = crypto.createHash('sha256').update('dd-auth:' + SAVE_SECRET).digest();
-function sealToken(t) {
-  const iv = crypto.randomBytes(12), c = crypto.createCipheriv('aes-256-gcm', AUTH_KEY, iv);
-  const enc = Buffer.concat([c.update(t, 'utf8'), c.final()]);
-  return Buffer.concat([iv, c.getAuthTag(), enc]).toString('base64');
-}
-function openToken(s) {
-  try {
-    const b = Buffer.from(s, 'base64'), d = crypto.createDecipheriv('aes-256-gcm', AUTH_KEY, b.subarray(0, 12));
-    d.setAuthTag(b.subarray(12, 28));
-    return Buffer.concat([d.update(b.subarray(28)), d.final()]).toString('utf8');
-  } catch { return null; }
-}
-const passHash = (pass, salt) => crypto.scryptSync(pass, salt, 32, { N: 16384, r: 8, p: 1 }).toString('hex');
-const cleanUser = (u) => (typeof u === 'string' ? u.trim().toLowerCase() : '');
-const USER_RE = /^[a-z0-9ñ_.-]{3,20}$/;
-const loginFails = new Map(); // usuario -> { n, until }
-function indexLogin(user, pid) {
-  const ix = store.meta('logins') || {};
-  if (ix[user] !== pid) { ix[user] = pid; store.setMeta('logins', ix); }
-}
-// al arrancar, el índice se rehace con las cuentas guardadas
-for (const [pid, a] of Object.entries(store.players())) if (a && a.login && a.login.user) indexLogin(a.login.user, pid);
 
 // Cambia el nombre de un servidor: sólo su dueño (si aún no tiene, quien lo renombra pasa a serlo)
 function renameServer(pid, id, name) {
@@ -713,87 +591,6 @@ function checkAchievements(room, user) {
   return got;
 }
 
-// ---------- Hazañas de la taberna (lo último que ha pasado) ----------
-function feat(room, text) {
-  const key = 'feats:' + room.name;
-  const list = store.meta(key) || [];
-  list.unshift({ ts: Date.now(), text });
-  store.setMeta(key, list.slice(0, 25));
-}
-function tavernView(room, user) {
-  const f = room.fund || { gold: 0, donors: {} };
-  const donors = Object.values(f.donors || {}).sort((a, b) => b.gold - a.gold).slice(0, 8);
-  return { t: 'tavern:info', gold: f.gold, level: PROG.tavernLevel(f), bonus: PROG.tavernBonus(f), donors, feats: store.meta('feats:' + room.name) || [], mine: ((f.donors || {})[user.cid] || {}).gold || 0 };
-}
-function donate(room, user, amount) {
-  const n = Math.max(1, Math.min(user.profile.gold, Math.floor(Number(amount) || 0)));
-  if (!n || user.profile.gold < n) return false;
-  const before = PROG.tavernLevel(room.fund);
-  user.profile.gold -= n;
-  room.fund = room.fund || { gold: 0, donors: {} };
-  room.fund.donors = room.fund.donors || {};
-  room.fund.gold += n;
-  const d = room.fund.donors[user.cid] || { name: user.name, gold: 0 };
-  d.name = user.name; d.gold += n; room.fund.donors[user.cid] = d;
-  saveRoom(room); saveUser(user); sendMe(user);
-  broadcast(room, { t: 'profile', id: user.id, xp: user.profile.xp, gold: user.profile.gold, level: levelOf(user) });
-  const after = PROG.tavernLevel(room.fund);
-  if (after > before) {
-    const L = PROG.TAVERN_LEVELS[after - 1];
-    system(room, `🎉 ¡La taberna mejora! ${L.icon} ${L.name}: ${L.text} para todos los que jueguen aquí.`);
-    feat(room, `${L.icon} La taberna consigue «${L.name}» gracias a todos.`);
-  }
-  return true;
-}
-
-// ---------- Mercado entre jugadores (común a todos los servidores) ----------
-function marketList() { return store.meta('market') || []; }
-function marketView(user) { return { t: 'market', list: marketList().map((l) => ({ id: l.id, item: l.item, price: l.price, seller: l.sellerName, mine: l.cid === user.cid })), fee: PROG.MARKET.fee }; }
-function payOffline(cid, pid, slot, gold) {
-  // si el vendedor está conectado, el oro le llega al momento; si no, se le apunta en su cuenta guardada
-  for (const r of rooms.values()) for (const u of r.users.values()) if (u.cid === cid) { u.profile.gold += gold; saveUser(u); sendMe(u); send(u.ws, { t: 'toast', text: `🏪 Has vendido algo en el mercado: +${gold} 🪙` }); return; }
-  const acc = store.player(pid);
-  if (acc && acc.slots && acc.slots[slot]) { acc.slots[slot].gold = (acc.slots[slot].gold || 0) + gold; acc.slots[slot].marketNews = (acc.slots[slot].marketNews || 0) + gold; store.setPlayer(pid, acc); }
-}
-
-// ---------- Temporadas ----------
-function seasonAdd(user, pts) {
-  if (!pts) return;
-  const key = 'season:' + PROG.seasonKey();
-  const all = store.meta(key) || {};
-  const cur = all[user.cid] || { name: user.name, pts: 0, cls: user.profile.char.cls };
-  cur.name = user.name; cur.cls = user.profile.char.cls;
-  cur.pts = Math.round((cur.pts + pts) * 10) / 10;
-  all[user.cid] = cur;
-  store.setMeta(key, all);
-}
-function seasonView(user) {
-  const sk = PROG.seasonKey();
-  const rows = Object.entries(store.meta('season:' + sk) || {}).map(([cid, r]) => ({ ...r, pts: Math.floor(r.pts), me: cid === user.cid })).sort((a, b) => b.pts - a.pts);
-  rows.forEach((r, i) => { r.pos = i + 1; });
-  const mine = rows.find((r) => r.me) || null;
-  const last = Object.entries(store.meta('season:' + (sk - 1)) || {}).map(([, r]) => ({ name: r.name, pts: Math.floor(r.pts) })).sort((a, b) => b.pts - a.pts).slice(0, 3);
-  return { t: 'season', id: sk, ends: PROG.seasonEnds(), top: rows.slice(0, 15), mine, last, aura: user.profile.aura || null };
-}
-// premios de la temporada anterior (se entregan al entrar)
-function seasonPrize(room, user) {
-  const p = user.profile, sk = PROG.seasonKey() - 1;
-  if (sk < 0 || (p.seasonPaid || -1) >= sk) return;
-  p.seasonPaid = sk;
-  const rows = Object.entries(store.meta('season:' + sk) || {}).sort((a, b) => b[1].pts - a[1].pts);
-  const i = rows.findIndex(([cid]) => cid === user.cid);
-  if (i < 0 || rows[i][1].pts < PROG.SEASON.minPts) return saveUser(user);
-  const prize = PROG.SEASON_PRIZES.find((z) => i + 1 <= z.rank);
-  const title = `${prize.title} ${PROG.seasonNumber(sk)}`;
-  p.extraTitles = [...new Set([...(p.extraTitles || []), title])];
-  const order = ['temporada', 'bronce', 'plata', 'oro'];
-  if (!p.aura || order.indexOf(prize.aura) > order.indexOf(p.aura)) p.aura = prize.aura;
-  user.look = lookFrom(p);
-  saveUser(user); sendMe(user);
-  broadcast(room, { t: 'look', id: user.id, look: user.look });
-  system(room, `🏆 ${user.name} recibe «${title}» por la temporada ${PROG.seasonNumber(sk)} (puesto ${i + 1}).`);
-  feat(room, `🏆 ${user.name}: «${title}».`);
-}
 
 function rankAdd(user, cat, v) {
   if (!v) return;
@@ -821,33 +618,6 @@ function ranksView(user) {
 }
 
 // ---------- Materiales, oficios y mascotas ----------
-// Recompensa diaria (por cuenta, la recoge el personaje que entra)
-function offerLogin(user) {
-  const st = PROG.loginState(user.account.daily);
-  send(user.ws, { t: 'login:offer', ...st, rewards: PROG.LOGIN_REWARDS });
-}
-function claimLogin(room, user) {
-  const acc = user.account, st = PROG.loginState(acc.daily);
-  if (st.claimed) return;
-  acc.daily = { last: PROG.dayKey(), streak: st.streak };
-  const R = st.next, p = user.profile, lvl = levelOf(user);
-  const got = [];
-  if (R.gold) { reward(room, user, 0, R.gold); got.push(`${R.gold} 🪙`); }
-  for (const [cid, n] of Object.entries(R.cons || {})) { p.cons[cid] = (p.cons[cid] || 0) + n; got.push(`${n}× ${RULES.CONSUMABLES[cid].name}`); }
-  if (R.mats) { giveMats(room, user, R.mats, true); for (const [k, n] of Object.entries(R.mats)) got.push(`${n} ${PROG.MATS[k].icon}`); }
-  if (R.item) {
-    const it = R.item === 'cofre'
-      ? (rnd() < 0.08 ? RULES.makeItem(rnd, { ilvl: lvl, rarity: 'unico', classes: [p.char.cls], leg: Object.keys(RULES.LEGENDARY)[crypto.randomInt(0, Object.keys(RULES.LEGENDARY).length)] })
-        : RULES.makeItem(rnd, { ilvl: lvl, rarity: rnd() < 0.3 ? 'unico' : 'raro', classes: [p.char.cls] }))
-      : RULES.makeItem(rnd, { ilvl: lvl, rarity: R.item, classes: [p.char.cls] });
-    if (give(room, user, it)) got.push(`«${it.name}»`); else { reward(room, user, 0, it.value); got.push(`${it.value} 🪙 (mochila llena)`); }
-  }
-  store.setPlayer(user.pid, acc);
-  saveUser(user); sendMe(user);
-  send(user.ws, { t: 'login:claimed', streak: st.streak, got });
-  seasonAdd(user, PROG.SEASON_PTS.daily);
-  if (st.streak === 7) { system(room, `🎁 ${user.name} completa una racha de 7 días y abre el gran cofre.`); feat(room, `🎁 ${user.name} completó una racha de 7 días.`); }
-}
 
 function giveMats(room, user, mats, silent) {
   const p = user.profile;
@@ -963,56 +733,6 @@ function nextFloor(room, user, desc, r) {
   joinInstance(room, user, inst);
 }
 
-// ---------- Asalto semanal ----------
-function raidInfo(user) {
-  const week = PROG.weekKey();
-  const rank = ((store.meta('raids') || {})[week] || []).slice(0, 10);
-  return { t: 'raid:info', week, theme: PROG.raidTheme(week), mod: PROG.raidMod(week), rank, done: user.profile.raidWeek === week, level: Math.max(levelOf(user), PROG.RAID.minLevel) + PROG.RAID.bonusLevel };
-}
-function startRaid(room, user) {
-  const week = PROG.weekKey();
-  const level = Math.max(levelOf(user), PROG.RAID.minLevel) + PROG.RAID.bonusLevel;
-  // el mapa sale de la semana: el mismo para todos
-  const d = GEN.generate({ theme: PROG.raidTheme(week), level, seed: 'asalto-' + week });
-  d.id = 'raid' + crypto.randomBytes(3).toString('hex');
-  const M = PROG.WEEKLY_MODS[PROG.raidMod(week)];
-  d.name = `Asalto semanal · ${d.name}`;
-  d.raid = { week, mod: PROG.raidMod(week), start: Date.now() };
-  const inst = getInstance(room, d);
-  joinInstance(room, user, inst);
-  system(room, `⚔️ ${user.name} empieza el Asalto semanal (nivel ${level}, desafío ${M.icon} ${M.name}). ¡Uníos desde 🗝️ Mazmorras: es para jugar en grupo!`);
-}
-function raidDone(room, inst) {
-  const R = inst.def.raid, week = R.week;
-  const time = Math.round((Date.now() - R.start) / 1000);
-  const heroes = [...inst.players.values()].map((p) => p.user);
-  const all = store.meta('raids') || {};
-  const list = all[week] || [];
-  const entry = { names: heroes.map((u) => u.name), time, level: inst.level, at: Date.now() };
-  list.push(entry);
-  list.sort((a, b) => a.time - b.time);
-  const pos = list.indexOf(entry) + 1;
-  all[week] = list.slice(0, 20);
-  for (const k of Object.keys(all)) if (Number(k) < week - 4) delete all[k]; // sólo las últimas semanas
-  store.setMeta('raids', all);
-  const mm = Math.floor(time / 60), ss = String(time % 60).padStart(2, '0');
-  system(room, `🏆 ${heroes.map((u) => u.name).join(', ')} superan el Asalto semanal en ${mm}:${ss}${pos <= 20 ? ` (puesto ${pos} de la semana)` : ''}.`);
-  feat(room, `⚔️ ${heroes.map((u) => u.name).join(', ')} superaron el Asalto semanal en ${mm}:${ss}.`);
-  // cofre semanal: una vez por semana y personaje
-  for (const u of heroes) seasonAdd(u, PROG.SEASON_PTS.raid);
-  for (const u of heroes) {
-    if (u.profile.raidWeek === week) { send(u.ws, { t: 'dwhisper', text: 'Ya abriste el cofre del Asalto esta semana: hoy sólo cuenta para la clasificación.' }); continue; }
-    u.profile.raidWeek = week;
-    const lvl = inst.level, cls = [u.profile.char.cls];
-    const items = [RULES.makeItem(rnd, { ilvl: lvl, rarity: rnd() < 0.35 ? 'unico' : 'raro', classes: cls })];
-    if (rnd() < 0.1) items.push(RULES.makeItem(rnd, { ilvl: lvl, rarity: 'unico', classes: cls, leg: Object.keys(RULES.LEGENDARY)[crypto.randomInt(0, Object.keys(RULES.LEGENDARY).length)] }));
-    const got = [];
-    for (const it of items) { if (give(room, u, it)) got.push(`«${it.name}»`); }
-    reward(room, u, 0, 40 * lvl); got.push(`${40 * lvl} 🪙`);
-    giveMats(room, u, { esencia: 3, polvo: 2 }, true);
-    send(u.ws, { t: 'dwhisper', text: `🎁 Cofre del Asalto semanal: ${got.join(', ')}, 3 💠 y 2 ✨.` });
-  }
-}
 
 // ---------- Arena: duelos con apuesta en el sótano de Alfonso ----------
 function startDuel(room, A, B, bet) {
@@ -1102,6 +822,18 @@ function endTrade(t, text) {
 
 // ---------- Conexiones ----------
 const EMOTES = new Set(['wave', 'dance', 'cheers', 'laugh', 'heart', 'fight', 'think', 'sleep']);
+// ---------- Módulos del servidor (server/*.js): reciben lo que necesitan y devuelven sus funciones ----------
+const CTX = {
+  GEN, PROG, RULES, broadcast, cleanText, crypto, fs, getInstance, give, giveMats, http, joinInstance, levelOf,
+  lookFrom, path, reward, rnd, rooms, saveRoom, saveUser, send, sendMe, serverName, store, system, zlib
+};
+const { adminPage, logClientError, sendStatic } = require('./server/web.js')(CTX);
+const { USER_RE, cleanUser, indexLogin, loginFails, makeBackup, openToken, passHash, restoreBackup, sealToken } = require('./server/accounts.js')(CTX);
+const {
+  claimLogin, donate, feat, marketList, marketView, offerLogin, payOffline,
+  raidDone, raidInfo, seasonAdd, seasonPrize, seasonView, startRaid, tavernView,
+} = require('./server/social.js')(CTX);
+
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 262144 }); // cabe la copia de seguridad de la cuenta
 
 wss.on('connection', (ws) => {
