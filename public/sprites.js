@@ -75,7 +75,7 @@
   function hero(look, o = {}) {
     const g = look.gear || {};
     const gk = [g.w, g.wr, g.o, g.or, g.casco, g.cascoR, g.pecho, g.pechoR, g.guantes, g.botas, g.set].join(',');
-    const key = ['h', look.cls, look.species || '', look.sub || '', look.skin, look.hair, look.color || '', look.npc || '', gk, o.back ? 1 : 0, o.frame || 0, o.sit ? 1 : 0, o.emote || '', o.tick || 0, o.mug ? 1 : 0, o.wiping ? 1 : 0].join(':');
+    const key = ['h', look.cls, look.species || '', look.skin, look.hair, look.color || '', look.npc || '', gk, o.back ? 1 : 0, o.frame || 0, o.sit ? 1 : 0, o.emote || '', o.tick || 0, o.mug ? 1 : 0, o.wiping ? 1 : 0].join(':');
     return cached(key, () => drawHero(look, o));
   }
 
@@ -97,8 +97,7 @@
     const species = look.species || 'human';
     let body = look.color || k.color, trim = k.trim;
     if (set) { body = set[0]; trim = set[1]; }
-    const dragonColor = species === 'dragonborn' && look.sub ? MAP.DRAGON_COLORS[look.sub.replace('draconic-ancestor-', '')] : null;
-    const skin = dragonColor || MAP.SKINS[look.skin] || MAP.SKINS[0], skinD = shade(skin, -0.18);
+    const skin = MAP.SKINS[look.skin] || MAP.SKINS[0], skinD = shade(skin, -0.18);
     const hair = MAP.HAIRS[look.hair] || MAP.HAIRS[0], hairD = shade(hair, -0.3), hairL = shade(hair, 0.25);
     const back = !!o.back;
     const p = painter(g, 0, 2);
@@ -207,14 +206,12 @@
     p.col(16, 10, 16, skinD); p.row(17, 8, 15, skinD);
     if (look.beard && !back) { p.rect(9, 15, 7, 3, look.beard); p.row(18, 10, 14, look.beard); p.px(12, 16, skin); }
     if (species === 'elf') { p.px(6, 13, skin); p.px(5, 12, skin); p.px(4, 11, skin); p.px(17, 13, skin); p.px(18, 12, skin); p.px(19, 11, skin); }
-    if (species === 'gnome') { p.px(6, 13, skin); p.px(5, 12, skin); p.px(17, 13, skin); p.px(18, 12, skin); }
     if (species === 'goblin') { p.px(6, 13, skin); p.px(5, 13, skin); p.px(4, 12, skin); p.px(3, 12, skin); p.px(2, 11, skin); p.px(5, 12, skin); p.px(17, 13, skin); p.px(18, 13, skin); p.px(19, 12, skin); p.px(20, 12, skin); p.px(21, 11, skin); p.px(18, 12, skin); p.px(5, 14, '#ffcf4a'); p.px(18, 14, '#ffcf4a'); }
-    if (species === 'dragonborn' && !back) { p.rect(16, 13, 2, 3, skin); p.px(17, 13, skinD); p.row(16, 15, 17, skinD); }
 
     const helm = npc ? null : gear.casco || null;
     const hidesHair = helm === 'placas' || helm === 'malla' || helm === 'tela' || npc === 'encapuchado' || npc === 'mercader';
     // --- pelo ---
-    if (!look.bald && species !== 'dragonborn' && !hidesHair) {
+    if (!look.bald && !hidesHair) {
       const hc = npc === 'bruja' ? '#b8b8c0' : hair, hcD = npc === 'bruja' ? '#8a8a92' : hairD, hcL = npc === 'bruja' ? '#d8d8e0' : hairL;
       if (back) {
         p.rect(7, 8, 10, 10, hc); p.row(8, 8, 15, hcL); p.col(16, 9, 17, hcD);
@@ -242,16 +239,10 @@
     // --- rasgos de especie ---
     if (!helm && !npc) {
       if (species === 'dwarf' && !back && !look.beard) { p.rect(9, 15, 7, 3, hair); p.row(18, 10, 14, hair); p.px(12, 19, hair); p.px(12, 16, skin); p.px(13, 16, skin); }
-      if (species === 'tiefling') { const hn = '#3a2a2a'; p.px(9, 7, hn); p.px(8, 6, hn); p.px(8, 5, hn); p.px(9, 4, hn); p.px(14, 7, hn); p.px(15, 6, hn); p.px(15, 5, hn); p.px(14, 4, hn); }
     }
     if (species === 'goblin' && !back && npc !== 'encapuchado' && helm !== 'placas') { p.px(11, 13, '#ffd21a'); p.px(14, 13, '#ffd21a'); p.px(12, 15, skinD); p.px(13, 15, skinD); p.px(12, 16, skinD); p.px(11, 17, '#fff6dc'); p.px(14, 17, '#fff6dc'); }
     if (species === 'orc' && !back && helm !== 'placas') { p.px(11, 16, '#fff6dc'); p.px(11, 15, '#fff6dc'); p.px(14, 16, '#fff6dc'); p.px(14, 15, '#fff6dc'); }
     if (species === 'dwarf' && !back && helm && helm !== 'placas') { p.rect(9, 15, 7, 3, hair); p.row(18, 10, 14, hair); p.px(12, 16, skin); p.px(13, 16, skin); }
-    if (species === 'dragonborn' && !helm) {
-      p.rect(7, 8, 10, 3, skin); p.row(8, 9, 14, shade(skin, 0.15));
-      p.px(8, 7, skinD); p.px(10, 6, skinD); p.px(13, 6, skinD); p.px(15, 7, skinD);
-      if (back) { p.rect(7, 11, 10, 6, skin); p.col(11, 9, 16, skinD); }
-    }
 
     // --- cascos ---
     const hr = RARITY_COL[gear.cascoR];

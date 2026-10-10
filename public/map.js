@@ -201,7 +201,6 @@
   const SKINS = ['#f6d3b3', '#e8b48a', '#c98a5e', '#8d5a3b', '#5c3a26', '#8aab62', '#6a8a4a', '#c0605a', '#8a4a8a', '#5a6ab8', '#a8aeb8', '#7e8692', '#a8b85a', '#6aa07a', '#f2e4d4'];
   const SPECIES_SKINS = { elf: [14, 0, 1, 2, 3], orc: [5, 6, 10, 11, 3], goblin: [5, 6, 12, 13] };
   const skinsFor = (species) => SPECIES_SKINS[species] || [0, 1, 2, 3, 4];
-  const DRAGON_COLORS = { black: '#3a3a44', blue: '#3a6ad0', brass: '#c8a040', bronze: '#a87030', copper: '#b8683a', gold: '#e0b830', green: '#3a8a4a', red: '#b83a2a', silver: '#c0c8d0', white: '#e8eef0' };
   const HAIRS = ['#2b2018', '#6b4226', '#c4472d', '#e8c25a', '#d8d8d8', '#3a6fd8', '#d85aa8', '#8a8a8a', '#6a1a1a'];
   // Sexo y peinado: cada peinado usa la cabeza de un modelo (y, si hace falta, una barba)
   const SEXES = { m: 'Hombre', f: 'Mujer' };
@@ -245,7 +244,6 @@
     const hs = hairstyle(sex, look.hs || (species === 'dwarf' && sex === 'm' ? 'barba' : null)).id;
     const out = { cls, species, sex, hs, skin: idx(look.skin, SKINS.length), hair: idx(look.hair, HAIRS.length) };
     if (!skinsFor(species).includes(out.skin)) out.skin = skinsFor(species)[0];
-    if (typeof look.sub === 'string' && /^[a-z-]{1,40}$/.test(look.sub)) out.sub = look.sub;
     if (species === 'goblin') out.gob = cleanGoblin(look.gob, sex);
     return out;
   }
@@ -261,7 +259,7 @@
   const SERVER_NAME_MAX = 20;
 
   const MAP = createMap();
-  Object.assign(MAP, { SERVERS, SERVER_NAME_MAX, createMap, defaultItems, sanitizeItems, MERCHANTS, merchantAt, CLASSES, LEGACY_CLASS, SPECIES, SKINS, SPECIES_SKINS, skinsFor, DRAGON_COLORS, HAIRS, SEXES, HAIRSTYLES, hairstyle, cleanLook, GOBLIN, GOBLIN_KEYS, goblinDefaults, cleanGoblin });
+  Object.assign(MAP, { SERVERS, SERVER_NAME_MAX, createMap, defaultItems, sanitizeItems, MERCHANTS, merchantAt, CLASSES, LEGACY_CLASS, SPECIES, SKINS, SPECIES_SKINS, skinsFor, HAIRS, SEXES, HAIRSTYLES, hairstyle, cleanLook, GOBLIN, GOBLIN_KEYS, goblinDefaults, cleanGoblin });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = MAP;
   else root.MAP = MAP;

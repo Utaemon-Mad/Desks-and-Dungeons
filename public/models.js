@@ -129,7 +129,7 @@
     if (npc === 'bruja') cloth = '#2a1a34';
     if (npc === 'encapuchado') cloth = '#2a2226';
     if (npc === 'mercader') cloth = '#28305a';
-    const skinHex = species === 'dragonborn' ? '#9a3a2a' : MAP.SKINS[look.skin] || MAP.SKINS[0];
+    const skinHex = MAP.SKINS[look.skin] || MAP.SKINS[0];
     const hairHex = npc === 'bruja' ? '#b8b8c0' : MAP.HAIRS[look.hair] || MAP.HAIRS[0];
     const skin = mat(skinHex), hairM = mat(hairHex);
     const chest = npc === 'bruja' || npc === 'encapuchado' ? 'robe' : npc === 'mercader' ? 'kimono' : gear.pecho || null;
@@ -216,13 +216,11 @@
     }
     if (look.beard || species === 'dwarf') { const bd = mesh(cone(0.11, 0.16, 6), mat(look.beard || hairHex), 0, -0.06, 0.07, head); bd.rotation.x = Math.PI; }
     // rasgos de especie
-    if (species === 'elf' || species === 'gnome' || species === 'goblin') for (const sx of [-1, 1]) { const big = species === 'goblin'; const e = mesh(cone(big ? 0.06 : 0.03, big ? 0.28 : 0.12, 4), skin, sx * (big ? 0.2 : 0.15), 0.1, 0, head); e.rotation.z = -sx * (big ? 1.35 : 1.2); if (big) mesh(torus(0.022, 0.006), mat('#ffcf4a', { metal: 0.6, rough: 0.25 }), sx * 0.15, 0.06, 0, head).rotation.y = Math.PI / 2; }
+    if (species === 'elf' || species === 'goblin') for (const sx of [-1, 1]) { const big = species === 'goblin'; const e = mesh(cone(big ? 0.06 : 0.03, big ? 0.28 : 0.12, 4), skin, sx * (big ? 0.2 : 0.15), 0.1, 0, head); e.rotation.z = -sx * (big ? 1.35 : 1.2); if (big) mesh(torus(0.022, 0.006), mat('#ffcf4a', { metal: 0.6, rough: 0.25 }), sx * 0.15, 0.06, 0, head).rotation.y = Math.PI / 2; }
     if (species === 'orc') for (const sx of [-1, 1]) mesh(cone(0.012, 0.04, 4), mat('#fff6dc'), sx * 0.04, -0.01, 0.13, head);
-    if (species === 'tiefling' && helm !== 'placas') for (const sx of [-1, 1]) { const h = mesh(cone(0.025, 0.12, 5), mat('#3a2a2a'), sx * 0.08, 0.2, 0, head); h.rotation.z = -sx * 0.4; }
-    if (species === 'dragonborn') { mesh(box(0.12, 0.08, 0.12), skin, 0, 0.02, 0.12, head); for (const sx of [-1, 1]) { const h = mesh(cone(0.02, 0.1, 4), mat('#d8c8a0'), sx * 0.06, 0.18, -0.06, head); h.rotation.x = -0.8; } }
     // pelo
     const hidesHair = helm === 'placas' || helm === 'malla' || helm === 'tela' || npc === 'encapuchado' || npc === 'mercader';
-    if (!look.bald && species !== 'dragonborn' && !hidesHair) {
+    if (!look.bald && !hidesHair) {
       const cap = mesh(halfSph(0.14), hairM, 0, 0.075, -0.015, head);
       cap.scale.set(1.02, 0.95, 1.05);
       mesh(box(0.2, 0.06, 0.05), hairM, 0, 0.13, 0.07, head); // flequillo
@@ -1078,7 +1076,7 @@
     const set = gear.set && SET_COL[gear.set];
     const [name, npcCloth] = NPC_CHAR[npc] || [CLASS_CHAR[cid] || 'Knight', null];
     const species = look.species || 'human';
-    const skin = species === 'dragonborn' ? '#9a3a2a' : MAP.SKINS[look.skin] || MAP.SKINS[0];
+    const skin = MAP.SKINS[look.skin] || MAP.SKINS[0];
     const hair = npc === 'bruja' ? '#b8b8c0' : MAP.HAIRS[look.hair] || MAP.HAIRS[0];
     // el peto manda en el color de la ropa (y algunos llevan capa); los conjuntos, en su color
     const A3 = !npc && globalThis.ARMOR3D;

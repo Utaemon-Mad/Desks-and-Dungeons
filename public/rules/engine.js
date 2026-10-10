@@ -278,12 +278,6 @@
   const ARMOR_BASE = { tela: 2, cuero: 4, malla: 6, placas: 8 };
   const ARMOR_SLOT = { casco: 0.6, pecho: 1.4, guantes: 0.4, botas: 0.5 };
   const ARMOR_REQ = { tela: [0, 0, 0], cuero: [2, 5, 8], malla: [4, 8, 12], placas: [7, 11, 15] };
-  const ARMOR_NAMES = {
-    casco:   { tela: ['Capucha', 'f'], cuero: ['Gorro de cuero', 'm'], malla: ['Almófar', 'm'], placas: ['Yelmo', 'm'] },
-    pecho:   { tela: ['Túnica', 'f'], cuero: ['Jubón de cuero', 'm'], malla: ['Cota de malla', 'f'], placas: ['Coraza', 'f'] },
-    guantes: { tela: ['Guantes de tela', 'mp'], cuero: ['Guantes de cuero', 'mp'], malla: ['Guanteletes de malla', 'mp'], placas: ['Guanteletes', 'mp'] },
-    botas:   { tela: ['Sandalias', 'fp'], cuero: ['Botas de cuero', 'fp'], malla: ['Botas de malla', 'fp'], placas: ['Grebas', 'fp'] },
-  };
   // Bases de armadura al estilo de Diablo 2: por ranura, tipo y nivel (normal, excepcional, élite), dos variantes
   // cada una (it.sk = 0 o 1). Cada base tiene su aspecto en el modelo 3D (public/armor3d.js).
   const ARMOR_SKINS = {
@@ -448,7 +442,7 @@
       const [name, g, req] = O.tiers[tier];
       return { name, g, req, O };
     }
-    if (ARMOR_SLOT[it.slot] && ARMOR_NAMES[it.slot][it.type]) {
+    if (ARMOR_SLOT[it.slot] && ARMOR_SKINS[it.slot][it.type]) {
       const [name, g] = ARMOR_SKINS[it.slot][it.type][Math.min(2, tier)][it.sk ? 1 : 0];
       const fue = ARMOR_REQ[it.type][tier];
       return { name, g, req: fue ? { fue } : {} };
@@ -1151,7 +1145,7 @@
 
   const RULES = {
     MAX_LEVEL, BAG_SIZE, RULES_VERSION, STAT_BASE, STAT_MAX, POINTS_START, STATS, STAT_IDS, EXTRA, ELEMENTS, RACES, RACE_IDS, SEXES, CLASSES, CLASS_IDS, LEGACY_CLASS, ARMOR_TYPES, ARMOR_SKINS,
-    ABILITIES, ABILITY_BY_ID, XP_TABLE, SLOTS, SLOT_IDS, TIERS, WEAPONS, FISTS, OFFHANDS, ARMOR_NAMES, ARMOR_REQ, JEWELS,
+    ABILITIES, ABILITY_BY_ID, XP_TABLE, SLOTS, SLOT_IDS, TIERS, WEAPONS, FISTS, OFFHANDS, ARMOR_REQ, JEWELS,
     RARITIES, RARITY_ORDER, LEGACY_RARITY, AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES,
     statName, fmtStat, classId, raceId, levelFromXp, pointsTotal, pointsSpent, pointsFree, baseStats, statRoom, newChar, cleanChar,
     rollRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, describeRich, baseInfo, speedName, allowedBases, affixPool, affixTier, rollAffixValue,

@@ -1753,7 +1753,6 @@
     pickRow($('#species-pick'), RULES.RACE_IDS.map((id) => ({ id, label: RULES.RACES[id].name, sub: fmtMods(RULES.RACES[id].mods), title: RULES.RACES[id].perkText })), look.species, (id) => {
       look.species = id;
       if (!MAP.skinsFor(id).includes(look.skin)) look.skin = MAP.skinsFor(id)[0];
-      delete look.sub;
     });
     $('#ed-race-note').textContent = RULES.RACES[look.species].perkText;
     pickRow($('#class-pick'), RULES.CLASS_IDS.map((id) => { const k = RULES.CLASSES[id]; return { id, label: `${k.icon} ${k.name}`, sub: fmtMods(k.base), title: k.desc }; }), look.cls, (id) => { look.cls = id; });
