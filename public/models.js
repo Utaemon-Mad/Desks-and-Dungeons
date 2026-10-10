@@ -204,14 +204,18 @@
     // cara
     const faceHidden = helm === 'placas' || npc === 'encapuchado';
     if (!faceHidden) {
-      for (const sx of [-1, 1]) mesh(box(0.025, 0.035, 0.01), mat('#1b1410'), sx * 0.05, 0.07, 0.13, head);
-      mesh(box(0.03, 0.04, 0.04), mat(shade(skinHex, -0.15)), 0, 0.03, 0.14, head);
+      const gob = species === 'goblin';
+      for (const sx of [-1, 1]) mesh(box(0.025, 0.035, 0.01), gob ? mat('#ffd21a', { emissive: '#c89a00', ei: 0.7 }) : mat('#1b1410'), sx * 0.05, 0.07, 0.13, head);
+      if (gob) {
+        mesh(cone(0.022, 0.11, 5), skin, 0, 0.02, 0.18, head).rotation.x = Math.PI / 2 + 0.3;
+        for (const sx of [-1, 1]) mesh(cone(0.01, 0.03, 4), mat('#fff6dc'), sx * 0.035, -0.035, 0.13, head).rotation.x = Math.PI;
+      } else mesh(box(0.03, 0.04, 0.04), mat(shade(skinHex, -0.15)), 0, 0.03, 0.14, head);
       if (npc === 'bruja') mesh(cone(0.025, 0.08, 5), mat(shade(skinHex, -0.1)), 0, 0.02, 0.17, head).rotation.x = Math.PI / 2;
       if (npc === 'mercader') { mesh(box(0.12, 0.012, 0.01), mat('#1b1410'), 0, -0.01, 0.14, head); mesh(box(0.012, 0.05, 0.01), mat('#1b1410'), -0.055, -0.04, 0.135, head); mesh(box(0.012, 0.05, 0.01), mat('#1b1410'), 0.055, -0.04, 0.135, head); }
     }
     if (look.beard || species === 'dwarf') { const bd = mesh(cone(0.11, 0.16, 6), mat(look.beard || hairHex), 0, -0.06, 0.07, head); bd.rotation.x = Math.PI; }
     // rasgos de especie
-    if (species === 'elf' || species === 'gnome' || species === 'goblin') for (const sx of [-1, 1]) { const big = species === 'goblin'; const e = mesh(cone(big ? 0.05 : 0.03, big ? 0.2 : 0.12, 4), skin, sx * (big ? 0.18 : 0.15), 0.1, 0, head); e.rotation.z = -sx * (big ? 1.35 : 1.2); }
+    if (species === 'elf' || species === 'gnome' || species === 'goblin') for (const sx of [-1, 1]) { const big = species === 'goblin'; const e = mesh(cone(big ? 0.06 : 0.03, big ? 0.28 : 0.12, 4), skin, sx * (big ? 0.2 : 0.15), 0.1, 0, head); e.rotation.z = -sx * (big ? 1.35 : 1.2); }
     if (species === 'orc') for (const sx of [-1, 1]) mesh(cone(0.012, 0.04, 4), mat('#fff6dc'), sx * 0.04, -0.01, 0.13, head);
     if (species === 'tiefling' && helm !== 'placas') for (const sx of [-1, 1]) { const h = mesh(cone(0.025, 0.12, 5), mat('#3a2a2a'), sx * 0.08, 0.2, 0, head); h.rotation.z = -sx * 0.4; }
     if (species === 'dragonborn') { mesh(box(0.12, 0.08, 0.12), skin, 0, 0.02, 0.12, head); for (const sx of [-1, 1]) { const h = mesh(cone(0.02, 0.1, 4), mat('#d8c8a0'), sx * 0.06, 0.18, -0.06, head); h.rotation.x = -0.8; } }
@@ -1082,7 +1086,7 @@
       w: gear.w, wr: gear.wr, o: gear.o, or: gear.or, weaponKind: kind, mug: npc === 'tabernero',
       head: hs ? hs.head : null,
     });
-    raceFeatures(root, species, { skin, hair, beard: look.beard || ((hs && hs.beard) || (species === 'dwarf' && hs && hs.head !== 'Barbarian' && look.sex !== 'f') ? hair : null), helmet });
+    raceFeatures(root, species, { skin, hair, beard: look.beard || ((hs && hs.beard) || (species === 'dwarf' && hs && hs.head !== 'Barbarian' && look.sex !== 'f') ? hair : null), helmet, head: (hs && hs.head) || name });
     const SP = MAP.SPECIES[species] || {};
     root.scale.setScalar(SP.scale || 1);
     const body = root.userData.parts.model;
@@ -1094,6 +1098,7 @@
   // Rasgos de raza sobre la cabeza del modelo: orejas de elfo y de goblin, colmillos de orco y barba
   // (se colocan con la caja de la cabeza y se pegan al hueso de la cabeza para que se muevan con ella)
   const linHex = (hex) => '#' + new THREE.Color(hex).convertSRGBToLinear().getHexString();
+  const GOBLIN_FACE = { Knight: { eye: -0.145, nose: -0.21 }, def: { eye: -0.06, nose: -0.13 } };
   function raceFeatures(root, species, o) {
     const P = root.userData.parts;
     if (!P.head || !P.headMesh || (species === 'human' && !o.beard)) return;
@@ -1103,19 +1108,49 @@
     const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
     const g = new THREE.Group();
     const skin = mat(linHex(o.skin));
-    if (species === 'elf' || species === 'goblin') {
-      const big = species === 'goblin';
+    if (species === 'elf') {
       for (const sx of [-1, 1]) {
-        const e = mesh(cone(size.x * (big ? 0.09 : 0.055), size.x * (big ? 0.5 : 0.32), 5), skin, c.x + sx * size.x * (big ? 0.55 : 0.5), c.y - size.y * 0.02, c.z - size.z * 0.06, g);
-        e.rotation.z = -sx * (big ? 1.25 : 0.95); e.rotation.x = -0.25;
+        const e = mesh(cone(size.x * 0.055, size.x * 0.32, 5), skin, c.x + sx * size.x * 0.5, c.y - size.y * 0.02, c.z - size.z * 0.06, g);
+        e.rotation.z = -sx * 0.95; e.rotation.x = -0.25;
       }
     }
     if (species === 'orc') {
       for (const sx of [-1, 1]) mesh(cone(size.x * 0.035, size.y * 0.13, 5), mat('#f0e6c8'), c.x + sx * size.x * 0.14, box.min.y + size.y * 0.24, box.max.z - size.z * 0.06, g);
     }
     if (species === 'goblin') {
-      const nose = mesh(cone(size.x * 0.06, size.z * 0.22, 5), skin, c.x, c.y - size.y * 0.06, box.max.z + size.z * 0.02, g);
-      nose.rotation.x = Math.PI / 2;
+      // orejas enormes en forma de hoja, con el interior más oscuro
+      const inner = mat(linHex(o.skin), { emissive: '#3a0a0a', ei: 0.35 });
+      for (const sx of [-1, 1]) {
+        const e = new THREE.Group();
+        e.position.set(c.x + sx * size.x * 0.42, c.y - size.y * 0.06, c.z - size.z * 0.08);
+        e.rotation.set(-0.2, sx * 0.35, -sx * 1.12);
+        g.add(e);
+        const outer = mesh(cone(size.x * 0.16, size.x * 0.8, 6), skin, 0, size.x * 0.4, 0, e);
+        outer.scale.z = 0.38;
+        const inn = mesh(cone(size.x * 0.1, size.x * 0.6, 6), inner, 0, size.x * 0.34, size.z * 0.035, e);
+        inn.scale.z = 0.22;
+      }
+      // altura de los ojos pintados en la textura según el modelo de cabeza
+      const F = GOBLIN_FACE[o.head] || GOBLIN_FACE.def;
+      // nariz larga y muy picuda, un poco caída
+      const nose = mesh(cone(size.x * 0.075, size.z * 0.5, 6), skin, c.x, c.y + size.y * F.nose, box.max.z + size.z * 0.15, g);
+      nose.rotation.x = Math.PI / 2 + 0.32;
+      // ojos amarillos con pupila rasgada
+      const eyeM = mat(linHex('#ffd21a'), { emissive: linHex('#c89a00'), ei: 0.9, rough: 0.3 });
+      const pupM = mat('#0a0806', { rough: 0.2 });
+      for (const sx of [-1, 1]) {
+        const ex = c.x + sx * size.x * 0.175, ey = c.y + size.y * F.eye, ez = box.max.z - size.z * 0.07;
+        const eye = mesh(sph(size.x * 0.085, 12, 10), eyeM, ex, ey, ez, g);
+        eye.scale.set(1.15, 0.85, 0.45);
+        const pup = mesh(sph(size.x * 0.02, 8, 6), pupM, ex, ey, ez + size.x * 0.032, g);
+        pup.scale.set(0.7, 2.6, 0.5);
+      }
+      // dientes puntiagudos asomando bajo el labio
+      const tooth = mat('#f4eedc', { rough: 0.4 });
+      for (const [tx, th] of [[-0.15, 0.1], [-0.06, 0.07], [0.06, 0.07], [0.15, 0.1]]) {
+        const t = mesh(cone(size.x * 0.03, size.y * th, 4), tooth, c.x + tx * size.x, box.min.y + size.y * 0.27 - size.y * th / 2, box.max.z - size.z * 0.1, g);
+        t.rotation.x = Math.PI;
+      }
     }
     if (o.beard) {
       // barba poblada: una esfera achatada bajo la boca y una punta

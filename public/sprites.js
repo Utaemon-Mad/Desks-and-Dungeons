@@ -208,7 +208,7 @@
     if (look.beard && !back) { p.rect(9, 15, 7, 3, look.beard); p.row(18, 10, 14, look.beard); p.px(12, 16, skin); }
     if (species === 'elf') { p.px(6, 13, skin); p.px(5, 12, skin); p.px(4, 11, skin); p.px(17, 13, skin); p.px(18, 12, skin); p.px(19, 11, skin); }
     if (species === 'gnome') { p.px(6, 13, skin); p.px(5, 12, skin); p.px(17, 13, skin); p.px(18, 12, skin); }
-    if (species === 'goblin') { p.px(6, 13, skin); p.px(5, 13, skin); p.px(4, 12, skin); p.px(3, 12, skin); p.px(17, 13, skin); p.px(18, 13, skin); p.px(19, 12, skin); p.px(20, 12, skin); }
+    if (species === 'goblin') { p.px(6, 13, skin); p.px(5, 13, skin); p.px(4, 12, skin); p.px(3, 12, skin); p.px(2, 11, skin); p.px(5, 12, skin); p.px(17, 13, skin); p.px(18, 13, skin); p.px(19, 12, skin); p.px(20, 12, skin); p.px(21, 11, skin); p.px(18, 12, skin); }
     if (species === 'dragonborn' && !back) { p.rect(16, 13, 2, 3, skin); p.px(17, 13, skinD); p.row(16, 15, 17, skinD); }
 
     const helm = npc ? null : gear.casco || null;
@@ -244,6 +244,7 @@
       if (species === 'dwarf' && !back && !look.beard) { p.rect(9, 15, 7, 3, hair); p.row(18, 10, 14, hair); p.px(12, 19, hair); p.px(12, 16, skin); p.px(13, 16, skin); }
       if (species === 'tiefling') { const hn = '#3a2a2a'; p.px(9, 7, hn); p.px(8, 6, hn); p.px(8, 5, hn); p.px(9, 4, hn); p.px(14, 7, hn); p.px(15, 6, hn); p.px(15, 5, hn); p.px(14, 4, hn); }
     }
+    if (species === 'goblin' && !back && npc !== 'encapuchado' && helm !== 'placas') { p.px(11, 13, '#ffd21a'); p.px(14, 13, '#ffd21a'); p.px(12, 15, skinD); p.px(13, 15, skinD); p.px(12, 16, skinD); p.px(11, 17, '#fff6dc'); p.px(14, 17, '#fff6dc'); }
     if (species === 'orc' && !back && helm !== 'placas') { p.px(11, 16, '#fff6dc'); p.px(11, 15, '#fff6dc'); p.px(14, 16, '#fff6dc'); p.px(14, 15, '#fff6dc'); }
     if (species === 'dwarf' && !back && helm && helm !== 'placas') { p.rect(9, 15, 7, 3, hair); p.row(18, 10, 14, hair); p.px(12, 16, skin); p.px(13, 16, skin); }
     if (species === 'dragonborn' && !helm) {
