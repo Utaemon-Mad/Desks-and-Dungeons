@@ -7,6 +7,16 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 7, date: 'Octubre', title: 'Para engancharse', items: [
+      '🟠 Objetos LEGENDARIOS con poderes: Rebote, Estallido, Sed de sangre, Frenesí, Égida, Trueno y Eco.',
+      '✨ El botín bueno cae con un haz de luz de su color y suena al caer.',
+      '🎁 Recompensa diaria: entra cada día y al séptimo abre el gran cofre.',
+      '⚔️ Asalto semanal: el mismo mapa para todos, más difícil, con cofre y clasificación por tiempo.',
+      '🌟 Árbol de talentos: tres ramas por clase y un punto cada dos niveles.',
+      '🏆 Temporadas de 6 semanas: puntos por jugar y aura dorada para los mejores.',
+      '🏦 Mejoras de la taberna entre todos y tablón de hazañas.',
+      '🏪 Mercado entre jugadores: vende tu botín y cobra aunque no estés conectado.',
+    ] },
     { v: 6, date: 'Octubre', title: 'Más profesional', items: [
       '🔊 Sonido y música en cada sitio: taberna, mazmorras, jefes y mundo abierto.',
       '👥 Ves la vida de tus compañeros; Alt+clic o P marca un sitio para el grupo; si caes, puedes volver con tu grupo.',
@@ -54,6 +64,50 @@
     if (seen && seen < NEWS[0].v) setTimeout(openNews, 1200);
     else if (!seen) save('dd-news', String(NEWS[0].v)); // a los nuevos no se les enseña la lista
   });
+
+  // ---------- Recompensa diaria con racha ----------
+  const dwin = el('div', 'overlay win hidden');
+  dwin.id = 'dailywin';
+  dwin.innerHTML = '<div class="panel card"><div class="panel-title">🎁 RECOMPENSA DIARIA</div><p class="tag daily-sub"></p><div class="daily-row"></div><p class="daily-got hidden"></p><div class="edit-row"><button class="btn big daily-claim" type="button">RECOGER</button></div></div>';
+  document.body.appendChild(dwin);
+  let offer = null;
+  function renderDaily(claimedNow) {
+    const row = dwin.querySelector('.daily-row'); row.innerHTML = '';
+    for (const R of offer.rewards) {
+      const c = el('div', 'daily-day');
+      const past = R.day < offer.streak || (claimedNow && R.day === offer.streak);
+      if (past) c.classList.add('done');
+      if (R.day === offer.streak && !claimedNow) c.classList.add('today');
+      if (R.day === 7) c.classList.add('big');
+      c.append(el('small', '', `Día ${R.day}`), el('b', '', past ? '✔' : R.icon), el('span', '', R.text));
+      row.appendChild(c);
+    }
+    dwin.querySelector('.daily-sub').textContent = claimedNow ? `¡Racha de ${offer.streak} ${offer.streak === 1 ? 'día' : 'días'}! Vuelve mañana para el siguiente.` : `Entra cada día para mejorar el premio. Hoy toca el día ${offer.streak} de 7${offer.streak > 1 ? ' (¡no rompas la racha!)' : ''}.`;
+    const b = dwin.querySelector('.daily-claim');
+    b.textContent = claimedNow ? '¡A JUGAR!' : 'RECOGER';
+  }
+  function showDaily() {
+    if (!offer) return;
+    // si Alfonso está explicando el tutorial, se espera a que termine
+    const tut = document.querySelector('.tut');
+    if (tut && !tut.classList.contains('hidden')) return setTimeout(showDaily, 3000);
+    dwin.querySelector('.daily-got').classList.add('hidden');
+    renderDaily(false);
+    dwin.classList.remove('hidden');
+    DD.sfx && DD.sfx('open');
+  }
+  DD.on('login:offer', (m) => { if (m.claimed) return; offer = m; showDaily(); });
+  DD.on('login:claimed', (m) => {
+    if (!offer) return;
+    renderDaily(true);
+    const g = dwin.querySelector('.daily-got'); g.textContent = 'Recibes: ' + m.got.join(', '); g.classList.remove('hidden');
+    DD.sfx && DD.sfx(m.streak === 7 ? 'levelup' : 'chest');
+    offer.claimedNow = true;
+  });
+  dwin.querySelector('.daily-claim').onclick = () => {
+    if (offer && !offer.claimedNow) DD.net.send({ t: 'login:claim' });
+    else { dwin.classList.add('hidden'); offer = null; }
+  };
 
   // ---------- Mensaje del día ----------
   const motdEl = el('div', 'motd hidden');

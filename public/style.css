@@ -783,3 +783,70 @@ body.cb .dlog-line.loot-conjunto { color: #cc79a7; }
 .tool:hover .ico .gi { transform: translateY(-2px) scale(1.06); filter: drop-shadow(0 2px 0 #000) drop-shadow(0 0 10px rgba(240, 192, 96, .7)); }
 @media (max-width: 820px) { .tool .ico .gi { width: 24px; height: 24px; } }
 .act-btn .ic .gi { margin: 0 auto; filter: drop-shadow(0 1px 0 #000); }
+
+/* Legendarios */
+.icell.r-leg { border-color: #ff8a1a !important; box-shadow: inset 0 0 14px rgba(255, 138, 26, .6), 0 0 8px rgba(255, 138, 26, .7) !important; animation: leg-glow 1.6s infinite alternate; }
+@keyframes leg-glow { to { box-shadow: inset 0 0 18px rgba(255, 138, 26, .85), 0 0 14px rgba(255, 138, 26, .95); } }
+.tip-line.leg, .leg { color: #ffb04a; font-weight: 600; }
+
+/* Recompensa diaria */
+#dailywin .panel { width: min(760px, calc(100% - 24px)); }
+.daily-row { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; margin: 10px 0; }
+.daily-day { background: linear-gradient(#3a2618, #24160d); border: 2px solid #5a3a22; border-radius: 8px; padding: 8px 4px; text-align: center; display: flex; flex-direction: column; gap: 4px; align-items: center; min-height: 128px; }
+.daily-day small { color: #b99a72; font: 600 12px "Pixelify Sans", sans-serif; }
+.daily-day b { font-size: 28px; line-height: 1; }
+.daily-day span { font-size: 11.5px; color: #e8d3a8; line-height: 1.25; }
+.daily-day.done { opacity: .55; }
+.daily-day.done b { color: #7dff8a; }
+.daily-day.today { border-color: #ffd24a; box-shadow: 0 0 14px rgba(255, 210, 74, .6); animation: leg-glow 1.2s infinite alternate; }
+.daily-day.big { background: linear-gradient(#5a2e10, #3a1a08); }
+.daily-got { color: #ffe39a; font-weight: 600; text-align: center; }
+@media (max-width: 820px) { .daily-row { grid-template-columns: repeat(4, 1fr); } }
+
+/* Asalto semanal */
+.raid-btn { background: linear-gradient(#a8321e, #6a1a0e) !important; border-color: #3a0a04 !important; color: #fff !important; }
+#raidwin .panel { width: min(560px, calc(100% - 24px)); }
+.raid-rank { margin: 4px 0 8px; padding-left: 22px; }
+.raid-rank li { margin-bottom: 3px; }
+.raid-rank li:first-child { color: #ffd24a; font-weight: 700; }
+
+/* Talentos */
+.tal-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.tal-head b { color: #ffd24a; font-size: 16px; }
+.tal-head .btn { margin-left: auto; }
+.tal-trees { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.tal-tree { background: rgba(0, 0, 0, .22); border: 1px solid #5a3a22; border-radius: 10px; padding: 8px; display: flex; flex-direction: column; gap: 8px; }
+.tal-title { font: 700 15px "Pixelify Sans", sans-serif; color: #ffd77a; text-align: center; }
+.tal { position: relative; display: grid; grid-template-columns: 34px 1fr; grid-template-rows: auto auto; column-gap: 8px; text-align: left; background: linear-gradient(#3a2618, #24160d); border: 2px solid #5a3a22; border-radius: 8px; padding: 6px 8px; color: #e8d3a8; cursor: pointer; }
+.tal .tal-ic { grid-row: span 2; font-size: 24px; display: flex; align-items: center; justify-content: center; }
+.tal b { font-size: 13px; color: #f3e6c8; }
+.tal small { font-size: 11.5px; color: #cdb894; }
+.tal em { position: absolute; right: 6px; top: 4px; font: 700 11px "Pixelify Sans", sans-serif; font-style: normal; color: #b99a72; }
+.tal.has { border-color: #c98a1e; }
+.tal.has em { color: #ffd24a; }
+.tal.max { border-color: #ffd24a; box-shadow: 0 0 8px rgba(255, 210, 74, .45); }
+.tal.can:hover { border-color: #ffe39a; transform: translateY(-1px); }
+.tal.locked { opacity: .42; filter: grayscale(.7); cursor: default; }
+@media (max-width: 820px) { .tal-trees { grid-template-columns: 1fr; } }
+
+/* Temporada */
+.season-rank { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.season-row { display: grid; grid-template-columns: 36px 1fr auto 96px; gap: 8px; align-items: center; padding: 5px 8px; border-radius: 6px; background: rgba(0, 0, 0, .2); }
+.season-row.me { outline: 2px solid #ffd24a; }
+.season-row.top1 em { color: #ffd24a; } .season-row.top2 em { color: #d8e4f0; } .season-row.top3 em { color: #e0904a; }
+.season-row em { font-style: normal; font-weight: 700; }
+.season-row small { text-align: right; }
+
+/* Taberna del grupo, hazañas y mercado */
+#tavwin .panel, #mkwin .panel { width: min(640px, calc(100% - 24px)); max-height: 88vh; overflow-y: auto; }
+.tav-lvl { display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 7px 10px; margin: 5px 0; border-radius: 8px; background: rgba(0, 0, 0, .22); border: 1px solid #5a3a22; }
+.tav-lvl.got { border-color: #7dff8a; opacity: .85; }
+.tav-lvl.cur { border-color: #ffd24a; }
+.tav-lvl .meter { grid-column: 1 / -1; height: 8px; }
+.feats { display: flex; flex-direction: column; gap: 3px; }
+.feat-row { font-size: 13px; padding: 3px 6px; border-left: 3px solid #e0a93a; background: rgba(0, 0, 0, .15); }
+.mk-grid { display: flex; flex-direction: column; gap: 6px; }
+.mk-row { display: flex; align-items: center; gap: 10px; padding: 5px 8px; background: rgba(0, 0, 0, .2); border-radius: 8px; }
+.mk-info { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+.mk-info small { color: #b99a72; font-size: 12px; }
+.mk-price { width: 90px; padding: 5px; border-radius: 5px; border: 2px solid #5a3418; background: #fbf4e2; color: #2b1d14; }

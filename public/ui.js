@@ -37,8 +37,8 @@
   function showTip(it, ev, extra) {
     tip.innerHTML = '';
     const R = RULES.RARITIES[it.rarity] || RULES.RARITIES.normal;
-    const name = el('div', 'tip-name', it.name); name.style.color = R.color;
-    tip.append(name, el('div', 'tip-type', RULES.typeLine(it)));
+    const name = el('div', 'tip-name', (it.leg ? '★ ' : '') + it.name); name.style.color = RULES.itemColor ? RULES.itemColor(it) : R.color;
+    tip.append(name, el('div', 'tip-type', it.leg ? RULES.typeLine(it).replace('Único', 'Legendario') : RULES.typeLine(it)));
     const p = me();
     // características que tendrías sin lo que llevas en ese hueco (para los requisitos)
     const stats = p ? RULES.derive({ ...p, equip: { ...p.equip, [it.slot]: p.equip[it.slot] && p.equip[it.slot].id === it.id ? it : undefined } }).stats : null;
@@ -101,7 +101,7 @@
 
   // Casilla de objeto (icono con borde de rareza)
   function itemCell(it, opts = {}) {
-    const b = el('button', 'icell ' + (it ? 'r-' + it.rarity : 'empty'));
+    const b = el('button', 'icell ' + (it ? 'r-' + it.rarity + (it.leg ? ' r-leg' : '') : 'empty'));
     b.type = 'button';
     if (it) {
       let art = null;
@@ -305,6 +305,7 @@
     if (charTab === 'ficha') body.appendChild(fichaView(p));
     else if (charTab === 'equipo') body.appendChild(equipView(p));
     else if (charTab === 'misiones') body.appendChild(questsView(p));
+    else if (charTab === 'talentos') body.appendChild(talentsView(p));
     else body.appendChild(skillsView(p));
   }
 
@@ -487,6 +488,40 @@
     if (me().pet) acts.push([`Dar a ${me().pet.name}`, () => DD.net.send({ t: 'pet:put', id: it.id })]);
     acts.push(['Tirar', () => { if (['inferior', 'normal', 'superior'].includes(it.rarity) || confirm(`¿Tirar «${it.name}»? Se perderá para siempre.`)) DD.net.send({ t: 'inv:drop', id: it.id }); }, true]);
     actionMenu(e, acts);
+  }
+
+  // Talentos: tres ramas por clase; cada escalón se abre con 3 puntos más en su rama
+  function talentsView(p) {
+    const d = derived();
+    const c = p.char, t = c.talents || {};
+    const wrap = el('div', 'talents');
+    const head = el('div', 'tal-head');
+    head.appendChild(el('b', '', `${d.talentPoints} punto${d.talentPoints === 1 ? '' : 's'} de talento libre${d.talentPoints === 1 ? '' : 's'}`));
+    head.appendChild(el('span', 'muted small', ' · uno cada 2 niveles · para abrir cada fila hacen falta 3 puntos más en esa rama'));
+    if (RULES.talentSpent(t)) {
+      const rb = el('button', 'btn alt', `Reiniciar (${15 * d.level} 🪙)`);
+      rb.onclick = () => { if (confirm('¿Reiniciar todos los talentos?')) DD.net.send({ t: 'talent:reset' }); };
+      head.appendChild(rb);
+    }
+    wrap.appendChild(head);
+    const cols = el('div', 'tal-trees');
+    RULES.TALENTS[c.cls].forEach((tree, ti) => {
+      const spent = tree.t.reduce((a, tl) => a + (t[tl.id] || 0), 0);
+      const col = el('div', 'tal-tree');
+      col.appendChild(el('div', 'tal-title', `${tree.icon} ${tree.name} · ${spent}`));
+      tree.t.forEach((tl, i) => {
+        const r = t[tl.id] || 0, open = spent >= i * 3, can = !RULES.canTalent(c, d.level, tl.id);
+        const b = el('button', 'tal' + (r ? ' has' : '') + (r >= tl.max ? ' max' : '') + (open ? '' : ' locked') + (can ? ' can' : ''));
+        b.type = 'button';
+        b.append(el('span', 'tal-ic', tl.icon), el('b', '', tl.name), el('small', '', tl.desc), el('em', '', `${r}/${tl.max}`));
+        b.title = open ? (can ? 'Clic para subir este talento' : RULES.canTalent(c, d.level, tl.id) || '') : `Pon ${i * 3} puntos en ${tree.name} para abrirlo`;
+        b.onclick = () => { if (can) { DD.net.send({ t: 'talent:add', id: tl.id }); DD.sfx && DD.sfx('click'); } else DD.toast(RULES.canTalent(c, d.level, tl.id) || ''); };
+        col.appendChild(b);
+      });
+      cols.appendChild(col);
+    });
+    wrap.appendChild(cols);
+    return wrap;
   }
 
   function skillsView(p) {

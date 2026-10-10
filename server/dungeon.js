@@ -59,7 +59,7 @@ class Instance {
     this.npcs = def.npcs || [];
     this.waystones = def.waystones || [];
     this.pets = new Map(); // dueño -> mascota
-    this.mod = def.descent ? def.descent.mod : null; // desafío semanal del Descenso
+    this.mod = def.descent ? def.descent.mod : def.raid ? def.raid.mod : null; // desafío semanal del Descenso o del Asalto
     this.duel = def.duel || null;                     // arena: { a, b, bet, startAt }
     this.herbs = new Map((def.herbs || []).map((h) => [h.id, { ...h, readyAt: 0 }]));
     this.worldBoss = null;
@@ -175,6 +175,7 @@ class Instance {
     if (this.mod === 'frenesi') { m.ms = Math.round(m.ms * 0.75); m.atk = Math.round(m.atk * 0.8); }
     if (this.mod === 'gigantes') { m.hp = Math.round(m.hp * 1.5); m.xp = Math.round(m.xp * 1.5); m.big = true; }
     if (o.hpMult) m.hp = Math.round(m.hp * o.hpMult);
+    if (this.def.raid) { m.hp = Math.round(m.hp * PROG.RAID.hpMult); m.dmg = m.dmg.map((v) => v * PROG.RAID.dmgMult); m.xp = Math.round(m.xp * PROG.RAID.xpMult); }
     const id = 'e' + ++this.seq;
     this.enemies.set(id, {
       id, k: m.k, m, x, y, hp: m.hp, maxHp: m.hp, dir: 'S', sm: m.ms, summoned: !!o.summoned,
@@ -699,7 +700,7 @@ class Instance {
     }
     if (!step) return;
     const [dx, dy] = step;
-    const speed = (p.mounted && p.mount ? 1 / (1 + p.mount.speed / 100) : 1) * (p.slowUntil > now ? 1.8 : 1);
+    const speed = (p.mounted && p.mount ? 1 / (1 + p.mount.speed / 100) : 1) * (p.slowUntil > now ? 1.8 : 1) / (1 + this.buffSum(p, 'haste') / 100);
     p.sm = Math.round(p.d.moveMs * (dx && dy ? 1.41 : 1) * speed);
     p.nextStep = now + p.sm;
     p.x += dx; p.y += dy;
@@ -816,11 +817,24 @@ class Instance {
   weaponAttack(p, t, now) {
     const d = p.d;
     p.dir = dirName(t.x - p.x, t.y - p.y);
-    p.nextAttack = now + d.atkMs;
+    p.nextAttack = now + d.atkMs / (1 + this.buffSum(p, 'haste') / 100);
     const chance = Math.max(55, Math.min(99, 90 + d.hit - 4 * Math.max(0, t.m.level - d.level)));
     const kind = d.weapon.kind;
     if (rnd() * 100 >= chance) { this.event({ e: 'hit', by: p.user.id, t: t.id, miss: true, kind }); return; }
     this.damageEnemy(p, t, this.weaponRoll(p), { kind, magic: kind === 'magic', undead: (d.undead || 0) / 100, elem: this.elemRoll(p) });
+    // legendario «Trueno»: cada cuarto golpe cae un rayo que salta a dos enemigos más
+    if (d.leg && d.leg.trueno && (p.legHits = (p.legHits || 0) + 1) % 4 === 0) {
+      const dmg = this.weaponRoll(p) * 1.5;
+      const hit = [t, ...this.enemiesNear(t, 3, p).filter((o) => o !== t).sort((a, b) => cheb(a, t) - cheb(b, t)).slice(0, 2)];
+      let from = { x: t.x, y: t.y - 4 };
+      for (const o of hit) {
+        if (!this.enemies.has(o.id)) continue;
+        this.event({ e: 'fx', kind: 'bolt', from, to: { x: o.x, y: o.y }, color: '#fff27a' });
+        this.damageEnemy(p, o, o === t ? dmg : dmg * 0.6, { magic: true, name: 'Trueno', fx: 'lightning', chain: true });
+        from = { x: o.x, y: o.y };
+      }
+      this.event({ e: 'leg', id: p.user.id, name: '🌩️ Trueno' });
+    }
   }
 
   // Daño elemental del arma (como en Diablo 2): fuego, frío (ralentiza), rayo y veneno (en 3 s); no lo para la armadura
@@ -871,6 +885,11 @@ class Instance {
     this.event({ e: 'hit', by: p.user.id, t: e.id, dmg, crit, kind: o.kind || 'ability', fx: o.fx || null, name: o.name || null });
     const ls = p.d.lifesteal / 100 + (o.leech || 0);
     if (ls > 0) this.heal(p, Math.max(1, Math.round(dmg * ls)), o.leech ? o.name : 'Robo de vida');
+    // legendario «Rebote»: lo que va a distancia salta a otro enemigo cercano
+    if (!o.chain && p.d.leg && p.d.leg.rebote && (o.kind === 'ranged' || o.kind === 'magic' || o.magic)) {
+      const next = this.enemiesNear(e, 3, p).filter((x) => x !== e && this.los(e, x)).sort((a, b) => cheb(a, e) - cheb(b, e))[0];
+      if (next) { this.event({ e: 'fx', kind: 'bolt', from: { x: e.x, y: e.y }, to: { x: next.x, y: next.y }, color: '#9ad8ff' }); this.damageEnemy(p, next, base * 0.6, { ...o, chain: true, noCrit: true, name: 'Rebote' }); }
+    }
     if (e.hp <= 0) this.killEnemy(p, e);
     return dmg;
   }
@@ -904,10 +923,13 @@ class Instance {
     p.pending = null;
     c.en -= ab.cost;
     c.cds[ab.id] = now + ab.cd * FAST * (1 - p.d.cdr / 100);
+    // legendario «Eco»: a veces la habilidad sale gratis
+    if (p.d.leg && p.d.leg.eco && rnd() < 0.25) { c.en += ab.cost; c.cds[ab.id] = now + 300; this.event({ e: 'leg', id: p.user.id, name: '🔁 Eco' }); }
     p.nextAttack = Math.max(p.nextAttack, now + 350);
     if (point) p.dir = dirName(point.x - p.x, point.y - p.y) || p.dir;
     this.event({ e: 'cast', by: p.user.id, name: ab.name, id: ab.id });
-    const dmgFor = () => (ab.weapon || ab.kind === 'strike' ? this.weaponRoll(p) : this.spellRoll(p)) * (ab.mult || 1);
+    const boost = 1 + ((p.d.abBoost && p.d.abBoost[ab.id]) || 0) / 100; // talentos que mejoran esta habilidad
+    const dmgFor = () => (ab.weapon || ab.kind === 'strike' ? this.weaponRoll(p) : this.spellRoll(p)) * (ab.mult || 1) * boost;
     const magic = !(ab.weapon || ab.kind === 'strike');
     const color = { fire: '#ff7a2a', cold: '#9ad8ff', holy: '#fff2a0', void: '#a05aff', blood: '#ff3a4a', lightning: '#fff27a' }[ab.fx] || '#ffffff';
     switch (ab.kind) {
@@ -974,22 +996,23 @@ class Instance {
       }
       case 'heal': {
         const t = point && this.players.get(point.user ? point.user.id : '') || p;
-        this.heal(t, Math.round((t.d.hp * ab.pct + roll(p.d.spell) * 0.5) * p.d.healPow), ab.name);
+        this.heal(t, Math.round((t.d.hp * ab.pct + roll(p.d.spell) * 0.5) * p.d.healPow * boost), ab.name);
         this.event({ e: 'fx', kind: 'heal', x: t.x, y: t.y });
         break;
       }
       case 'healAll': {
-        for (const o of this.players.values()) if (cheb(o, p) <= ab.radius) { this.heal(o, Math.round(o.d.hp * ab.pct * p.d.healPow), ab.name); this.event({ e: 'fx', kind: 'heal', x: o.x, y: o.y }); }
+        for (const o of this.players.values()) if (cheb(o, p) <= ab.radius) { this.heal(o, Math.round(o.d.hp * ab.pct * p.d.healPow * boost), ab.name); this.event({ e: 'fx', kind: 'heal', x: o.x, y: o.y }); }
         this.event({ e: 'fx', kind: 'nova', x: p.x, y: p.y, radius: ab.radius, color: '#7dff8a' });
         break;
       }
       case 'buff': {
-        for (const o of this.players.values()) if (cheb(o, p) <= ab.radius) o.tbuffs[ab.id] = { ...ab.buff, until: now + ab.dur };
+        const bb = Object.fromEntries(Object.entries(ab.buff).map(([k, v]) => [k, typeof v === 'number' ? Math.round(v * boost) : v]));
+        for (const o of this.players.values()) if (cheb(o, p) <= ab.radius) o.tbuffs[ab.id] = { ...bb, until: now + ab.dur };
         this.event({ e: 'fx', kind: 'nova', x: p.x, y: p.y, radius: ab.radius, color: ab.buff.dr ? '#7ad0ff' : '#ff6a3a' });
         break;
       }
       case 'aura': {
-        this.auras.push({ owner: p.user.id, radius: ab.radius, mult: ab.mult, until: now + ab.dur, next: now + 1000, name: ab.name });
+        this.auras.push({ owner: p.user.id, radius: ab.radius, mult: ab.mult * boost, until: now + ab.dur, next: now + 1000, name: ab.name });
         this.event({ e: 'fx', kind: 'aura', id: p.user.id, until: ab.dur, radius: ab.radius });
         break;
       }
@@ -1050,6 +1073,16 @@ class Instance {
       if (pet && pet.downUntil <= Date.now() && this.hooks.petXp && (this.kind !== 'world' || cheb(o, e) <= 20)) this.hooks.petXp(o.user, Math.max(1, Math.round(xp * 0.6)));
     }
     this.event({ e: 'die', id: e.id, k: e.k, x: e.x, y: e.y, by: p.user.id, xp: shown || Math.round(share), boss: e.m.boss || undefined, elite: e.m.elite || undefined });
+    // poderes legendarios al matar
+    const L = p.d.leg || {};
+    if (L.sed) this.heal(p, Math.max(1, Math.round(p.d.hp * 0.06)), 'Sed de sangre');
+    if (L.frenesi) { p.tbuffs.frenesi = { haste: 30, until: Date.now() + 4000 }; this.sendPrivate(p); }
+    if (L.estallido && !this.blasting) {
+      this.blasting = true; // los que mueren por el estallido no vuelven a estallar
+      this.event({ e: 'fx', kind: 'nova', x: e.x, y: e.y, radius: 1, color: '#ff8a1a' });
+      for (const o of this.enemiesNear(e, 1, p)) if (o !== e) this.damageEnemy(p, o, e.maxHp * 0.3, { magic: true, noCrit: true, name: 'Estallido', chain: true });
+      this.blasting = false;
+    }
     const info = { elite: e.m.elite, boss: e.m.boss, world: !!e.wb, fam: (RULES.MONSTERS[e.k] || {}).fam };
     if (this.hooks.kill) for (const o of party) if (this.kind !== 'world' || cheb(o, e) <= 20) this.hooks.kill(o.user, e.k, info);
     // desafío «cadáveres explosivos» (o zombis hinchados): estallan al rato
@@ -1081,6 +1114,7 @@ class Instance {
       const spot = this.freeNear(e.x, e.y, (a, b) => this.walkTile(a, b) && ![...this.loot.values()].some((l) => l.x === a && l.y === b));
       this.portal = spot;
       this.event({ e: 'portal', x: spot.x, y: spot.y, name: e.m.name });
+      if (this.def.raid && this.hooks.raidDone) this.hooks.raidDone(this);
       // el resto de la sala huye: no queda nadie que pelee por su señor
       for (const o of [...this.enemies.values()]) if (o.summoned) { this.enemies.delete(o.id); this.event({ e: 'die', id: o.id, k: o.k, x: o.x, y: o.y, xp: 0 }); }
     }
@@ -1099,7 +1133,14 @@ class Instance {
     if (!o.magic && p.d.block && rnd() * 100 < p.d.block) { dmg *= 0.35; blocked = true; }
     dmg *= 1 - Math.min(60, this.buffSum(p, 'dr')) / 100;
     dmg = Math.max(1, Math.round(dmg));
+    // legendario «Égida»: el escudo absorbe primero
+    if (p.shield > 0) { const a = Math.min(p.shield, dmg); p.shield -= a; dmg -= a; if (p.shield <= 0) p.shield = 0; }
     c.hp -= dmg;
+    if (p.d.leg && p.d.leg.egida && c.hp > 0 && c.hp < p.d.hp * 0.3 && Date.now() >= (p.egidaReady || 0)) {
+      p.shield = Math.round(p.d.hp * 0.35); p.egidaReady = Date.now() + 45000;
+      this.event({ e: 'fx', kind: 'aura', id: p.user.id, until: 2500, radius: 1 });
+      this.event({ e: 'leg', id: p.user.id, name: '🛡️ Égida' });
+    }
     p.fishing = null;
     this.event({ e: 'hit', by: o.by || null, t: p.user.id, dmg, crit: o.crit || undefined, block: blocked || undefined, name: o.name || null, kind: o.kind || 'melee' });
     // desafío «sed de sangre»: el enemigo se cura con lo que hiere
@@ -1389,7 +1430,7 @@ class Instance {
 
   // Resumen para la lista de partidas abiertas
   summary() {
-    return { id: this.id, name: this.def.name, theme: this.def.theme, level: this.level, players: [...this.players.values()].map((p) => p.user.name), bossDead: this.bossDead };
+    return { id: this.id, name: this.def.name, theme: this.def.theme, level: this.level, players: [...this.players.values()].map((p) => p.user.name), bossDead: this.bossDead, raid: !!this.def.raid };
   }
 }
 

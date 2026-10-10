@@ -146,6 +146,24 @@
   const DAY = 86400000;
   const dayKey = (now = Date.now()) => Math.floor(now / DAY);
   const weekKey = (now = Date.now()) => Math.floor((now / DAY - 4) / 7); // las semanas empiezan en lunes
+  // Recompensa por entrar cada día (por cuenta): siete días seguidos y vuelta a empezar; si fallas un día, la racha se reinicia
+  const LOGIN_REWARDS = [
+    { day: 1, icon: '🪙', text: '50 de oro y 2 pociones de vida', gold: 50, cons: { 'pocion-vida-p': 2 } },
+    { day: 2, icon: '🔩', text: '100 de oro y materiales de forja', gold: 100, mats: { hierro: 6, esencia: 1 } },
+    { day: 3, icon: '🔵', text: 'Un objeto mágico de tu nivel', gold: 50, item: 'magico' },
+    { day: 4, icon: '🧪', text: '200 de oro, elixir y pociones', gold: 200, cons: { elixir: 1, 'pocion-energia': 2 } },
+    { day: 5, icon: '🟡', text: 'Un objeto raro de tu nivel', gold: 80, item: 'raro' },
+    { day: 6, icon: '📜', text: '300 de oro y pergaminos', gold: 300, cons: { 'perg-fuego': 1, 'perg-retorno': 1 }, mats: { esencia: 2 } },
+    { day: 7, icon: '🎁', text: 'Gran cofre: objeto raro o único (¡y puede ser legendario!) y polvo de estrella', gold: 500, item: 'cofre', mats: { polvo: 2 } },
+  ];
+  // ¿qué toca hoy? acct.daily = { last: día, streak }
+  function loginState(daily, now = Date.now()) {
+    const today = dayKey(now);
+    const d = daily || { last: -1, streak: 0 };
+    if (d.last === today) return { claimed: true, streak: d.streak, next: null };
+    const streak = d.last === today - 1 ? (d.streak % 7) + 1 : 1;
+    return { claimed: false, streak, next: LOGIN_REWARDS[streak - 1] };
+  }
   const FAM = { goblin: 'goblins', orco: 'orcos', muerto: 'no muertos', bestia: 'bestias', humano: 'bandidos y sectarios', demonio: 'demonios' };
   // ev: tipo de suceso que cuenta; f: filtro opcional
   const DAILY = {
@@ -253,6 +271,42 @@
   const DESCENT_THEMES = ['cuevas', 'cripta', 'nido', 'fortaleza', 'volcan', 'abismo'];
   const descentTheme = (floor) => DESCENT_THEMES[(floor - 1) % DESCENT_THEMES.length];
   const descentLevel = (startLevel, floor) => startLevel + floor - 1;
+  // Mejoras de la taberna: se pagan entre todos con donaciones; cada nivel suma sus bonificaciones a quien esté en ese servidor
+  const TAVERN_LEVELS = [
+    { cost: 2000, name: 'Barril de honor', icon: '🛢️', bonus: { xp: 5 }, text: '+5% de experiencia' },
+    { cost: 6000, name: 'Chimenea encantada', icon: '🔥', bonus: { gold: 8 }, text: '+8% de oro' },
+    { cost: 15000, name: 'Cofre del gremio', icon: '🧰', bonus: { mf: 15 }, text: '+15 de hallazgo mágico' },
+    { cost: 35000, name: 'Estandarte de la taberna', icon: '🚩', bonus: { xp: 5, gold: 7, mf: 10 }, text: '+5% de experiencia, +7% de oro y +10 de hallazgo mágico' },
+    { cost: 80000, name: 'Salón de los héroes', icon: '🏛️', bonus: { xp: 10, mf: 15 }, text: '+10% de experiencia y +15 de hallazgo mágico' },
+  ];
+  function tavernBonus(fund) {
+    const b = { xp: 0, gold: 0, mf: 0 };
+    const lvl = tavernLevel(fund);
+    for (let i = 0; i < lvl; i++) for (const [k, v] of Object.entries(TAVERN_LEVELS[i].bonus)) b[k] += v;
+    return b;
+  }
+  function tavernLevel(fund) { let g = (fund && fund.gold) || 0, n = 0; for (const L of TAVERN_LEVELS) { if (g >= L.cost) { n++; g -= L.cost; } else break; } return n; }
+  // Mercado entre jugadores
+  const MARKET = { fee: 0.05, maxPerChar: 8, maxPrice: 1000000 };
+  // Temporadas de 6 semanas: puntos por jugar; al acabar, título y aura para los mejores
+  const SEASON = { weeks: 6, minPts: 40 };
+  const seasonKey = (now = Date.now()) => Math.floor(weekKey(now) / SEASON.weeks);
+  const seasonEnds = (now = Date.now()) => ((seasonKey(now) + 1) * SEASON.weeks * 7 + 4) * DAY;
+  // número que se enseña: la temporada 1 es la de octubre de 2026
+  const SEASON_BASE = seasonKey(Date.UTC(2026, 9, 1));
+  const seasonNumber = (sk) => sk - SEASON_BASE + 1;
+  const SEASON_PTS = { boss: 10, elite: 2, kill: 0.2, floor: 3, legend: 15, task: 5, quest: 8, raid: 40, daily: 5, duel: 4 };
+  const SEASON_PRIZES = [
+    { rank: 1, title: 'Campeón de la temporada', aura: 'oro' },
+    { rank: 2, title: 'Subcampeón de la temporada', aura: 'plata' },
+    { rank: 3, title: 'Bronce de la temporada', aura: 'bronce' },
+    { rank: 999, title: 'Veterano de la temporada', aura: 'temporada' },
+  ];
+  const AURAS = { oro: '#ffd24a', plata: '#d8e4f0', bronce: '#e0904a', temporada: '#8a6aff' };
+  // Asalto semanal: el mismo mapa para todos durante la semana, más duro y con su propio desafío; clasificación por tiempo
+  const RAID = { name: 'Asalto semanal', hpMult: 1.6, dmgMult: 1.3, xpMult: 1.5, bonusLevel: 2, minLevel: 3 };
+  const raidTheme = (week = weekKey()) => DESCENT_THEMES[((week + 2) % DESCENT_THEMES.length + DESCENT_THEMES.length) % DESCENT_THEMES.length];
+  const raidMod = (week = weekKey()) => { const ids = Object.keys(WEEKLY_MODS); return ids[(((week + 3) % ids.length) + ids.length) % ids.length]; };
 
   // ======================================================================
   //  Clasificaciones semanales
@@ -282,7 +336,7 @@
     MATS, FISH_BY_ZONE, HERB_BY_ZONE, matDrops, catchFish,
     MAX_UP, upgradeCost, applyUpgrade, enchantCost, enchant, COMBINE_TO, combineCost, combine, salvage, baseName,
     RECIPES, COOK_PRICE, FOOD_MIN,
-    DAILY, WEEKLY, FAM, dayKey, weekKey, boardFor, taskDef, taskText, taskMatch, taskReward,
+    TAVERN_LEVELS, tavernBonus, tavernLevel, MARKET, SEASON, seasonKey, seasonEnds, seasonNumber, SEASON_PTS, SEASON_PRIZES, AURAS, RAID, raidTheme, raidMod, LOGIN_REWARDS, loginState, DAILY, WEEKLY, FAM, dayKey, weekKey, boardFor, taskDef, taskText, taskMatch, taskReward,
     ACHIEVEMENTS, MAX_STATS, STAT_NAMES, WORLD_BOSSES, WORLD_EVENT,
     WEEKLY_MODS, weekMod, descentTheme, descentLevel, BOARDS, ARENA, arenaTiles,
   };

@@ -354,6 +354,19 @@
   // Nombres de los objetos raros (dos palabras al azar, como «Mordisco Lúgubre» en Diablo 2)
   const RARE_A = ['Mordisco', 'Grito', 'Colmillo', 'Tormenta', 'Pesadilla', 'Ruina', 'Sombra', 'Llanto', 'Espina', 'Ira', 'Plaga', 'Eco', 'Garra', 'Calavera', 'Brasa', 'Hueso', 'Lamento', 'Furia', 'Aullido', 'Presagio', 'Veneno', 'Juramento', 'Corona', 'Ala'];
   const RARE_B = ['Lúgubre', 'Cruel', 'Feroz', 'del Cuervo', 'de Hierro', 'de la Noche', 'del Abismo', 'del Ocaso', 'de Ceniza', 'de la Tumba', 'de Sangre', 'de Escarcha', 'del Trueno', 'de Medianoche', 'Voraz', 'Salvaje', 'del Lobo', 'de Plata'];
+  // Objetos legendarios: únicos muy raros con un poder que cambia cómo juegas (it.leg)
+  const LEGENDARY = {
+    rebote: { name: 'Rebote', icon: '⚡', desc: 'Tus disparos, rayos y golpes a distancia rebotan a otro enemigo cercano con el 60% del daño.' },
+    estallido: { name: 'Estallido', icon: '💥', desc: 'Los enemigos que matas estallan y hieren a los de alrededor con el 30% de su vida máxima.' },
+    sed: { name: 'Sed de sangre', icon: '🩸', desc: 'Cada enemigo que matas te cura el 6% de tu vida máxima.' },
+    frenesi: { name: 'Frenesí', icon: '🌪️', desc: 'Al matar ganas un 30% de velocidad de ataque y de movimiento durante 4 s.' },
+    egida: { name: 'Égida', icon: '🛡️', desc: 'Si bajas del 30% de vida, un escudo absorbe daño igual al 35% de tu vida máxima (cada 45 s).' },
+    trueno: { name: 'Trueno', icon: '🌩️', desc: 'Cada cuarto golpe con el arma cae un rayo sobre el objetivo (150% del daño) que salta a 2 enemigos más.' },
+    eco: { name: 'Eco', icon: '🔁', desc: 'Tus habilidades tienen un 25% de probabilidad de no gastar energía ni tiempo de espera.' },
+  };
+  const LEGENDARY_COLOR = '#ff8a1a';
+  const itemColor = (it) => (it && it.leg ? LEGENDARY_COLOR : (RARITIES[it && it.rarity] || RARITIES.normal).color);
+
   const UNIQUE_NAMES = {
     arma: ['Filo del Alba', 'Llanto de la Viuda', 'Segadora de Almas', 'Colmillo de Medianoche', 'Juramento Roto', 'Ira del Dragón', 'Susurro del Vacío', 'Lamento del Rey', 'Aguijón de Ceniza', 'Furia Carmesí'],
     mano: ['Bastión Inquebrantable', 'Esfera del Eclipse', 'Muro de los Mártires', 'Corazón de Tormenta'],
@@ -591,7 +604,8 @@
       } else if (rarity === 'raro') it.name = `${pick(rng, RARE_A)} ${pick(rng, RARE_B)}`;
       else it.name = B.name;
     }
-    it.value = itemValue(it);
+    if (o.leg && LEGENDARY[o.leg] && rarity === 'unico') { it.leg = o.leg; it.value = 0; }
+    it.value = itemValue(it) * (it.leg ? 3 : 1);
     it.weight = itemWeight(it);
     return it;
   }
@@ -655,6 +669,9 @@
     const lvl = Math.max(1, o.ilvl | 0);
     for (let i = 0; i < rolls; i++) {
       if (rng() >= DROP[kind].chance * (kind === 'normal' ? 1 + Math.min(0.5, (o.mf || 0) / 400) : 1)) continue;
+      // legendario: muy raro, sobre todo de jefes y a más nivel
+      const legChance = { boss: 0.015, elite: 0.004, chest: 0.004, normal: 0.0003 }[kind] * (1 + lvl / 20) * (1 + Math.min(1, (o.mf || 0) / 300));
+      if (rng() < legChance) { out.push(makeItem(rng, { ilvl: lvl, rarity: 'unico', classes: o.classes, leg: pick(rng, Object.keys(LEGENDARY)) })); continue; }
       const rarity = rollDropRarity(rng, kind, lvl, o.mf);
       // los enemigos normales sueltan objetos de su nivel o algo por debajo
       const ilvl = kind === 'normal' ? Math.max(1, lvl - Math.floor(rng() * 3)) : lvl;
@@ -721,6 +738,7 @@
     if (it.addMax) lines.push({ t: `+${it.addMax} al daño máximo`, c: 'mod' });
     for (const [k, r] of Object.entries(it.elem || {})) lines.push({ t: `${ELEMENTS[k].icon} ${r[0]}–${r[1]} de daño de ${ELEMENTS[k].name}${k === 'frio' ? ' (ralentiza)' : ''}`, c: 'mod' });
     for (const [k, v] of Object.entries(it.stats || {})) lines.push({ t: fmtStat(k, v), c: 'mod' });
+    if (it.leg && LEGENDARY[it.leg]) lines.push({ t: `★ Legendario · ${LEGENDARY[it.leg].icon} ${LEGENDARY[it.leg].name}: ${LEGENDARY[it.leg].desc}`, c: 'leg' });
     const cl = classesFor(it);
     if (cl.length < CLASS_IDS.length) lines.push({ t: `Ideal para: ${cl.map((c) => CLASSES[c].name).join(', ')}`, c: 'muted' });
     lines.push({ t: `Peso ${it.weight !== undefined ? it.weight : itemWeight(it)} kg`, c: 'muted' });
@@ -835,6 +853,88 @@
   }
 
   // Limpia una ficha guardada (o enviada por un cliente): puntos dentro del total y sin pasar del máximo natural
+  // ======================================================================
+  //  Talentos: 3 ramas por clase, 4 talentos por rama (el último, de 1 punto). Un punto cada 2 niveles.
+  //  Para abrir el escalón n de una rama hay que haber puesto 3·(n−1) puntos en ella.
+  //  e: bonificaciones por punto (las mismas claves que el equipo; ab:<habilidad> = % de daño o curación)
+  // ======================================================================
+  const T = (id, name, icon, desc, e, max = 3) => ({ id, name, icon, desc, e, max });
+  const TALENTS = {
+    guerrero: [
+      { name: 'Armas', icon: '⚔️', t: [T('g-filo', 'Filo templado', '🗡️', '+5% de daño por punto', { dmgPct: 5 }), T('g-golpe', 'Golpe demoledor', '💥', '+15% de daño de Golpe brutal por punto', { 'ab:golpe': 15 }), T('g-critico', 'Ojo del verdugo', '🎯', '+2% de crítico por punto', { crit: 2 }), T('g-torbellino', 'Tormenta de acero', '🌀', 'Torbellino hace un 50% más de daño', { 'ab:torbellino': 50 }, 1)] },
+      { name: 'Defensa', icon: '🛡️', t: [T('g-vida', 'Aguante', '❤️', '+6% de vida por punto', { hpPct: 6 }), T('g-armadura', 'Piel de hierro', '🪨', '+8% de armadura por punto', { armorPct: 8 }), T('g-res', 'Voluntad férrea', '🔮', '+5% de resistencia mágica por punto', { resAll: 5 }), T('g-muro', 'Muro viviente', '🏰', '+15% de vida y +10% de armadura', { hpPct: 15, armorPct: 10 }, 1)] },
+      { name: 'Furia', icon: '🔥', t: [T('g-rapidez', 'Brazo rápido', '⚡', '+5% de velocidad de ataque por punto', { speed: 5 }), T('g-sangre', 'Sed de batalla', '🩸', '+1% de robo de vida por punto', { lifesteal: 1 }), T('g-carga', 'Embestida', '🐂', '+20% de daño de Carga por punto', { 'ab:carga': 20 }), T('g-berserk', 'Berserker', '😡', '+12% de daño y +10% de velocidad de ataque', { dmgPct: 12, speed: 10 }, 1)] },
+    ],
+    mago: [
+      { name: 'Fuego', icon: '🔥', t: [T('m-llama', 'Llama interior', '🕯️', '+5% de poder de hechizos por punto', { spellPct: 5 }), T('m-bola', 'Bola ardiente', '☄️', '+15% de daño de Bola de fuego por punto', { 'ab:bola': 15 }), T('m-ignicion', 'Ignición', '💥', '+10% de daño crítico por punto', { critDmg: 10 }), T('m-meteoro', 'Lluvia de meteoros', '🌋', 'Meteoro hace un 50% más de daño', { 'ab:meteoro': 50 }, 1)] },
+      { name: 'Escarcha', icon: '❄️', t: [T('m-escarcha', 'Frío glacial', '🧊', '+15% de daño de Nova de escarcha por punto', { 'ab:escarcha': 15 }), T('m-armadura', 'Armadura de hielo', '🛡️', '+10% de armadura por punto', { armorPct: 10 }), T('m-esquiva', 'Paso helado', '💨', '+2% de esquiva por punto', { dodge: 2 }), T('m-ventisca', 'Corazón de invierno', '❄️', '+10% de vida y +10% de resistencia mágica', { hpPct: 10, resAll: 10 }, 1)] },
+      { name: 'Arcano', icon: '🔮', t: [T('m-energia', 'Pozo arcano', '💠', '+10 de energía por punto', { en: 10 }), T('m-regen', 'Mente clara', '🌀', '+1 de energía por segundo por punto', { enRegen: 1 }), T('m-misiles', 'Proyectiles afilados', '✨', '+15% de daño de Proyectiles mágicos por punto', { 'ab:misiles': 15 }), T('m-prisa', 'Prisa arcana', '⏳', '-10% de tiempo de espera de las habilidades', { cdr: 10 }, 1)] },
+    ],
+    explorador: [
+      { name: 'Puntería', icon: '🎯', t: [T('e-ojo', 'Ojo de halcón', '🦅', '+2% de crítico por punto', { crit: 2 }), T('e-letal', 'Disparo letal', '💀', '+10% de daño crítico por punto', { critDmg: 10 }), T('e-perforante', 'Punta de acero', '➶', '+15% de daño de Flecha perforante por punto', { 'ab:perforante': 15 }), T('e-francotirador', 'Francotirador', '🏹', '+15% de daño', { dmgPct: 15 }, 1)] },
+      { name: 'Supervivencia', icon: '🌲', t: [T('e-esquiva', 'Reflejos', '💨', '+2% de esquiva por punto', { dodge: 2 }), T('e-vida', 'Curtido', '❤️', '+5% de vida por punto', { hpPct: 5 }), T('e-paso', 'Paso ligero', '👣', '+5% de velocidad al andar por punto', { move: 5 }), T('e-sombra', 'Fantasma del bosque', '🌫️', '+5% de esquiva y +10% de resistencia mágica', { dodge: 5, resAll: 10 }, 1)] },
+      { name: 'Andanada', icon: '🌧️', t: [T('e-lluvia', 'Cielo de flechas', '🌧️', '+15% de daño de Lluvia de flechas por punto', { 'ab:lluvia': 15 }), T('e-multiple', 'Abanico', '🏹', '+15% de daño de Disparo múltiple por punto', { 'ab:multiple': 15 }), T('e-rapidez', 'Mano rápida', '⚡', '+5% de velocidad de ataque por punto', { speed: 5 }), T('e-tormenta', 'Tormenta de flechas', '⛈️', '+10% de velocidad de ataque y -10% de espera', { speed: 10, cdr: 10 }, 1)] },
+    ],
+    picaro: [
+      { name: 'Asesinato', icon: '🗡️', t: [T('p-critico', 'Punto débil', '🎯', '+2% de crítico por punto', { crit: 2 }), T('p-letal', 'Golpe mortal', '💀', '+12% de daño crítico por punto', { critDmg: 12 }), T('p-punalada', 'Puñalada trapera', '🔪', '+15% de daño de Puñalada por punto', { 'ab:punalada': 15 }), T('p-asesino', 'Asesino', '☠️', '+12% de daño y +4% de crítico', { dmgPct: 12, crit: 4 }, 1)] },
+      { name: 'Venenos', icon: '🧪', t: [T('p-veneno', 'Toxinas', '🐍', '+15% de daño de Hoja envenenada por punto', { 'ab:veneno': 15 }), T('p-abanico', 'Lluvia de cuchillos', '🔪', '+15% de daño de Abanico de cuchillos por punto', { 'ab:abanico': 15 }), T('p-daño', 'Filos untados', '🗡️', '+5% de daño por punto', { dmgPct: 5 }), T('p-plaga', 'Maestro envenenador', '☣️', '+2% de robo de vida y +10% de daño', { lifesteal: 2, dmgPct: 10 }, 1)] },
+      { name: 'Sombras', icon: '🌑', t: [T('p-esquiva', 'Escurridizo', '💨', '+2% de esquiva por punto', { dodge: 2 }), T('p-paso', 'Pies silenciosos', '👣', '+5% de velocidad al andar por punto', { move: 5 }), T('p-sombra', 'Paso sombrío', '🌑', '-5% de espera de las habilidades por punto', { cdr: 5 }), T('p-niebla', 'Uno con la noche', '🌫️', '+6% de esquiva y +10% de velocidad de ataque', { dodge: 6, speed: 10 }, 1)] },
+    ],
+    paladin: [
+      { name: 'Justicia', icon: '⚖️', t: [T('pa-daño', 'Brazo justo', '⚔️', '+5% de daño por punto', { dmgPct: 5 }), T('pa-sagrado', 'Golpe bendito', '☀️', '+15% de daño de Golpe sagrado por punto', { 'ab:sagrado': 15 }), T('pa-critico', 'Juicio certero', '🎯', '+2% de crítico por punto', { crit: 2 }), T('pa-juicio', 'Martillo de los cielos', '🔨', 'Martillo del juicio hace un 50% más de daño', { 'ab:juicio': 50 }, 1)] },
+      { name: 'Protección', icon: '🛡️', t: [T('pa-armadura', 'Fe de acero', '🪨', '+8% de armadura por punto', { armorPct: 8 }), T('pa-vida', 'Corazón noble', '❤️', '+6% de vida por punto', { hpPct: 6 }), T('pa-aura', 'Aura poderosa', '🛡️', '+20% de efecto del Aura de protección por punto', { 'ab:aura': 20 }), T('pa-baluarte', 'Baluarte', '🏰', '+15% de resistencia mágica y +10% de armadura', { resAll: 15, armorPct: 10 }, 1)] },
+      { name: 'Luz', icon: '✨', t: [T('pa-cura', 'Manos sanadoras', '🙌', '+8% de curación por punto', { healPct: 8 }), T('pa-manos', 'Imposición mayor', '💛', '+15% de curación de Imposición de manos por punto', { 'ab:manos': 15 }), T('pa-energia', 'Devoción', '💠', '+8 de energía por punto', { en: 8 }), T('pa-santo', 'Santo', '😇', '+15% de curación y -10% de espera', { healPct: 15, cdr: 10 }, 1)] },
+    ],
+    sacerdote: [
+      { name: 'Sanación', icon: '💚', t: [T('s-cura', 'Toque sanador', '🤲', '+8% de curación por punto', { healPct: 8 }), T('s-curar', 'Curación mayor', '💚', '+15% de curación de Curar heridas por punto', { 'ab:curar': 15 }), T('s-plegaria', 'Coro celestial', '🙏', '+15% de curación de Plegaria de sanación por punto', { 'ab:plegaria': 15 }), T('s-milagro', 'Milagro', '🌟', '+20% de curación', { healPct: 20 }, 1)] },
+      { name: 'Castigo', icon: '🔥', t: [T('s-poder', 'Ira sagrada', '☀️', '+5% de poder de hechizos por punto', { spellPct: 5 }), T('s-llama', 'Llama purificadora', '🔥', '+15% de daño de Llama sagrada por punto', { 'ab:llama': 15 }), T('s-espiritus', 'Espíritus feroces', '👻', '+15% de daño de Espíritus guardianes por punto', { 'ab:espiritus': 15 }), T('s-castigo', 'Castigo divino', '⚡', '+15% de poder de hechizos y +3% de crítico', { spellPct: 15, crit: 3 }, 1)] },
+      { name: 'Disciplina', icon: '📿', t: [T('s-energia', 'Meditación', '💠', '+10 de energía por punto', { en: 10 }), T('s-regen', 'Calma', '🌀', '+1 de energía por segundo por punto', { enRegen: 1 }), T('s-res', 'Fe inquebrantable', '🔮', '+5% de resistencia mágica por punto', { resAll: 5 }), T('s-presteza', 'Presteza', '⏳', '-12% de espera de las habilidades', { cdr: 12 }, 1)] },
+    ],
+    druida: [
+      { name: 'Naturaleza', icon: '🌿', t: [T('d-poder', 'Savia', '🌱', '+5% de poder de hechizos por punto', { spellPct: 5 }), T('d-zarzas', 'Espinas', '🌵', '+15% de daño de Zarzas venenosas por punto', { 'ab:zarzas': 15 }), T('d-raices', 'Raíces profundas', '🌳', '+15% de daño de Raíces del bosque por punto', { 'ab:raices': 15 }), T('d-bosque', 'Ira del bosque', '🌲', '+15% de poder de hechizos', { spellPct: 15 }, 1)] },
+      { name: 'Tormenta', icon: '⛈️', t: [T('d-tormenta', 'Ojo del huracán', '🌪️', '+15% de daño de Tormenta por punto', { 'ab:tormenta': 15 }), T('d-critico', 'Relámpago', '⚡', '+2% de crítico por punto', { crit: 2 }), T('d-trueno', 'Trueno', '🌩️', '+10% de daño crítico por punto', { critDmg: 10 }), T('d-cielo', 'Señor del cielo', '☁️', '-10% de espera y +10% de daño crítico', { cdr: 10, critDmg: 10 }, 1)] },
+      { name: 'Vida', icon: '🍃', t: [T('d-cura', 'Bálsamo', '🍃', '+8% de curación por punto', { healPct: 8 }), T('d-rejuvenecer', 'Florecer', '🌸', '+15% de curación de Rejuvenecer por punto', { 'ab:rejuvenecer': 15 }), T('d-vida', 'Corteza', '🪵', '+6% de vida por punto', { hpPct: 6 }), T('d-arbol', 'Espíritu del roble', '🌳', '+15% de vida y +10% de curación', { hpPct: 15, healPct: 10 }, 1)] },
+    ],
+  };
+  const TALENT_BY_ID = {};
+  for (const [cls, trees] of Object.entries(TALENTS)) trees.forEach((tr, ti) => tr.t.forEach((tl, i) => { TALENT_BY_ID[tl.id] = { ...tl, cls, tree: ti, tier: i }; }));
+  const talentPoints = (level) => Math.max(0, Math.floor((level - 1) / 2));
+  const talentSpent = (talents) => Object.values(talents || {}).reduce((a, b) => a + b, 0);
+  const treeSpent = (talents, cls, ti) => TALENTS[cls][ti].t.reduce((a, tl) => a + ((talents || {})[tl.id] || 0), 0);
+  // ¿se puede subir este talento?
+  function canTalent(char, level, id) {
+    const tl = TALENT_BY_ID[id];
+    if (!tl || tl.cls !== char.cls) return 'Ese talento no es de tu clase.';
+    const t = char.talents || {};
+    if ((t[id] || 0) >= tl.max) return 'Ese talento ya está al máximo.';
+    if (talentSpent(t) >= talentPoints(level)) return 'No te quedan puntos de talento (uno cada 2 niveles).';
+    if (treeSpent(t, char.cls, tl.tree) < tl.tier * 3) return `Pon ${tl.tier * 3} puntos en ${TALENTS[char.cls][tl.tree].name} para abrir este talento.`;
+    return null;
+  }
+  // limpia los talentos guardados (clase cambiada, nivel o datos raros)
+  function cleanTalents(cls, talents, level) {
+    const out = {};
+    if (!TALENTS[cls] || !talents || typeof talents !== 'object') return out;
+    const char = { cls, talents: out };
+    // se vuelven a poner por orden de escalón, respetando las reglas
+    const ids = Object.keys(talents).filter((id) => TALENT_BY_ID[id] && TALENT_BY_ID[id].cls === cls).sort((a, b) => TALENT_BY_ID[a].tier - TALENT_BY_ID[b].tier);
+    for (const id of ids) for (let r = 0; r < Math.min(TALENT_BY_ID[id].max, Math.floor(Number(talents[id]) || 0)); r++) { if (canTalent(char, level, id)) break; out[id] = (out[id] || 0) + 1; }
+    return out;
+  }
+  // bonificaciones de los talentos: { claves de equipo } y { ab: { habilidad: % } }
+  function talentBonus(char) {
+    const t = {}, ab = {};
+    for (const [id, r] of Object.entries((char && char.talents) || {})) {
+      const tl = TALENT_BY_ID[id];
+      if (!tl || tl.cls !== char.cls) continue;
+      for (const [k, v] of Object.entries(tl.e)) {
+        if (k.startsWith('ab:')) ab[k.slice(3)] = (ab[k.slice(3)] || 0) + v * r;
+        else t[k] = (t[k] || 0) + v * r;
+      }
+    }
+    return { t, ab };
+  }
+
   function cleanChar(c, level) {
     const out = newChar(c && c.cls, c && c.look ? { ...c.look, species: raceId(c.look.species) } : {});
     if (c && c.alloc) {
@@ -845,6 +945,7 @@
         out.alloc[k] = v; budget -= v;
       }
     }
+    if (c && c.talents) out.talents = cleanTalents(out.cls, c.talents, level || 1);
     return out;
   }
 
@@ -888,6 +989,8 @@
     const level = levelFromXp(profile.xp || 0);
     const base = baseStats(char);
     const g = gearTotals(profile.equip, profile.buffs, now, char);
+    const TB = talentBonus(char);
+    for (const [k, v] of Object.entries(TB.t)) g.t[k] = round1((g.t[k] || 0) + v);
     const stats = {}, natural = {};
     for (const k of STAT_IDS) {
       natural[k] = Math.min(STAT_MAX, base[k] + (char.alloc[k] || 0));
@@ -949,6 +1052,10 @@
       sets: g.sets, buffs: g.buffs,
       abilities: abilitiesFor(char, level),
     };
+    d.abBoost = TB.ab;
+    d.talentPoints = talentPoints(level) - talentSpent(char.talents);
+    d.leg = {};
+    for (const sl of SLOT_IDS) { const it = profile.equip && profile.equip[sl]; if (it && it.leg && LEGENDARY[it.leg]) d.leg[it.leg] = true; }
     return d;
   }
 
@@ -1166,7 +1273,7 @@
     ABILITIES, ABILITY_BY_ID, XP_TABLE, SLOTS, SLOT_IDS, TIERS, WEAPONS, FISTS, OFFHANDS, ARMOR_REQ, JEWELS,
     RARITIES, RARITY_ORDER, LEGACY_RARITY, AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES,
     statName, fmtStat, classId, raceId, levelFromXp, pointsTotal, pointsSpent, pointsFree, baseStats, statRoom, newChar, cleanChar,
-    rollRarity, rollDropRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, describeRich, baseInfo, speedName, allowedBases, affixPool, affixTier, rollAffixValue,
+    TALENTS, TALENT_BY_ID, talentPoints, talentSpent, canTalent, cleanTalents, talentBonus, LEGENDARY, LEGENDARY_COLOR, itemColor, rollRarity, rollDropRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, describeRich, baseInfo, speedName, allowedBases, affixPool, affixTier, rollAffixValue,
     migrateItem, migrateProfile, adj,
     PETS, PET_LEVEL, MOUNT_LEVEL, MOUNTS, petStats, PET_MAX, petXpFor, petLevelFromXp, petEvo, petTitle, PET_SKILLS, PET_SKILL_LEVEL, petBagWeight, ZONES, QUESTS, itemWeight, classesFor,
     priceScale, buyPrice, itemBuyPrice, armeroStock, seeded, gearTotals, derive, abilitiesFor, gearLook, monsterAt, reduction, xpPenalty,

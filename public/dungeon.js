@@ -46,6 +46,7 @@
   }
   $('#dlevel').addEventListener('input', (e) => { menu.level = Number(e.target.value); buildThemes(); });
   $('#dgo').onclick = () => { menuEl.classList.add('hidden'); DD.net.send({ t: 'dnew', theme: menu.theme === 'random' ? null : menu.theme, level: menu.level }); };
+  { const b = document.createElement('button'); b.className = 'btn big raid-btn'; b.type = 'button'; b.id = 'draid'; b.textContent = '⚔️ ASALTO SEMANAL (en grupo)'; b.onclick = () => { menuEl.classList.add('hidden'); DD.emit('open-raid'); }; $('#dgo').after(b); }
   { const b = document.createElement('button'); b.className = 'btn alt big'; b.type = 'button'; b.id = 'ddescent'; b.textContent = '🌀 DESCENSO INFINITO'; b.onclick = () => { menuEl.classList.add('hidden'); DD.emit('open-descent'); }; $('#dgo').after(b); }
 
   DD.on('dmenu', (m) => {
@@ -59,7 +60,7 @@
       row.className = 'drow';
       const info = document.createElement('div');
       info.className = 'dinfo';
-      const nm = document.createElement('b'); nm.textContent = `${(RULES.THEMES[d.theme] || {}).icon || ''} ${d.name}`;
+      const nm = document.createElement('b'); nm.textContent = `${d.raid ? '⚔️' : (RULES.THEMES[d.theme] || {}).icon || ''} ${d.name}`;
       const meta = document.createElement('small'); meta.textContent = `Nivel ${d.level} · ${d.players.length ? 'dentro: ' + d.players.join(', ') : 'vacía'}`;
       info.append(nm, meta);
       const play = document.createElement('button'); play.className = 'btn'; play.textContent = '⚔️ UNIRSE';
@@ -223,8 +224,8 @@
       case 'loot': {
         if (ev.gold) float(ev.x, ev.y, `+${ev.gold} 🪙`, '#ffd23f', ev.id === me);
         if (ev.xp && ev.id === me) setTimeout(() => float(ev.x, ev.y, `+${ev.xp} PX`, '#9fe0ff', true), 300);
-        if (ev.item && ev.id === me && (ev.item.rarity === 'unico' || ev.item.rarity === 'conjunto')) DD.emit('bigloot', ev.item);
-        if (ev.item) { float(ev.x, ev.y, ev.item.name, DSPRITES.RARITY[ev.item.rarity], true); log(`${who(ev.id)} recoge «${ev.item.name}» (${RULES.RARITIES[ev.item.rarity].name.toLowerCase()})`, 'loot-' + ev.item.rarity); }
+        if (ev.item && ev.id === me && (ev.item.leg || ev.item.rarity === 'unico' || ev.item.rarity === 'conjunto')) DD.emit('bigloot', ev.item);
+        if (ev.item) { float(ev.x, ev.y, ev.item.name, ev.item.leg ? RULES.LEGENDARY_COLOR : DSPRITES.RARITY[ev.item.rarity], true); log(`${who(ev.id)} recoge «${ev.item.name}» (${RULES.RARITIES[ev.item.rarity].name.toLowerCase()})`, 'loot-' + ev.item.rarity); }
         if (ev.cons) float(ev.x, ev.y, RULES.CONSUMABLES[ev.cons].name, '#ff8a8a');
         if (ev.mat) { const M = PROG.MATS[ev.mat]; float(ev.x, ev.y, `+${ev.n} ${M.icon}`, ev.mat === 'polvo' ? '#ffe27a' : ev.mat === 'esencia' ? '#7ad0ff' : '#c8c8d0', ev.id === me); }
         if (ev.id === me) { if (ev.item) DD.sfx('item', { rarity: ev.item.rarity }); else if (ev.cons) DD.sfx('potion'); else DD.sfx('coin'); }
@@ -264,6 +265,7 @@
         break;
       }
       case 'join': if (ev.id !== me) log(`${who(ev.id)} entra.`); break;
+      case 'leg': { const h = game.ents.get(ev.id); if (h) float(h.x, h.y, ev.name + '!', RULES.LEGENDARY_COLOR, ev.id === me); if (ev.id === me) DD.sfx('cast', { kind: 'holy', vol: 0.6 }); break; }
       case 'door': DD.sfx('door', { vol: 0.8 }); game.openDoors.add(ev.y * game.map.w + ev.x); updateVision(); fogDirty = true; break;
     }
   }
@@ -275,7 +277,7 @@
     game.map = m.dungeon;
     game.props = m.dungeon.props || [];
     game.ents.clear(); game.floaters = []; game.fx = []; game.projs = []; game.teles = []; game.particles = []; game.auras = [];
-    game.log = []; game.statics = null; game.boss = null; game.bossSeen = 0; game.camInit = false; game.keys.clear(); game.sentDir = '0,0';
+    game.log = []; game.statics = null; game.boss = null; game.bossSeen = 0; game.heardLoot = new Set(); game.camInit = false; game.keys.clear(); game.sentDir = '0,0';
     game.seen = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.vis = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.openDoors = new Set(m.dungeon.doors || []);
@@ -772,19 +774,30 @@
   function lootModel(l) {
     const g = new THREE.Group();
     if (l.r) {
-      const col = MODELS.RARITY[l.r] || '#d8d4c8';
       const it = l.it || {};
+      const col = it.leg ? RULES.LEGENDARY_COLOR : MODELS.RARITY[l.r] || '#d8d4c8';
       let o = null;
       // armas y escudos con su modelo de verdad (tipo, nivel y variante); el resto, una caja del color del material
       if ((it.slot === 'arma' || it.slot === 'mano') && window.WEAPON3D) o = WEAPON3D.build(it.base, it.tier || 0, l.r, { sk: it.sk });
       if (!o && it.slot === 'arma') o = MODELS.weapon(it.base, l.r);
       if (o) { o.rotation.z = Math.PI / 2; o.position.y = 0.12; o.scale.setScalar(0.8); g.add(o); }
       else MODELS.mesh(MODELS.box(0.22, 0.16, 0.22), MODELS.mat(it.slot === 'mano' ? '#7a2222' : it.type === 'placas' ? '#a8aeb8' : it.type === 'malla' ? '#7e8692' : it.type === 'cuero' ? '#6a4226' : it.slot === 'amuleto' || it.slot === 'anillo' ? '#c8a040' : '#6a4aa0', { metal: it.type === 'placas' ? 0.6 : 0 }), 0, 0.1, 0, g);
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.12, ['inferior', 'normal', 'superior'].includes(l.r) ? 0.6 : 1.8, 6, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: ['inferior', 'normal', 'superior'].includes(l.r) ? 0.25 : 0.45, depthWrite: false, side: THREE.DoubleSide }));
-      beam.position.y = ['inferior', 'normal', 'superior'].includes(l.r) ? 0.3 : 0.9;
+      // haz de luz: más alto y ancho cuanto mejor es el objeto (los legendarios, un pilar naranja que se ve de lejos)
+      const plain = ['inferior', 'normal', 'superior'].includes(l.r);
+      const great = it.leg || l.r === 'unico' || l.r === 'conjunto';
+      const H = plain ? 0.6 : it.leg ? 6 : great ? 4 : l.r === 'raro' ? 2.8 : 1.8;
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(great ? 0.09 : 0.05, great ? 0.2 : 0.12, H, 8, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: plain ? 0.25 : great ? 0.6 : 0.45, depthWrite: false, side: THREE.DoubleSide, blending: great ? THREE.AdditiveBlending : THREE.NormalBlending }));
+      beam.position.y = H / 2;
       beam.layers.set(1);
       g.add(beam);
-      g.userData.light = ['inferior', 'normal', 'superior'].includes(l.r) ? null : col;
+      if (great) {
+        // anillo en el suelo que late
+        const ring = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.32, 24), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+        ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03; ring.layers.set(1);
+        g.add(ring); g.userData.ring = ring; g.userData.beam = beam;
+      }
+      g.userData.light = plain ? null : col;
+      g.userData.great = great;
     } else if (l.gold && MODELS.GL.ready && MODELS.pieceGeo('coin_stack_small')) {
       g.add(MODELS.piece('coin_stack_small', 0.28));
       g.userData.light = '#ffd23f';
@@ -1010,8 +1023,17 @@
       if (!game.seen[l.y * map.w + l.x]) continue;
       lootIds.add(l.id);
       let o = lootObjs.get(l.id);
-      if (!o) { o = lootModel(l); stage.scene.add(o); lootObjs.set(l.id, o); }
+      if (!o) {
+        o = lootModel(l); stage.scene.add(o); lootObjs.set(l.id, o);
+        // al caer algo bueno suena a botín (una vez por objeto)
+        if (l.r && !game.heardLoot.has(l.id)) {
+          game.heardLoot.add(l.id);
+          if (l.it && l.it.leg) { DD.sfx('item', { rarity: 'unico' }); setTimeout(() => DD.sfx('levelup', { vol: 0.6 }), 250); }
+          else if (['raro', 'unico', 'conjunto'].includes(l.r)) DD.sfx('item', { rarity: l.r, vol: 0.8 });
+        }
+      }
       o.position.set(l.x + 0.5, Math.sin(now / 300 + l.x) * 0.03, l.y + 0.5);
+      if (o.userData.ring) { const k = 1 + 0.25 * Math.sin(now / 220); o.userData.ring.scale.set(k, k, k); o.userData.beam.material.opacity = 0.45 + 0.2 * Math.sin(now / 300); }
       if (o.children[0]) o.children[0].rotation.y = now / 900;
     }
     for (const [id, o] of lootObjs) if (!lootIds.has(id)) { stage.scene.remove(o); lootObjs.delete(id); }

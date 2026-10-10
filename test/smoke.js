@@ -59,6 +59,12 @@ function rulesTests() {
   const ln = lootStats({ ilvl: 3 }), le = lootStats({ ilvl: 3, elite: true }), lb = lootStats({ ilvl: 3, boss: true }, 2000);
   assert.ok(ln.per < 0.15 && ln.good < 0.005, `un enemigo normal suelta poco (${ln.per.toFixed(3)} objetos, ${ln.good.toFixed(4)} raros)`);
   assert.ok(le.per > ln.per * 4 && lb.good > le.good, 'los élites y los jefes sueltan más y mejor');
+  // legendarios: únicos con un poder que se nota en la ficha
+  const legIt = RULES.makeItem(rng, { ilvl: 20, rarity: 'unico', slot: 'arma', base: 'espada', leg: 'trueno' });
+  assert.ok(legIt.leg === 'trueno' && RULES.describe(legIt).some((t) => /Legendario/.test(t)), 'legendario con su poder');
+  assert.ok(RULES.derive({ char: RULES.newChar('guerrero', {}), xp: RULES.XP_TABLE[20], equip: { arma: legIt }, buffs: {} }).leg.trueno, 'el poder se activa al llevarlo');
+  let legs = 0; for (let i = 0; i < 4000; i++) for (const it of RULES.rollLoot(rng, { ilvl: 5 })) if (it.leg) legs++;
+  assert.ok(legs <= 6, `los enemigos normales casi nunca sueltan legendarios (${legs} en 4000)`);
   // armas: tres niveles (normal, excepcional, élite) que pegan más y piden más
   const t = [0, 1, 2].map((tier) => RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'arma', base: 'espada', tier, sk: 0 }));
   assert.ok(t[0].dmg[1] < t[1].dmg[1] && t[1].dmg[1] < t[2].dmg[1], 'el élite pega más');
@@ -249,6 +255,25 @@ async function instanceTests() {
   dinst.join(du);
   dinst.damageEnemy(dinst.players.get('u2'), [...dinst.enemies.values()][0], 9999, { noCrit: true });
   assert.ok(dinst.teles.some((t) => t.orphan), 'el cadáver va a estallar');
+
+  // Poderes legendarios en combate
+  const lsent = [];
+  const linst = new Instance({ ...def, id: 'leg', spawns: [{ k: 'goblin-minion', x: 5, y: 2 }, { k: 'goblin-minion', x: 6, y: 2 }, { k: 'goblin-minion', x: 6, y: 3 }], chests: [] }, { ...hooks, send: (u, m) => lsent.push(m), kill: () => {} });
+  const lrng = RULES.seeded('leg');
+  const lprof = { ...profile, equip: { ...profile.equip, arma: RULES.makeItem(lrng, { ilvl: 5, rarity: 'unico', slot: 'arma', base: 'arco', leg: 'rebote' }), anillo: RULES.makeItem(lrng, { ilvl: 5, rarity: 'unico', slot: 'anillo', leg: 'estallido' }), amuleto: RULES.makeItem(lrng, { ilvl: 5, rarity: 'unico', slot: 'amuleto', leg: 'egida' }) } };
+  const lu = { id: 'u3', name: 'L', look: {}, profile: lprof };
+  linst.join(lu);
+  const lp = linst.players.get('u3');
+  assert.ok(lp.d.leg.rebote && lp.d.leg.estallido && lp.d.leg.egida, 'los tres poderes activos');
+  const [g1, g2, g3] = [...linst.enemies.values()];
+  const hp2 = g2.hp;
+  linst.damageEnemy(lp, g1, 3, { noCrit: true, kind: 'ranged' });
+  assert.ok(g2.hp < hp2 || g3.hp < g3.maxHp, 'el disparo rebota a otro enemigo');
+  linst.damageEnemy(lp, g2, 99999, { noCrit: true, kind: 'melee' });
+  assert.ok(linst.events.some((e) => e.e === 'fx' && e.color === '#ff8a1a') || lsent.some((m) => (m.events || []).some((e) => e.color === '#ff8a1a')), 'el enemigo estalla al morir');
+  lu.combat.hp = Math.round(lp.d.hp * 0.32);
+  linst.hurtPlayer(lp, 5, { raw: true });
+  assert.ok(lp.shield > 0, 'la égida se levanta al bajar del 30%');
 
   // Arena: los golpes al rival le quitan vida de verdad, y al caer termina el duelo
   let ended = null;
@@ -700,6 +725,113 @@ async function instanceTests() {
   assert.strictEqual(lg.token, tokU, 'el otro dispositivo recibe la llave de la cuenta');
   assert.strictEqual(lg.slots[0].name, 'Viajera', 'y ve sus personajes');
   lu.ws.close(); lu2.ws.close();
+
+  // Recompensa diaria: el día 1 da oro y pociones; no se puede recoger dos veces
+  const tokL = 'ef'.repeat(16);
+  mkAccU(tokL, 'Diaria');
+  const dl = await client('Diaria');
+  dl.send({ t: 'join', room: MAP.SERVERS[0].id, slot: 0, token: tokL });
+  await dl.next((m) => m.t === 'welcome');
+  const off = await dl.next((m) => m.t === 'login:offer', 5000);
+  assert.ok(!off.claimed && off.streak === 1 && off.rewards.length === 7, 'oferta del día 1');
+  dl.send({ t: 'login:claim' });
+  const cl = await dl.next((m) => m.t === 'login:claimed');
+  assert.ok(cl.got.some((g) => /50/.test(g)), 'recibe el oro del día 1');
+  const accL = store.player(store.hash(tokL));
+  assert.ok(accL.daily && accL.daily.streak === 1 && accL.slots[0].cons['pocion-vida-p'] >= 2, 'racha guardada y pociones en la mochila');
+  assert.deepStrictEqual(PROG.loginState({ last: PROG.dayKey() - 1, streak: 3 }).streak, 4, 'la racha sigue si entras al día siguiente');
+  assert.deepStrictEqual(PROG.loginState({ last: PROG.dayKey() - 2, streak: 5 }).streak, 1, 'y se reinicia si fallas un día');
+  assert.deepStrictEqual(PROG.loginState({ last: PROG.dayKey() - 1, streak: 7 }).streak, 1, 'tras el día 7 vuelve a empezar');
+  dl.ws.close();
+
+  // Asalto semanal: mismo mapa para todos, enemigos más duros, cofre y clasificación
+  const tokR = 'a1b2'.repeat(8);
+  mkAccU(tokR, 'Asaltante');
+  const rcl = await client('Asaltante');
+  rcl.send({ t: 'join', room: MAP.SERVERS[0].id, slot: 0, token: tokR });
+  await rcl.next((m) => m.t === 'welcome');
+  rcl.send({ t: 'raid:info' });
+  const rinfo = await rcl.next((m) => m.t === 'raid:info');
+  assert.ok(RULES.THEMES[rinfo.theme] && PROG.WEEKLY_MODS[rinfo.mod] && !rinfo.done, 'información del asalto de la semana');
+  await sleep(1000);
+  rcl.send({ t: 'raid:start' });
+  const rstart = await rcl.next((m) => m.t === 'dstart');
+  assert.ok(/Asalto semanal/.test(rstart.dungeon.name), 'entra en el asalto');
+  const rinst = rooms.get(MAP.SERVERS[0].id).instances.get(rstart.dungeon.id);
+  const sameMap = GEN.generate({ theme: rinfo.theme, level: rinst.level, seed: 'asalto-' + rinfo.week });
+  assert.strictEqual(sameMap.tiles, rinst.def.tiles, 'el mapa es el de la semana (igual para todos)');
+  const rbossE = [...rinst.enemies.values()].find((e) => e.m.boss);
+  assert.ok(rbossE.maxHp > RULES.monsterAt(rbossE.k, rinst.level).hp * 1.5, 'el jefe tiene más vida que en una mazmorra normal');
+  rinst.damageEnemy(rinst.players.get([...rinst.players.keys()][0]), rbossE, 1e9, { noCrit: true });
+  await sleep(100);
+  const rrank = (store.meta('raids') || {})[rinfo.week] || [];
+  assert.ok(rrank.some((r) => r.names.includes('Asaltante')), 'entra en la clasificación');
+  assert.strictEqual(store.player(store.hash(tokR)).slots[0].raidWeek, rinfo.week, 'cofre semanal entregado');
+  rcl.ws.close();
+
+  // Talentos: se suben con las reglas de la rama, cuentan en la ficha y se guardan
+  const tokT = 'c3d4'.repeat(8);
+  store.setPlayer(store.hash(tokT), { slots: [{ name: 'Talentosa', xp: RULES.XP_TABLE[12], gold: 500, rv: RULES.RULES_VERSION, char: RULES.newChar('mago', { species: 'elf', sex: 'f' }), equip: {}, bag: [], cons: {}, buffs: {} }, null, null], last: null });
+  const tc = await client('Talentosa');
+  tc.send({ t: 'join', room: MAP.SERVERS[1].id, slot: 0, token: tokT });
+  await tc.next((m) => m.t === 'welcome');
+  tc.send({ t: 'talent:add', id: 'm-meteoro' });
+  assert.match((await tc.next((m) => m.t === 'error')).text, /Pon 9 puntos/, 'el último talento de la rama pide 9 puntos en ella');
+  tc.send({ t: 'talent:add', id: 'g-filo' });
+  assert.match((await tc.next((m) => m.t === 'error')).text, /no es de tu clase/, 'no se pueden coger talentos de otra clase');
+  for (let i = 0; i < 3; i++) tc.send({ t: 'talent:add', id: 'm-llama' });
+  tc.send({ t: 'talent:add', id: 'm-bola' });
+  await sleep(300);
+  const tcp = store.player(store.hash(tokT)).slots[0];
+  assert.deepStrictEqual(tcp.char.talents, { 'm-llama': 3, 'm-bola': 1 }, 'talentos guardados');
+  const tdv = RULES.derive(tcp);
+  assert.ok(tdv.abBoost.bola === 15 && tdv.talentPoints === RULES.talentPoints(12) - 4, 'cuentan en la ficha');
+  assert.deepStrictEqual(RULES.cleanChar(tcp.char, 12).talents, { 'm-llama': 3, 'm-bola': 1 }, 'cleanChar conserva los talentos válidos');
+  tc.send({ t: 'talent:reset' });
+  await sleep(300);
+  assert.ok(!RULES.talentSpent(store.player(store.hash(tokT)).slots[0].char.talents), 'se pueden reiniciar');
+  tc.ws.close();
+
+  // Mercado: vender, comprar y cobrar aunque el vendedor no esté; mejoras de la taberna; temporada
+  const tokMS = 'e5f6'.repeat(8), tokMB = 'a7b8'.repeat(8);
+  const mkRng = RULES.seeded('mercado');
+  const mkSword = RULES.makeItem(mkRng, { ilvl: 10, rarity: 'raro', slot: 'arma', base: 'espada' });
+  store.setPlayer(store.hash(tokMS), { slots: [{ name: 'Vendedora', xp: RULES.XP_TABLE[10], gold: 10, rv: RULES.RULES_VERSION, char: RULES.newChar('guerrero', {}), equip: {}, bag: [mkSword], cons: {}, buffs: {} }, null, null], last: null });
+  store.setPlayer(store.hash(tokMB), { slots: [{ name: 'Compradora', xp: RULES.XP_TABLE[10], gold: 9000, rv: RULES.RULES_VERSION, char: RULES.newChar('paladin', {}), equip: {}, bag: [], cons: {}, buffs: {} }, null, null], last: null });
+  // temporada anterior: la compradora quedó primera
+  const mkCsB = store.hash(tokMB);
+  store.setMeta('season:' + (PROG.seasonKey() - 1), { [mkCsB]: { name: 'Compradora', pts: 120, cls: 'paladin' } });
+  const mkSrv = MAP.SERVERS[2].id;
+  const mkSv = await client('Vendedora');
+  mkSv.send({ t: 'join', room: mkSrv, slot: 0, token: tokMS });
+  await mkSv.next((m) => m.t === 'welcome');
+  mkSv.send({ t: 'market:sell', id: mkSword.id, price: 400 });
+  const mkL1 = await mkSv.next((m) => m.t === 'market');
+  const mkLst = mkL1.list.find((l) => l.item.id === mkSword.id);
+  assert.ok(mkLst && mkLst.mine && mkLst.price === 400, 'objeto a la venta');
+  mkSv.ws.close();
+  await sleep(300);
+  const mkBu = await client('Compradora');
+  mkBu.send({ t: 'join', room: mkSrv, slot: 0, token: tokMB });
+  await mkBu.next((m) => m.t === 'welcome');
+  mkBu.send({ t: 'market:buy', id: mkLst.id });
+  await mkBu.next((m) => m.t === 'market');
+  await sleep(200);
+  assert.ok(store.player(store.hash(tokMB)).slots[0].bag.some((x) => x.id === mkSword.id), 'la compradora tiene la espada');
+  assert.strictEqual(store.player(store.hash(tokMS)).slots[0].gold, 10 + Math.floor(400 * (1 - PROG.MARKET.fee)), 'la vendedora cobra aunque no esté');
+  // mejoras de la taberna
+  await sleep(1000);
+  mkBu.send({ t: 'tavern:donate', gold: 2500 });
+  const mkTv = await mkBu.next((m) => m.t === 'tavern:info');
+  assert.ok(mkTv.level >= 1 && mkTv.bonus.xp >= 5, 'la donación sube la taberna de nivel');
+  // premio de la temporada anterior al entrar
+  await sleep(3000);
+  const mkAccB = store.player(store.hash(tokMB)).slots[0];
+  assert.ok((mkAccB.extraTitles || []).some((t) => /Campeón de la temporada/.test(t)) && mkAccB.aura === 'oro', 'título y aura de campeona');
+  mkBu.send({ t: 'season:get' });
+  const mkSsn = await mkBu.next((m) => m.t === 'season');
+  assert.ok(mkSsn.last.length && mkSsn.last[0].name === 'Compradora', 'la temporada anterior se ve en la clasificación');
+  mkBu.ws.close();
 
   // Dueño de la taberna: mensaje del día, silenciar y expulsar (el primero en entrar en un servidor nuevo es el dueño)
   const SRV3 = MAP.SERVERS[2].id;
