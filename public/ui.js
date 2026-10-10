@@ -105,7 +105,9 @@
     const b = el('button', 'icell ' + (it ? 'r-' + it.rarity : 'empty'));
     b.type = 'button';
     if (it) {
-      b.appendChild(itemIcon(it, 36));
+      let art = null;
+      if (opts.art && window.VIEW3D && VIEW3D.itemArt) { try { art = VIEW3D.itemArt(it, opts.art[0], opts.art[1]); } catch { art = null; } }
+      if (art) { art.className = 'art'; b.appendChild(art); } else b.appendChild(itemIcon(it, 36));
       if (it.set) b.classList.add('set');
       const p = me();
       // en rojo lo que no puedes llevar (nivel o requisitos de características, sin contar lo que ya llevas en ese hueco)
@@ -153,7 +155,7 @@
   DD.on('combat', (c) => { combat = c; renderHud(); });
   DD.on('dexit', () => { combat = null; renderHud(); });
   DD.on('me', () => { renderHud(); if (!$('#charwin').classList.contains('hidden')) renderChar(); if (!$('#levelup').classList.contains('hidden')) renderLevelUp(); if (!$('#tradewin').classList.contains('hidden')) renderTrade(); if (shop && !$('#shopwin').classList.contains('hidden')) renderShop(); });
-  DD.on('look', (m) => { if (m.id === DD.myId) renderHud(true); });
+  DD.on('look', (m) => { if (m.id === DD.myId) { renderHud(true); if (!$('#charwin').classList.contains('hidden')) renderChar(); } });
   DD.on('me-stats', () => renderHud());
   DD.on('welcome', () => { hud.classList.remove('hidden'); });
 
@@ -374,31 +376,79 @@
     return wrap;
   }
 
+  // Inventario al estilo de los RPG clásicos: retrato y mochila a la izquierda, muñeco con el equipo a la derecha
+  // y un panel con lo que da tu equipo. Los objetos se ven en 3D. Arrastra de la mochila a un hueco para
+  // equiparlo (o del hueco a la mochila para quitarlo); clic para ver las opciones.
+  const DOLL = [
+    ['casco', 'casco', [120, 120]], ['amuleto', 'amu', [64, 64]],
+    ['arma', 'arma', [116, 206]], ['pecho', 'pecho', [152, 206]], ['mano', 'mano', [116, 206]],
+    ['guantes', 'guan', [116, 116]], ['botas', 'botas', [152, 116]], ['anillo', 'ani', [64, 64]],
+  ];
   function equipView(p) {
-    const wrap = el('div', 'equip');
-    const doll = el('div', 'doll');
-    const order = [['casco', 'c'], ['amuleto', 'a'], ['arma', 'w'], ['pecho', 'p'], ['mano', 'o'], ['guantes', 'g'], ['anillo', 'r'], ['botas', 'b']];
+    const wrap = el('div', 'inv2');
+    const left = el('div', 'inv-left'), right = el('div', 'inv-right');
+    // ---- retrato ----
     const u = DD.users.get(DD.myId);
-    const pv = document.createElement('canvas'); pv.width = 150; pv.height = 200; pv.className = 'doll-pv';
-    if (u) pv.getContext('2d').drawImage(DD.heroImage(u.look, 150, 200, 'full'), 0, 0);
-    doll.appendChild(pv);
-    for (const [slot, pos] of order) {
-      const it = p.equip[slot];
-      const cell = itemCell(it, { slot, onClick: (e) => { if (it) actionMenu(e, [['Quitar', () => DD.net.send({ t: 'inv:unequip', slot })]]); } });
-      cell.classList.add('slot-' + pos);
-      const lab = el('span', 'slot-name', RULES.SLOTS[slot].name);
-      cell.appendChild(lab);
-      doll.appendChild(cell);
-    }
-    wrap.appendChild(doll);
-    const bagBox = el('div', 'bag-box');
-    bagBox.appendChild(el('div', 'panel-title small', `MOCHILA ${p.bag.length}/${RULES.BAG_SIZE} · 🪙 ${p.gold}`));
-    const grid = el('div', 'bag');
+    const d = derived();
+    const port = el('div', 'inv-portrait frame-orn');
+    const pv = document.createElement('canvas'); pv.width = 300; pv.height = 230;
+    if (u) { try { pv.getContext('2d').drawImage(DD.heroImage(u.look, 300, 230, 'full'), 0, 0); } catch { /* sin 3D */ } }
+    port.appendChild(pv);
+    const plate = el('div', 'inv-plate');
+    plate.append(el('b', '', u ? u.name : ''), el('small', '', `${RULES.CLASSES[p.char.cls].name} · nivel ${d.level}`));
+    port.appendChild(plate);
+    left.appendChild(port);
+    // ---- mochila ----
+    const bagHead = el('div', 'inv-head');
+    bagHead.append(el('span', '', `Mochila ${p.bag.length}/${RULES.BAG_SIZE}`), el('span', 'gold', `🪙 ${p.gold}`));
+    left.appendChild(bagHead);
+    const grid = el('div', 'inv-bag frame-orn');
     for (let i = 0; i < RULES.BAG_SIZE; i++) {
       const it = p.bag[i];
-      grid.appendChild(itemCell(it, { onClick: (e) => { if (it) itemActions(e, it); } }));
+      const c = itemCell(it, { art: [60, 60], onClick: (e) => { if (it) itemActions(e, it); } });
+      if (it) { c.draggable = true; c.ondragstart = (e) => { e.dataTransfer.setData('text/dd-item', it.id); e.dataTransfer.setData('text/dd-for-' + it.slot, '1'); c.classList.add('dragging'); }; c.ondragend = () => c.classList.remove('dragging'); }
+      c.ondragover = (e) => { if (e.dataTransfer.types.includes('text/dd-slot')) { e.preventDefault(); c.classList.add('drop'); } };
+      c.ondragleave = () => c.classList.remove('drop');
+      c.ondrop = (e) => { c.classList.remove('drop'); const slot = e.dataTransfer.getData('text/dd-slot'); if (slot) { e.preventDefault(); DD.net.send({ t: 'inv:unequip', slot }); } };
+      grid.appendChild(c);
     }
-    bagBox.appendChild(grid);
+    left.appendChild(grid);
+    const load = el('div', 'load' + (d.overloaded ? ' over' : ''), `⚖️ Carga ${d.weight} / ${d.capacity} kg${d.overloaded ? ' · ¡sobrecargado, andas más lento!' : ''}`);
+    load.title = 'La Fuerza aumenta lo que puedes cargar. Una mascota lleva más.';
+    left.appendChild(load);
+    // ---- muñeco con el equipo ----
+    const doll = el('div', 'inv-doll frame-orn');
+    for (const [slot, area, size] of DOLL) {
+      const it = p.equip[slot];
+      const cell = itemCell(it, { slot, art: size, onClick: (e) => { if (it) actionMenu(e, [['Quitar', () => DD.net.send({ t: 'inv:unequip', slot })]]); } });
+      cell.classList.add('doll-slot', 'ds-' + area);
+      cell.style.gridArea = area;
+      cell.appendChild(el('span', 'slot-name', RULES.SLOTS[slot].name));
+      if (it) { cell.draggable = true; cell.ondragstart = (e) => e.dataTransfer.setData('text/dd-slot', slot); }
+      // sólo se suelta en su hueco (el tipo del arrastre lleva la ranura del objeto)
+      cell.ondragover = (e) => { if (e.dataTransfer.types.includes('text/dd-for-' + slot)) { e.preventDefault(); cell.classList.add('drop'); } };
+      cell.ondragleave = () => cell.classList.remove('drop');
+      cell.ondrop = (e) => { cell.classList.remove('drop'); const id = e.dataTransfer.getData('text/dd-item'); if (id && e.dataTransfer.types.includes('text/dd-for-' + slot)) { e.preventDefault(); DD.net.send({ t: 'inv:equip', id }); } };
+      doll.appendChild(cell);
+    }
+    const armor = el('div', 'inv-armor');
+    armor.innerHTML = `<span title="Armadura">🛡️ <b>${d.armor}</b></span><span title="Daño">⚔️ <b>${d.dmg[0]}–${d.dmg[1]}</b></span>`;
+    armor.style.gridArea = 'stat';
+    doll.appendChild(armor);
+    right.appendChild(doll);
+    // ---- panel: lo que da el equipo ----
+    const info = el('div', 'inv-info frame-orn');
+    const rows = [['❤️ Vida', d.hp], ['⚡ Energía', d.en], ['⚔️ Daño', `${d.dmg[0]}–${d.dmg[1]}`], ['✨ Hechizos', `${d.spell[0]}–${d.spell[1]}`], ['🛡️ Armadura', d.armor], ['🎯 Crítico', d.crit + '%'], ['💨 Esquiva', d.dodge + '%'], ['🔮 Res. mágica', d.magicRes + '%']];
+    const tbl = el('div', 'inv-stats');
+    for (const [k, v] of rows) tbl.append(el('span', '', k), el('b', '', String(v)));
+    info.append(el('div', 'inv-head', 'Tu equipo'), tbl);
+    const setN = {};
+    for (const s2 of RULES.SLOT_IDS) if (p.equip[s2] && p.equip[s2].set) setN[p.equip[s2].set] = (setN[p.equip[s2].set] || 0) + 1;
+    for (const [k, n] of Object.entries(setN)) info.appendChild(el('div', 'set-line', `Conjunto de ${RULES.CLASSES[k] ? RULES.CLASSES[k].name.toLowerCase() : k}: ${n} piezas`));
+    info.appendChild(el('p', 'muted small', 'Arrastra un objeto de la mochila a su hueco para equiparlo, o del hueco a la mochila para quitarlo. Clic para más opciones. Lo que llevas cambia el aspecto de tu héroe.'));
+    right.appendChild(info);
+    // ---- pociones, materiales y mascota ----
+    const extra = el('div', 'inv-extra');
     const cons = el('div', 'cons-row');
     for (const [id, n] of Object.entries(p.cons || {})) {
       const C = RULES.CONSUMABLES[id];
@@ -406,33 +456,28 @@
       c.append(consIcon(id, 28), el('span', 'cnt', String(n)));
       cons.appendChild(c);
     }
-    if (cons.children.length) { bagBox.appendChild(el('div', 'panel-title small', 'POCIONES Y PERGAMINOS')); bagBox.appendChild(cons); }
-    const d = derived();
-    const load = el('div', 'load' + (d.overloaded ? ' over' : ''), `⚖️ Carga ${d.weight} / ${d.capacity} kg${d.overloaded ? ' · ¡vas sobrecargado y andas más lento!' : ''}`);
-    load.title = 'La Fuerza aumenta lo que puedes cargar. Una mascota lleva más.';
-    bagBox.insertBefore(load, grid);
-    // materiales de la forja, peces y hierbas (no ocupan sitio en la mochila)
+    if (cons.children.length) { extra.appendChild(el('div', 'inv-head', 'Pociones y pergaminos')); extra.appendChild(cons); }
     const mats = Object.entries(p.mats || {}).filter(([k, n]) => n > 0 && window.PROG && PROG.MATS[k]);
     if (mats.length) {
       const row = el('div', 'mats-row');
       for (const [k, n] of mats) { const t = el('span', 'mat', `${PROG.MATS[k].icon} ${n}`); t.title = PROG.MATS[k].name + (PROG.MATS[k].desc ? ' — ' + PROG.MATS[k].desc : ''); row.appendChild(t); }
-      bagBox.insertBefore(row, grid);
+      extra.appendChild(el('div', 'inv-head', 'Materiales'));
+      extra.appendChild(row);
     }
     if (p.pet) {
       const P = RULES.PETS[p.pet.type];
       const plvl = RULES.petLevelFromXp(p.pet.xp);
       const st = RULES.petStats(p.pet.type, RULES.levelFromXp(p.xp), plvl);
-      bagBox.appendChild(el('div', 'panel-title small', `${P.icon} ${p.pet.name.toUpperCase()} (${RULES.petTitle(p.pet.type, plvl)}, nv ${plvl}) · lleva ${RULES.petBagWeight(p.pet)} / ${st.cap} kg`));
+      extra.appendChild(el('div', 'inv-head', `${P.icon} ${p.pet.name} (${RULES.petTitle(p.pet.type, plvl)}, nv ${plvl}) · lleva ${RULES.petBagWeight(p.pet)} / ${st.cap} kg`));
       const pg = el('div', 'bag small');
       for (let i = 0; i < 12; i++) {
         const it = p.pet.bag[i];
         pg.appendChild(itemCell(it, { onClick: () => { if (it) DD.net.send({ t: 'pet:take', id: it.id }); } }));
       }
-      bagBox.appendChild(pg);
-      bagBox.appendChild(el('p', 'muted small', `Clic en un objeto de la mochila → «Dar a ${p.pet.name}». Clic en lo que lleva para recuperarlo. Fuerza ${st.fue} · muerde ${st.dmg[0]}–${st.dmg[1]}.`));
+      extra.appendChild(pg);
     }
-    bagBox.appendChild(el('p', 'muted small', 'Clic en un objeto para equiparlo o tirarlo. Véndelos a los comerciantes de la taberna. Lo que equipas cambia el aspecto de tu héroe.'));
-    wrap.appendChild(bagBox);
+    if (extra.children.length) right.appendChild(extra);
+    wrap.append(left, right);
     return wrap;
   }
 
