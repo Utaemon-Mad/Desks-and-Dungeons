@@ -699,7 +699,7 @@
     const g = new THREE.Group();
     const lin = (h) => '#' + new THREE.Color(h).convertSRGBToLinear().getHexString();
     const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: lin(c), roughness: o.r ?? 0.8, metalness: o.m || 0 });
-    const wood = M(theme === 'cripta' ? '#4a3a2e' : theme === 'volcan' ? '#3a2620' : '#6a4426'), dark = M('#3a2414'), iron = M('#3a3a40', { r: 0.45, m: 0.8 });
+    const wood = M(theme === 'cripta' ? '#4a3a2e' : theme === 'volcan' || theme === 'abismo' ? '#3a2620' : '#6a4426'), dark = M('#3a2414'), iron = M('#3a3a40', { r: 0.45, m: 0.8 });
     const stone = M(theme === 'cuevas' ? '#5e4c3a' : theme === 'nido' ? '#44523a' : '#6a6870');
     const box = (w, h, d, m, x, y, z, par = g) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; par.add(o); return o; };
     // marco de piedra
@@ -721,6 +721,7 @@
     fortaleza: { gain: [1.05, 0.97, 0.9], lift: [0.012, 0.004, 0], saturation: 1.0, vignette: 0.45 },
     nido: { gain: [0.95, 1.06, 0.9], lift: [0, 0.01, 0], saturation: 1.05, vignette: 0.5 },
     volcan: { gain: [1.12, 0.96, 0.82], lift: [0.02, 0.004, 0], saturation: 1.15, vignette: 0.5, bloom: 0.75 },
+    abismo: { gain: [1.18, 0.9, 0.8], lift: [0.03, 0, 0], saturation: 1.2, vignette: 0.58, bloom: 0.85 },
     arena: { gain: [1.08, 0.98, 0.88], lift: [0.012, 0.005, 0], saturation: 1.1, vignette: 0.55, bloom: 0.65 },
   };
   const DIR_ANG = { S: 0, N: Math.PI, E: Math.PI / 2, W: -Math.PI / 2 };
@@ -1202,7 +1203,7 @@
 
   // Clima según la zona (y la hora): el tiempo cambia cada pocos minutos, igual para todos
   function weatherFor(map, zone, now) {
-    if (map.kind !== 'world') return map.theme === 'volcan' ? 'embers' : 'motes';
+    if (map.kind !== 'world') return map.theme === 'volcan' || map.theme === 'abismo' ? 'embers' : 'motes';
     const slot = Math.floor(now / 240000);
     const r = (Math.sin(slot * 91.7 + zone * 13.3) * 43758.5453) % 1;
     const roll = Math.abs(r);

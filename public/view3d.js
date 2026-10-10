@@ -238,6 +238,7 @@
     fortaleza: { floor: ['#504640', '#5a4a36'], seam: '#2e2622', wall: '#625852', top: '#151212', fog: '#080606', liquid: '#1e3a5a', sky: '#8a6a5a' },
     nido: { floor: ['#36402e', '#3c4632'], seam: '#222a1c', wall: '#44523a', top: '#0e120c', fog: '#040604', liquid: '#2a3a1a', sky: '#5a7a4a' },
     volcan: { floor: ['#2e2628', '#342a2c'], seam: '#1a1214', wall: '#463434', top: '#100a0a', fog: '#0a0404', liquid: '#c8400a', sky: '#a04a2a' },
+    abismo: { floor: ['#2a1a1c', '#30181a'], seam: '#120808', wall: '#4a2a2a', top: '#0e0606', fog: '#0a0202', liquid: '#e0400a', sky: '#802010' },
   };
   // Color de cada casilla del mundo (la textura del suelo se pinta con estos colores y algo de ruido)
   const WORLD_COLORS = {
@@ -544,9 +545,9 @@
     floor.position.y = -0.03;
     const HS = 0.25, VS = GL_WALL_H / 4;
     const many = (a, n, b) => Array(n).fill(a).concat(b ? [b] : []);
-    const floorNames = theme === 'cuevas' || theme === 'nido' ? many('floor_dirt_large', 9, 'floor_dirt_large_rocky') : theme === 'volcan' ? many('floor_tile_large', 7, 'floor_tile_large_rocks') : many('floor_tile_large', 1);
+    const floorNames = theme === 'cuevas' || theme === 'nido' ? many('floor_dirt_large', 9, 'floor_dirt_large_rocky') : theme === 'volcan' || theme === 'abismo' ? many('floor_tile_large', 7, 'floor_tile_large_rocks') : many('floor_tile_large', 1);
     // las piezas KayKit son claras: se oscurecen y tiñen según el tema
-    const TINT = { cripta: ['#727a8c', '#8e95a6'], cuevas: ['#8e785c', '#9c8a72'], fortaleza: ['#8a7c70', '#9a8e84'], nido: ['#6e7c5e', '#86947a'], volcan: ['#7a5e58', '#8a7470'] }[theme] || ['#80808a', '#90909a'];
+    const TINT = { cripta: ['#727a8c', '#8e95a6'], cuevas: ['#8e785c', '#9c8a72'], fortaleza: ['#8a7c70', '#9a8e84'], nido: ['#6e7c5e', '#86947a'], volcan: ['#7a5e58', '#8a7470'], abismo: ['#7a4a46', '#8a5650'] }[theme] || ['#80808a', '#90909a'];
     const tinted = (mat, hex) => [].concat(mat).map((m) => { const c = m.clone(); c.color = new THREE.Color(hex); return c; });
     const one = (a) => (a.length === 1 ? a[0] : a);
     const floors = {};

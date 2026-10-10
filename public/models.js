@@ -653,7 +653,7 @@
   function prop(k, theme) {
     if (GL.ready) { const p = propGL(k, theme); if (p) return p; }
     const g = new THREE.Group();
-    const stoneC = { cripta: '#6a6c76', cuevas: '#6e5c48', fortaleza: '#6a605a', nido: '#4a5a40', volcan: '#4a3a3a' }[theme] || '#6a6c76';
+    const stoneC = { cripta: '#6a6c76', cuevas: '#6e5c48', fortaleza: '#6a605a', nido: '#4a5a40', volcan: '#4a3a3a', abismo: '#4a2c2c' }[theme] || '#6a6c76';
     const stone = mat(stoneC), stoneD = mat(shade(stoneC, -0.3));
     let light = null, wall = false, block = true;
     switch (k) {
@@ -1023,7 +1023,7 @@
     return m;
   }
   // Decorado de las mazmorras con piezas KayKit (lo que no tiene equivalente sigue siendo low poly propio)
-  const BANNER_BY_THEME = { cripta: 'banner_patternB_white', cuevas: 'banner_patternA_brown', fortaleza: 'banner_patternA_red', nido: 'banner_patternA_green', volcan: 'banner_patternA_red' };
+  const BANNER_BY_THEME = { cripta: 'banner_patternB_white', cuevas: 'banner_patternA_brown', fortaleza: 'banner_patternA_red', nido: 'banner_patternA_green', volcan: 'banner_patternA_red', abismo: 'banner_patternA_red' };
   function propGL(k, theme) {
     const g = new THREE.Group();
     let light = null, wall = false, block = true;
@@ -1144,6 +1144,105 @@
     P.head.attach(g);
   }
 
+  // Rasgos de monstruo pegados a los huesos: cuernos, alas, cola, ojos que brillan, heridas…
+  // f: { horns: 'small'|'big'|'curl', wings: color, tail: color, eyes: color, wounds: true, ears: true, skinHex }
+  function monsterFeatures(root, f) {
+    const P = root.userData.parts;
+    if (!P || !P.headMesh) return;
+    root.updateMatrixWorld(true);
+    const bones = {};
+    P.model.traverse((c) => { if (c.isBone) bones[c.name] = c; });
+    P.headMesh.geometry.computeBoundingBox();
+    const hb = P.headMesh.geometry.boundingBox.clone().applyMatrix4(P.headMesh.matrixWorld);
+    const hc = hb.getCenter(new THREE.Vector3()), hs = hb.getSize(new THREE.Vector3());
+    let body = null;
+    P.model.traverse((c) => { if (c.isSkinnedMesh && /_Body$/.test(c.name)) body = c; });
+    const bb = body ? new THREE.Box3().setFromObject(body) : new THREE.Box3(new THREE.Vector3(-0.18, 0.17, -0.16), new THREE.Vector3(0.18, 0.59, 0.16));
+    const bw = bb.max.x - bb.min.x, bh = bb.max.y - bb.min.y;
+    const skin = mat(linHex(f.skinHex || '#8a2a1a'));
+    const H = new THREE.Group();
+    // ojos que brillan
+    if (f.eyes) {
+      const em = new THREE.MeshBasicMaterial({ color: f.eyes });
+      for (const sx of [-1, 1]) {
+        const e = mesh(sph(hs.x * 0.065, 8, 6), em, hc.x + sx * hs.x * 0.17, hc.y - hs.y * 0.04, hb.max.z - hs.z * 0.08, H);
+        e.scale.set(1.2, 0.8, 0.5); e.castShadow = false;
+      }
+    }
+    // cuernos
+    if (f.horns) {
+      const hornM = mat(linHex(f.hornHex || '#2a1a14'), { rough: 0.5 });
+      const big = f.horns !== 'small', k = f.horns === 'curl' ? 1.25 : big ? 1 : 0.6;
+      for (const sx of [-1, 1]) {
+        const base = new THREE.Group();
+        base.position.set(hc.x + sx * hs.x * 0.26, hb.max.y - hs.y * 0.12, hc.z + hs.z * 0.04);
+        base.rotation.z = -sx * (big ? 0.55 : 0.35); base.rotation.x = -0.25;
+        H.add(base);
+        const h1 = mesh(cone(hs.x * 0.09 * k, hs.y * 0.34 * k, 7), hornM, 0, hs.y * 0.17 * k, 0, base);
+        if (f.horns === 'curl') { base.rotation.x = -0.6; h1.scale.set(1.15, 1, 1.15); }
+      }
+    }
+    // orejas puntiagudas (diablillos)
+    if (f.ears) {
+      for (const sx of [-1, 1]) {
+        const e = mesh(cone(hs.x * 0.07, hs.x * 0.36, 5), skin, hc.x + sx * hs.x * 0.5, hc.y + hs.y * 0.02, hc.z - hs.z * 0.04, H);
+        e.rotation.z = -sx * 1.1; e.rotation.x = -0.2;
+      }
+    }
+    // heridas y carne podrida (zombis)
+    if (f.wounds) {
+      const blood = mat('#3a0806', { rough: 0.4 }), rot = mat(linHex('#4a5a34'));
+      const spots = [[0.32, 0.18, 0.7, blood], [-0.36, -0.05, 0.6, rot], [0.1, 0.38, 0.55, rot], [-0.2, 0.3, 0.75, blood]];
+      for (const [x, y, zf, m] of spots) {
+        const w = mesh(sph(hs.x * 0.11, 7, 5), m, hc.x + x * hs.x, hc.y + y * hs.y, hc.z + zf * hs.z * 0.5, H);
+        w.scale.set(1, 0.7, 0.35);
+        w.lookAt(new THREE.Vector3(hc.x + x * hs.x * 3, hc.y + y * hs.y * 3, hc.z + hs.z * 2));
+      }
+    }
+    if (P.head) P.head.attach(H);
+    // alas de murciélago a la espalda
+    const chest = bones.chest || bones.spine || P.head;
+    if (f.wings && chest) {
+      const W = new THREE.Group();
+      const shp = new THREE.Shape();
+      shp.moveTo(0, 0);
+      shp.lineTo(0.55, 0.32); shp.lineTo(0.95, 0.2); shp.lineTo(0.82, 0.02); shp.lineTo(0.66, 0.06);
+      shp.lineTo(0.56, -0.14); shp.lineTo(0.4, -0.02); shp.lineTo(0.26, -0.2); shp.lineTo(0.14, -0.04); shp.lineTo(0, -0.12);
+      const wg = new THREE.ShapeGeometry(shp);
+      const memb = mat(linHex(f.wings), { side: true, rough: 0.7 });
+      const boneM = mat(linHex(f.wingBone || '#1a0a08'));
+      const span = bw * (f.wingSpan || 1.4);
+      for (const sx of [-1, 1]) {
+        const g = new THREE.Group();
+        g.position.set(bb.getCenter(new THREE.Vector3()).x + sx * bw * 0.12, bb.min.y + bh * 0.78, bb.min.z + 0.01);
+        g.rotation.set(0.15, sx * -0.55, sx * 0.25);
+        const wmesh = mesh(wg, memb, 0, 0, 0, g); wmesh.scale.set(sx * span, span, 1);
+        // hueso del ala por el borde de arriba
+        const b1 = mesh(cyl(span * 0.018, span * 0.012, span * 0.64, 5), boneM, sx * span * 0.27, span * 0.16, 0.002, g); b1.rotation.z = -sx * 1.03;
+        const b2 = mesh(cyl(span * 0.012, span * 0.008, span * 0.42, 5), boneM, sx * span * 0.75, span * 0.26, 0.002, g); b2.rotation.z = sx * 1.86;
+        W.add(g);
+      }
+      chest.attach(W);
+    }
+    // cola con punta de flecha
+    const hips = bones.hips || chest;
+    if (f.tail && hips) {
+      const T = new THREE.Group();
+      const z0 = bb.min.z + 0.01, y0 = bb.min.y + bh * 0.22, L = bh * (f.tailLen || 1);
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(0, y0, z0), new THREE.Vector3(0, y0 - L * 0.18, z0 - L * 0.32),
+        new THREE.Vector3(L * 0.08, y0 - L * 0.12, z0 - L * 0.62), new THREE.Vector3(L * 0.1, y0 + L * 0.12, z0 - L * 0.82),
+      ]);
+      const tm = mat(linHex(f.tail));
+      mesh(new THREE.TubeGeometry(curve, 18, bw * 0.045, 6, false), tm, 0, 0, 0, T);
+      const end = curve.getPoint(1), dir = curve.getTangent(1);
+      const tip = mesh(cone(bw * 0.1, bw * 0.2, 4), tm, end.x, end.y, end.z, T);
+      tip.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+      tip.scale.z = 0.35;
+      hips.attach(T);
+    }
+  }
+
   // Enemigos humanoides con modelo de verdad (los animales y dragones siguen siendo low poly propios)
   const ENEMY_GL = {
     goblin: (M) => ['Barbarian', { tint: M.tint || '#8ac060', scale: 0.72, w: M.weapon === 'bow' ? 'ballesta' : 'daga', weaponKind: M.weapon === 'bow' ? 'ranged2' : 'dagger' }],
@@ -1156,7 +1255,10 @@
     troll: (M) => ['Barbarian', { tint: M.tint || '#70a870', scale: 1.5, weaponKind: 'unarmed', walk: 'Walking_B' }],
     skeleton: (M) => (M.weapon === 'bow' ? ['Skeleton_Rogue', { tint: M.tint, helmet: true, w: 'ballesta', wProp: 'Skeleton_Crossbow', weaponKind: 'ranged2' }] : ['Skeleton_Warrior', { tint: M.tint, w: 'espada', wProp: 'Skeleton_Blade', o: 'escudo', oProp: 'Skeleton_Shield_Small_A', weaponKind: 'melee1' }]),
     wight: (M) => ['Skeleton_Warrior', { tint: M.tint || '#9ab0d8', helmet: true, cape: true, w: 'hacha', wProp: 'Skeleton_Axe', weaponKind: 'melee1' }],
-    zombie: (M) => ['Skeleton_Minion', { tint: M.tint || '#a8c890', cape: true, weaponKind: 'unarmed', walk: 'Walking_D_Skeletons' }],
+    zombie: (M) => [M.bloated ? 'Barbarian' : 'Rogue', { tint: M.bloated ? '#b4c494' : '#a4c494', skin: M.tint || (M.bloated ? '#8aa070' : '#7a9a6a'), cloth: M.bloated ? '#5a4a30' : '#4a3a2e', hair: '#2a2a20', weaponKind: 'unarmed', walk: 'Walking_D_Skeletons', feat: { eyes: '#d8ff9a', wounds: true }, wide: M.bloated ? 1.35 : 1 }],
+    imp: (M) => ['Rogue', { tint: '#ff6e5e', skin: M.tint || '#c0301c', cloth: '#3a0c08', hair: '#1a0806', weaponKind: 'magic', float: true, feat: { skinHex: M.tint || '#c0301c', eyes: '#ffe24a', horns: 'small', ears: true, wings: '#5a1008', tail: M.tint || '#c0301c', wingSpan: 1.6, tailLen: 0.9 } }],
+    gargoyle: (M) => ['Barbarian', { tint: '#a2a8b0', skin: M.tint || '#6e7278', cloth: '#4a4e54', hair: '#3a3e44', weaponKind: 'unarmed', feat: { skinHex: '#6e7278', eyes: '#ff3a2a', horns: 'big', hornHex: '#4a4e54', wings: '#5a5e64', wingBone: '#3a3e44', wingSpan: 1.5 } }],
+    demon: (M) => ['Barbarian', { tint: '#ff6450', skin: M.tint || '#8a1a10', cloth: '#1e0806', hair: '#120404', w: 'hacha', wProp: 'axe_2handed', weaponKind: 'melee2', feat: { skinHex: M.tint || '#8a1a10', eyes: '#ffa02a', horns: 'curl', hornHex: '#1a1210', wings: '#3a0806', tail: M.tint || '#8a1a10', wingSpan: 1.7, tailLen: 1.1 } }],
     ghoul: (M) => ['Rogue', { tint: M.tint || '#c0c0b0', weaponKind: 'unarmed', walk: 'Walking_B' }],
     mummy: (M) => ['Mage', { tint: M.tint || '#f0e4c8', weaponKind: 'unarmed', walk: 'Walking_D_Skeletons' }],
     specter: (M) => ['Rogue_Hooded', { tint: M.tint || '#a8c0ff', opacity: 0.62, float: true, weaponKind: 'magic' }],
@@ -1172,15 +1274,17 @@
       spec = [CLASS_CHAR[cls] || 'Rogue', { cloth: M.tint || (cls === 'mago' ? '#5a1010' : '#4a3a2a'), helmet: M.boss, cape: M.boss, w: cls === 'explorador' ? 'ballesta' : cls === 'mago' ? 'varita' : cls === 'guerrero' ? 'hacha' : 'daga', weaponKind: cls === 'explorador' ? 'ranged2' : cls === 'mago' ? 'magic' : cls === 'guerrero' ? 'melee1' : 'dagger' }];
     } else if (ENEMY_GL[s]) spec = ENEMY_GL[s](M);
     else if (ENEMY_ANIMAL[s] && GL.animals[ENEMY_ANIMAL[s]]) {
-      const m = buildAnimalGL(ENEMY_ANIMAL[s], { tint: M.tint, glowEyes: M.boss ? '#ff3a2a' : null });
+      const m = buildAnimalGL(ENEMY_ANIMAL[s], { tint: M.tint, glowEyes: M.eyes || (M.boss ? '#ff3a2a' : null) });
       m.userData.kind = 'enemy';
       m.scale.multiplyScalar(M.scale || 1);
       return m;
     }
     if (!spec) return null;
     const [name, o] = spec;
-    if (M.boss) { o.cape = true; o.helmet = true; }
+    if (M.boss && !o.feat) { o.cape = true; o.helmet = true; }
     const m = buildGL(name, { ...o, kind: 'enemy' });
+    if (o.feat) { try { monsterFeatures(m, o.feat); } catch (e) { console.warn('rasgos de monstruo', e); } }
+    if (o.wide && o.wide !== 1) { const b = m.userData.parts.model; b.scale.x *= o.wide; b.scale.z *= o.wide; }
     m.scale.multiplyScalar(M.scale || 1);
     return m;
   }
@@ -1191,7 +1295,7 @@
   const ANIMALS = { Wolf: 0.62, Fox: 0.46, ShibaInu: 0.5, Horse: 1.3, Stag: 1.5 }; // altura en casillas
   const PET_GL = { perro: 'ShibaInu', lobo: 'Wolf', zorro: 'Fox' };
   const MOUNT_GL = { caballo: ['Horse', 1.3], lobo: ['Wolf', 0.98], ciervo: ['Stag', 1.5] };
-  const ENEMY_ANIMAL = { wolf: 'Wolf' };
+  const ENEMY_ANIMAL = { wolf: 'Wolf', hellhound: 'Wolf' };
   function buildAnimalGL(name, o = {}) {
     const A = GL.animals[name];
     if (!A) return null;

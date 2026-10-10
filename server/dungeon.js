@@ -1052,8 +1052,8 @@ class Instance {
     this.event({ e: 'die', id: e.id, k: e.k, x: e.x, y: e.y, by: p.user.id, xp: shown || Math.round(share), boss: e.m.boss || undefined, elite: e.m.elite || undefined });
     const info = { elite: e.m.elite, boss: e.m.boss, world: !!e.wb, fam: (RULES.MONSTERS[e.k] || {}).fam };
     if (this.hooks.kill) for (const o of party) if (this.kind !== 'world' || cheb(o, e) <= 20) this.hooks.kill(o.user, e.k, info);
-    // desafío «cadáveres explosivos»: estallan al rato
-    if (this.mod === 'explosivos' && !e.m.boss) {
+    // desafío «cadáveres explosivos» (o zombis hinchados): estallan al rato
+    if ((this.mod === 'explosivos' || e.m.explode) && !e.m.boss) {
       const cells = [];
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (this.walkTile(e.x + dx, e.y + dy)) cells.push([e.x + dx, e.y + dy]);
       const id = 't' + ++this.seq;

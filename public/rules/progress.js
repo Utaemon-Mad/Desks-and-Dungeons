@@ -146,7 +146,7 @@
   const DAY = 86400000;
   const dayKey = (now = Date.now()) => Math.floor(now / DAY);
   const weekKey = (now = Date.now()) => Math.floor((now / DAY - 4) / 7); // las semanas empiezan en lunes
-  const FAM = { goblin: 'goblins', orco: 'orcos', muerto: 'no muertos', bestia: 'bestias', humano: 'bandidos y sectarios' };
+  const FAM = { goblin: 'goblins', orco: 'orcos', muerto: 'no muertos', bestia: 'bestias', humano: 'bandidos y sectarios', demonio: 'demonios' };
   // ev: tipo de suceso que cuenta; f: filtro opcional
   const DAILY = {
     cazador:    { text: 'Derrota {n} monstruos', ev: 'kill', n: 25, icon: '⚔️' },
@@ -163,6 +163,7 @@
     muertos:    { text: 'Derrota {n} no muertos', ev: 'kill', f: 'fam:muerto', n: 12, icon: '💀' },
     bestias:    { text: 'Derrota {n} bestias', ev: 'kill', f: 'fam:bestia', n: 12, icon: '🐺' },
     orcos:      { text: 'Derrota {n} orcos u ogros', ev: 'kill', f: 'fam:orco', n: 10, icon: '🏰' },
+    demonios:   { text: 'Derrota {n} demonios', ev: 'kill', f: 'fam:demonio', n: 12, icon: '😈' },
     descenso:   { text: 'Llega al piso {n} del Descenso', ev: 'floor', max: true, n: 3, icon: '🌀' },
   };
   const WEEKLY = {
@@ -249,7 +250,7 @@
     gigantes:   { name: 'Gigantismo', icon: '🦣', desc: 'Enemigos enormes: +50% de vida y +50% de experiencia.' },
   };
   const weekMod = (week = weekKey()) => { const ids = Object.keys(WEEKLY_MODS); return ids[((week % ids.length) + ids.length) % ids.length]; };
-  const DESCENT_THEMES = ['cuevas', 'cripta', 'nido', 'fortaleza', 'volcan'];
+  const DESCENT_THEMES = ['cuevas', 'cripta', 'nido', 'fortaleza', 'volcan', 'abismo'];
   const descentTheme = (floor) => DESCENT_THEMES[(floor - 1) % DESCENT_THEMES.length];
   const descentLevel = (startLevel, floor) => startLevel + floor - 1;
 

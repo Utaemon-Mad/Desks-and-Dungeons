@@ -15,6 +15,10 @@
       '🍺 Alfonso enseña a jugar a los personajes nuevos (/tutorial para repetirlo).',
       '🔑 Usuario y contraseña: guarda tu cuenta y juega desde cualquier ordenador o móvil.',
       '📱 Se puede instalar como aplicación desde el navegador.',
+      '😈 Mazmorra nueva: el Abismo infernal, con diablillos, canes infernales, gárgolas, demonios y Azaroth.',
+      '🧟 Zombis de verdad en las criptas (¡cuidado con los hinchados, que revientan!).',
+      '💎 Botín más justo: los enemigos normales sueltan poco y básico; lo bueno, élites y jefes.',
+      '🧱 Muros de las mazmorras estables: ya no suben y bajan al moverte.',
     ] },
     { v: 5, date: 'Octubre', title: 'Armería de Diablo', items: [
       '⚔️ 192 armaduras y 156 armas distintas que cambian el aspecto de tu héroe.',
