@@ -61,7 +61,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 ```
 
 ## Dónde tocar para… (busca el nombre con grep, no leas el archivo entero)
-- Enemigo nuevo o cambiar sus números: fila en `MONSTERS` (rules/monsters-data.js); su modelo en `ENEMY_GL` + `monsterFeatures` (models.js).
+- Enemigo nuevo o cambiar sus números: fila en `MONSTERS` (rules/monsters-data.js); su modelo en `ENEMY_GL` + `monsterFeatures` (models-creatures.js).
 - Mazmorra/tema nuevo: `THEMES` (monsters-data.js) + colores en view3d.js (`volcan`/`abismo` como ejemplo) + decorado en server/gen.js.
 - Cuánto botín cae: `DROP` y `legChance` en `rollLoot` (engine.js). Poderes legendarios: `LEGENDARY` (engine.js) y su efecto en server/dungeon.js (`p.d.leg`).
 - Clases, razas, habilidades: `CLASSES`, `RACES`, `ABILITIES` (engine.js). Talentos: rules/talents-data.js.

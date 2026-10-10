@@ -1,5 +1,5 @@
 // Tablas de monstruos y de temas de mazmorra (las usan engine.js en el servidor y en el navegador).
-// Para añadir un enemigo basta una fila en MONSTERS (y su modelo en models.js si es nuevo).
+// Para añadir un enemigo basta una fila en MONSTERS (y su modelo en models-creatures.js si es nuevo).
 // sets: 'todas' = piezas de conjunto de todas las clases (lo resuelve engine.js)
 (function (root) {
   'use strict';
