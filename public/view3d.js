@@ -318,6 +318,7 @@
     return im;
   }
 
+  const LOW_WALL = 0.3; // altura de los muros bajos (los del lado de la cámara)
   // Construye todo lo fijo del mapa. Devuelve { group, lights, walls (actualizable con lo explorado) }
   function buildMap(map) {
     const mm = M();
@@ -358,7 +359,7 @@
         if (map.tiles[y * map.w + x] !== '#') continue;
         let near = false;
         for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) if (walk(x + dx, y + dy)) { near = true; break; }
-        if (near) walls.push({ x: x + 0.5, z: y + 0.5, y: WALL_H / 2, sy: WALL_H, tile: y * map.w + x, r: 0 });
+        if (near) walls.push({ x: x + 0.5, z: y + 0.5, y: WALL_H / 2, sy: WALL_H, tile: y * map.w + x, r: 0, low: walk(x, y - 1) });
       }
       const wallGeo = new THREE.BoxGeometry(1, 1, 1);
       const wallMat = new THREE.MeshStandardMaterial({ color: T.wall, roughness: 0.92, flatShading: true });
@@ -377,14 +378,13 @@
       wallMesh.castShadow = true; wallMesh.receiveShadow = true;
       group.add(wallMesh);
       out.walls = { mesh: wallMesh, list: walls, shown: -1 };
-      // los muros entre la cámara y el héroe se bajan para no taparlo
-      out.updateWalls = (seen, hx, hz) => {
+      // los muros con sala al norte, siempre bajos (como en la versión con modelos)
+      out.updateWalls = (seen) => {
         let n = 0;
         const m4 = new THREE.Matrix4();
         for (const w of walls) {
           if (!seen[w.tile] && !seenNear(seen, map, w.tile)) continue;
-          const cut = hx !== undefined && w.z > hz && w.z - hz < 7 && Math.abs(w.x - hx) < 7;
-          const h = cut ? 0.35 : WALL_H;
+          const h = w.low ? Math.max(0.35, WALL_H * LOW_WALL) : WALL_H;
           m4.makeScale(1, h, 1); m4.setPosition(w.x, h / 2, w.z);
           wallMesh.setMatrixAt(n++, m4);
         }
@@ -563,10 +563,10 @@
           near = true;
           const k = rand(x * 7.1 + y * 3.3 + dx * 5 + dy * 11);
           const name = k < 0.1 ? 'wall_cracked' : k < 0.14 ? 'wall_broken' : 'wall';
-          (segs[name] = segs[name] || []).push({ x: x + 0.5 + dx * 0.375, z: y + 0.5 + dy * 0.375, r, tile, cz: y + 0.5, cx: x + 0.5 });
+          (segs[name] = segs[name] || []).push({ x: x + 0.5 + dx * 0.375, z: y + 0.5 + dy * 0.375, r, tile, low: !isWall(x, y - 1) });
         }
         if (!near) for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) if (!isWall(x + dx, y + dy)) { near = true; break; }
-        if (near) caps.push({ x: x + 0.5, z: y + 0.5, tile });
+        if (near) caps.push({ x: x + 0.5, z: y + 0.5, tile, low: !isWall(x, y - 1) });
         continue;
       }
       if (WATER.has(ch)) continue;
@@ -598,15 +598,14 @@
     capMesh.count = 0; capMesh.receiveShadow = true;
     group.add(capMesh);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
-    // los muros entre la cámara y el héroe se bajan para no taparlo
-    const cutAt = (z, x, hx, hz) => hx !== undefined && z > hz + 0.4 && z - hz < 7 && Math.abs(x - hx) < 7;
-    out.updateWalls = (seen, hx, hz) => {
+    // Los muros que tienen sala justo al norte (la cámara los ve por detrás) son siempre bajos, para que no tapen
+    // la sala; el resto, siempre altos. Así nada aparece ni desaparece al moverse.
+    out.updateWalls = (seen) => {
       for (const W of wallMeshes) {
         let n = 0;
         for (const w of W.list) {
           if (!seen[w.tile] && !seenNear(seen, map, w.tile)) continue;
-          const cut = cutAt(w.cz, w.cx, hx, hz);
-          q.setFromAxisAngle(up, w.r); sc.set(HS, cut ? VS * 0.25 : VS, HS); ps.set(w.x, 0, w.z);
+          q.setFromAxisAngle(up, w.r); sc.set(HS, w.low ? VS * LOW_WALL : VS, HS); ps.set(w.x, 0, w.z);
           m4.compose(ps, q, sc);
           W.im.setMatrixAt(n++, m4);
         }
@@ -615,8 +614,7 @@
       let n = 0;
       for (const c of caps) {
         if (!seen[c.tile] && !seenNear(seen, map, c.tile)) continue;
-        const cut = cutAt(c.z, c.x, hx, hz);
-        m4.makeTranslation(c.x, cut ? GL_WALL_H * 0.25 : GL_WALL_H, c.z);
+        m4.makeTranslation(c.x, c.low ? GL_WALL_H * LOW_WALL : GL_WALL_H, c.z);
         capMesh.setMatrixAt(n++, m4);
       }
       capMesh.count = n; capMesh.instanceMatrix.needsUpdate = true;
