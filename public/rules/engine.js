@@ -354,6 +354,19 @@
   // Nombres de los objetos raros (dos palabras al azar, como «Mordisco Lúgubre» en Diablo 2)
   const RARE_A = ['Mordisco', 'Grito', 'Colmillo', 'Tormenta', 'Pesadilla', 'Ruina', 'Sombra', 'Llanto', 'Espina', 'Ira', 'Plaga', 'Eco', 'Garra', 'Calavera', 'Brasa', 'Hueso', 'Lamento', 'Furia', 'Aullido', 'Presagio', 'Veneno', 'Juramento', 'Corona', 'Ala'];
   const RARE_B = ['Lúgubre', 'Cruel', 'Feroz', 'del Cuervo', 'de Hierro', 'de la Noche', 'del Abismo', 'del Ocaso', 'de Ceniza', 'de la Tumba', 'de Sangre', 'de Escarcha', 'del Trueno', 'de Medianoche', 'Voraz', 'Salvaje', 'del Lobo', 'de Plata'];
+  // Objetos legendarios: únicos muy raros con un poder que cambia cómo juegas (it.leg)
+  const LEGENDARY = {
+    rebote: { name: 'Rebote', icon: '⚡', desc: 'Tus disparos, rayos y golpes a distancia rebotan a otro enemigo cercano con el 60% del daño.' },
+    estallido: { name: 'Estallido', icon: '💥', desc: 'Los enemigos que matas estallan y hieren a los de alrededor con el 30% de su vida máxima.' },
+    sed: { name: 'Sed de sangre', icon: '🩸', desc: 'Cada enemigo que matas te cura el 6% de tu vida máxima.' },
+    frenesi: { name: 'Frenesí', icon: '🌪️', desc: 'Al matar ganas un 30% de velocidad de ataque y de movimiento durante 4 s.' },
+    egida: { name: 'Égida', icon: '🛡️', desc: 'Si bajas del 30% de vida, un escudo absorbe daño igual al 35% de tu vida máxima (cada 45 s).' },
+    trueno: { name: 'Trueno', icon: '🌩️', desc: 'Cada cuarto golpe con el arma cae un rayo sobre el objetivo (150% del daño) que salta a 2 enemigos más.' },
+    eco: { name: 'Eco', icon: '🔁', desc: 'Tus habilidades tienen un 25% de probabilidad de no gastar energía ni tiempo de espera.' },
+  };
+  const LEGENDARY_COLOR = '#ff8a1a';
+  const itemColor = (it) => (it && it.leg ? LEGENDARY_COLOR : (RARITIES[it && it.rarity] || RARITIES.normal).color);
+
   const UNIQUE_NAMES = {
     arma: ['Filo del Alba', 'Llanto de la Viuda', 'Segadora de Almas', 'Colmillo de Medianoche', 'Juramento Roto', 'Ira del Dragón', 'Susurro del Vacío', 'Lamento del Rey', 'Aguijón de Ceniza', 'Furia Carmesí'],
     mano: ['Bastión Inquebrantable', 'Esfera del Eclipse', 'Muro de los Mártires', 'Corazón de Tormenta'],
@@ -591,7 +604,8 @@
       } else if (rarity === 'raro') it.name = `${pick(rng, RARE_A)} ${pick(rng, RARE_B)}`;
       else it.name = B.name;
     }
-    it.value = itemValue(it);
+    if (o.leg && LEGENDARY[o.leg] && rarity === 'unico') { it.leg = o.leg; it.value = 0; }
+    it.value = itemValue(it) * (it.leg ? 3 : 1);
     it.weight = itemWeight(it);
     return it;
   }
@@ -655,6 +669,9 @@
     const lvl = Math.max(1, o.ilvl | 0);
     for (let i = 0; i < rolls; i++) {
       if (rng() >= DROP[kind].chance * (kind === 'normal' ? 1 + Math.min(0.5, (o.mf || 0) / 400) : 1)) continue;
+      // legendario: muy raro, sobre todo de jefes y a más nivel
+      const legChance = { boss: 0.015, elite: 0.004, chest: 0.004, normal: 0.0003 }[kind] * (1 + lvl / 20) * (1 + Math.min(1, (o.mf || 0) / 300));
+      if (rng() < legChance) { out.push(makeItem(rng, { ilvl: lvl, rarity: 'unico', classes: o.classes, leg: pick(rng, Object.keys(LEGENDARY)) })); continue; }
       const rarity = rollDropRarity(rng, kind, lvl, o.mf);
       // los enemigos normales sueltan objetos de su nivel o algo por debajo
       const ilvl = kind === 'normal' ? Math.max(1, lvl - Math.floor(rng() * 3)) : lvl;
@@ -721,6 +738,7 @@
     if (it.addMax) lines.push({ t: `+${it.addMax} al daño máximo`, c: 'mod' });
     for (const [k, r] of Object.entries(it.elem || {})) lines.push({ t: `${ELEMENTS[k].icon} ${r[0]}–${r[1]} de daño de ${ELEMENTS[k].name}${k === 'frio' ? ' (ralentiza)' : ''}`, c: 'mod' });
     for (const [k, v] of Object.entries(it.stats || {})) lines.push({ t: fmtStat(k, v), c: 'mod' });
+    if (it.leg && LEGENDARY[it.leg]) lines.push({ t: `★ Legendario · ${LEGENDARY[it.leg].icon} ${LEGENDARY[it.leg].name}: ${LEGENDARY[it.leg].desc}`, c: 'leg' });
     const cl = classesFor(it);
     if (cl.length < CLASS_IDS.length) lines.push({ t: `Ideal para: ${cl.map((c) => CLASSES[c].name).join(', ')}`, c: 'muted' });
     lines.push({ t: `Peso ${it.weight !== undefined ? it.weight : itemWeight(it)} kg`, c: 'muted' });
@@ -949,6 +967,8 @@
       sets: g.sets, buffs: g.buffs,
       abilities: abilitiesFor(char, level),
     };
+    d.leg = {};
+    for (const sl of SLOT_IDS) { const it = profile.equip && profile.equip[sl]; if (it && it.leg && LEGENDARY[it.leg]) d.leg[it.leg] = true; }
     return d;
   }
 
@@ -1166,7 +1186,7 @@
     ABILITIES, ABILITY_BY_ID, XP_TABLE, SLOTS, SLOT_IDS, TIERS, WEAPONS, FISTS, OFFHANDS, ARMOR_REQ, JEWELS,
     RARITIES, RARITY_ORDER, LEGACY_RARITY, AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES,
     statName, fmtStat, classId, raceId, levelFromXp, pointsTotal, pointsSpent, pointsFree, baseStats, statRoom, newChar, cleanChar,
-    rollRarity, rollDropRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, describeRich, baseInfo, speedName, allowedBases, affixPool, affixTier, rollAffixValue,
+    LEGENDARY, LEGENDARY_COLOR, itemColor, rollRarity, rollDropRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, describeRich, baseInfo, speedName, allowedBases, affixPool, affixTier, rollAffixValue,
     migrateItem, migrateProfile, adj,
     PETS, PET_LEVEL, MOUNT_LEVEL, MOUNTS, petStats, PET_MAX, petXpFor, petLevelFromXp, petEvo, petTitle, PET_SKILLS, PET_SKILL_LEVEL, petBagWeight, ZONES, QUESTS, itemWeight, classesFor,
     priceScale, buyPrice, itemBuyPrice, armeroStock, seeded, gearTotals, derive, abilitiesFor, gearLook, monsterAt, reduction, xpPenalty,

@@ -52,9 +52,8 @@
   document.body.appendChild(loot);
   let lootT = null;
   DD.on('bigloot', (it) => {
-    const R = RULES.RARITIES[it.rarity] || {};
-    loot.style.setProperty('--rc', R.color || '#c8a46a');
-    loot.querySelector('small').textContent = it.rarity === 'conjunto' ? '¡OBJETO DE CONJUNTO!' : '¡OBJETO ÚNICO!';
+    loot.style.setProperty('--rc', RULES.itemColor(it));
+    loot.querySelector('small').textContent = it.leg ? `★ ¡LEGENDARIO! · ${RULES.LEGENDARY[it.leg].icon} ${RULES.LEGENDARY[it.leg].name}` : it.rarity === 'conjunto' ? '¡OBJETO DE CONJUNTO!' : '¡OBJETO ÚNICO!';
     loot.querySelector('b').textContent = it.name;
     let line = '';
     try { line = RULES.typeLine ? RULES.typeLine(it) : ''; } catch { line = ''; }

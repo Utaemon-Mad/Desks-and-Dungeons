@@ -59,6 +59,12 @@ function rulesTests() {
   const ln = lootStats({ ilvl: 3 }), le = lootStats({ ilvl: 3, elite: true }), lb = lootStats({ ilvl: 3, boss: true }, 2000);
   assert.ok(ln.per < 0.15 && ln.good < 0.005, `un enemigo normal suelta poco (${ln.per.toFixed(3)} objetos, ${ln.good.toFixed(4)} raros)`);
   assert.ok(le.per > ln.per * 4 && lb.good > le.good, 'los élites y los jefes sueltan más y mejor');
+  // legendarios: únicos con un poder que se nota en la ficha
+  const legIt = RULES.makeItem(rng, { ilvl: 20, rarity: 'unico', slot: 'arma', base: 'espada', leg: 'trueno' });
+  assert.ok(legIt.leg === 'trueno' && RULES.describe(legIt).some((t) => /Legendario/.test(t)), 'legendario con su poder');
+  assert.ok(RULES.derive({ char: RULES.newChar('guerrero', {}), xp: RULES.XP_TABLE[20], equip: { arma: legIt }, buffs: {} }).leg.trueno, 'el poder se activa al llevarlo');
+  let legs = 0; for (let i = 0; i < 4000; i++) for (const it of RULES.rollLoot(rng, { ilvl: 5 })) if (it.leg) legs++;
+  assert.ok(legs <= 6, `los enemigos normales casi nunca sueltan legendarios (${legs} en 4000)`);
   // armas: tres niveles (normal, excepcional, élite) que pegan más y piden más
   const t = [0, 1, 2].map((tier) => RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'arma', base: 'espada', tier, sk: 0 }));
   assert.ok(t[0].dmg[1] < t[1].dmg[1] && t[1].dmg[1] < t[2].dmg[1], 'el élite pega más');
@@ -249,6 +255,25 @@ async function instanceTests() {
   dinst.join(du);
   dinst.damageEnemy(dinst.players.get('u2'), [...dinst.enemies.values()][0], 9999, { noCrit: true });
   assert.ok(dinst.teles.some((t) => t.orphan), 'el cadáver va a estallar');
+
+  // Poderes legendarios en combate
+  const lsent = [];
+  const linst = new Instance({ ...def, id: 'leg', spawns: [{ k: 'goblin-minion', x: 5, y: 2 }, { k: 'goblin-minion', x: 6, y: 2 }, { k: 'goblin-minion', x: 6, y: 3 }], chests: [] }, { ...hooks, send: (u, m) => lsent.push(m), kill: () => {} });
+  const lrng = RULES.seeded('leg');
+  const lprof = { ...profile, equip: { ...profile.equip, arma: RULES.makeItem(lrng, { ilvl: 5, rarity: 'unico', slot: 'arma', base: 'arco', leg: 'rebote' }), anillo: RULES.makeItem(lrng, { ilvl: 5, rarity: 'unico', slot: 'anillo', leg: 'estallido' }), amuleto: RULES.makeItem(lrng, { ilvl: 5, rarity: 'unico', slot: 'amuleto', leg: 'egida' }) } };
+  const lu = { id: 'u3', name: 'L', look: {}, profile: lprof };
+  linst.join(lu);
+  const lp = linst.players.get('u3');
+  assert.ok(lp.d.leg.rebote && lp.d.leg.estallido && lp.d.leg.egida, 'los tres poderes activos');
+  const [g1, g2, g3] = [...linst.enemies.values()];
+  const hp2 = g2.hp;
+  linst.damageEnemy(lp, g1, 3, { noCrit: true, kind: 'ranged' });
+  assert.ok(g2.hp < hp2 || g3.hp < g3.maxHp, 'el disparo rebota a otro enemigo');
+  linst.damageEnemy(lp, g2, 99999, { noCrit: true, kind: 'melee' });
+  assert.ok(linst.events.some((e) => e.e === 'fx' && e.color === '#ff8a1a') || lsent.some((m) => (m.events || []).some((e) => e.color === '#ff8a1a')), 'el enemigo estalla al morir');
+  lu.combat.hp = Math.round(lp.d.hp * 0.32);
+  linst.hurtPlayer(lp, 5, { raw: true });
+  assert.ok(lp.shield > 0, 'la égida se levanta al bajar del 30%');
 
   // Arena: los golpes al rival le quitan vida de verdad, y al caer termina el duelo
   let ended = null;

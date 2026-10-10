@@ -699,7 +699,7 @@ class Instance {
     }
     if (!step) return;
     const [dx, dy] = step;
-    const speed = (p.mounted && p.mount ? 1 / (1 + p.mount.speed / 100) : 1) * (p.slowUntil > now ? 1.8 : 1);
+    const speed = (p.mounted && p.mount ? 1 / (1 + p.mount.speed / 100) : 1) * (p.slowUntil > now ? 1.8 : 1) / (1 + this.buffSum(p, 'haste') / 100);
     p.sm = Math.round(p.d.moveMs * (dx && dy ? 1.41 : 1) * speed);
     p.nextStep = now + p.sm;
     p.x += dx; p.y += dy;
@@ -816,11 +816,24 @@ class Instance {
   weaponAttack(p, t, now) {
     const d = p.d;
     p.dir = dirName(t.x - p.x, t.y - p.y);
-    p.nextAttack = now + d.atkMs;
+    p.nextAttack = now + d.atkMs / (1 + this.buffSum(p, 'haste') / 100);
     const chance = Math.max(55, Math.min(99, 90 + d.hit - 4 * Math.max(0, t.m.level - d.level)));
     const kind = d.weapon.kind;
     if (rnd() * 100 >= chance) { this.event({ e: 'hit', by: p.user.id, t: t.id, miss: true, kind }); return; }
     this.damageEnemy(p, t, this.weaponRoll(p), { kind, magic: kind === 'magic', undead: (d.undead || 0) / 100, elem: this.elemRoll(p) });
+    // legendario «Trueno»: cada cuarto golpe cae un rayo que salta a dos enemigos más
+    if (d.leg && d.leg.trueno && (p.legHits = (p.legHits || 0) + 1) % 4 === 0) {
+      const dmg = this.weaponRoll(p) * 1.5;
+      const hit = [t, ...this.enemiesNear(t, 3, p).filter((o) => o !== t).sort((a, b) => cheb(a, t) - cheb(b, t)).slice(0, 2)];
+      let from = { x: t.x, y: t.y - 4 };
+      for (const o of hit) {
+        if (!this.enemies.has(o.id)) continue;
+        this.event({ e: 'fx', kind: 'bolt', from, to: { x: o.x, y: o.y }, color: '#fff27a' });
+        this.damageEnemy(p, o, o === t ? dmg : dmg * 0.6, { magic: true, name: 'Trueno', fx: 'lightning', chain: true });
+        from = { x: o.x, y: o.y };
+      }
+      this.event({ e: 'leg', id: p.user.id, name: '🌩️ Trueno' });
+    }
   }
 
   // Daño elemental del arma (como en Diablo 2): fuego, frío (ralentiza), rayo y veneno (en 3 s); no lo para la armadura
@@ -871,6 +884,11 @@ class Instance {
     this.event({ e: 'hit', by: p.user.id, t: e.id, dmg, crit, kind: o.kind || 'ability', fx: o.fx || null, name: o.name || null });
     const ls = p.d.lifesteal / 100 + (o.leech || 0);
     if (ls > 0) this.heal(p, Math.max(1, Math.round(dmg * ls)), o.leech ? o.name : 'Robo de vida');
+    // legendario «Rebote»: lo que va a distancia salta a otro enemigo cercano
+    if (!o.chain && p.d.leg && p.d.leg.rebote && (o.kind === 'ranged' || o.kind === 'magic' || o.magic)) {
+      const next = this.enemiesNear(e, 3, p).filter((x) => x !== e && this.los(e, x)).sort((a, b) => cheb(a, e) - cheb(b, e))[0];
+      if (next) { this.event({ e: 'fx', kind: 'bolt', from: { x: e.x, y: e.y }, to: { x: next.x, y: next.y }, color: '#9ad8ff' }); this.damageEnemy(p, next, base * 0.6, { ...o, chain: true, noCrit: true, name: 'Rebote' }); }
+    }
     if (e.hp <= 0) this.killEnemy(p, e);
     return dmg;
   }
@@ -904,6 +922,8 @@ class Instance {
     p.pending = null;
     c.en -= ab.cost;
     c.cds[ab.id] = now + ab.cd * FAST * (1 - p.d.cdr / 100);
+    // legendario «Eco»: a veces la habilidad sale gratis
+    if (p.d.leg && p.d.leg.eco && rnd() < 0.25) { c.en += ab.cost; c.cds[ab.id] = now + 300; this.event({ e: 'leg', id: p.user.id, name: '🔁 Eco' }); }
     p.nextAttack = Math.max(p.nextAttack, now + 350);
     if (point) p.dir = dirName(point.x - p.x, point.y - p.y) || p.dir;
     this.event({ e: 'cast', by: p.user.id, name: ab.name, id: ab.id });
@@ -1050,6 +1070,16 @@ class Instance {
       if (pet && pet.downUntil <= Date.now() && this.hooks.petXp && (this.kind !== 'world' || cheb(o, e) <= 20)) this.hooks.petXp(o.user, Math.max(1, Math.round(xp * 0.6)));
     }
     this.event({ e: 'die', id: e.id, k: e.k, x: e.x, y: e.y, by: p.user.id, xp: shown || Math.round(share), boss: e.m.boss || undefined, elite: e.m.elite || undefined });
+    // poderes legendarios al matar
+    const L = p.d.leg || {};
+    if (L.sed) this.heal(p, Math.max(1, Math.round(p.d.hp * 0.06)), 'Sed de sangre');
+    if (L.frenesi) { p.tbuffs.frenesi = { haste: 30, until: Date.now() + 4000 }; this.sendPrivate(p); }
+    if (L.estallido && !this.blasting) {
+      this.blasting = true; // los que mueren por el estallido no vuelven a estallar
+      this.event({ e: 'fx', kind: 'nova', x: e.x, y: e.y, radius: 1, color: '#ff8a1a' });
+      for (const o of this.enemiesNear(e, 1, p)) if (o !== e) this.damageEnemy(p, o, e.maxHp * 0.3, { magic: true, noCrit: true, name: 'Estallido', chain: true });
+      this.blasting = false;
+    }
     const info = { elite: e.m.elite, boss: e.m.boss, world: !!e.wb, fam: (RULES.MONSTERS[e.k] || {}).fam };
     if (this.hooks.kill) for (const o of party) if (this.kind !== 'world' || cheb(o, e) <= 20) this.hooks.kill(o.user, e.k, info);
     // desafío «cadáveres explosivos» (o zombis hinchados): estallan al rato
@@ -1099,7 +1129,14 @@ class Instance {
     if (!o.magic && p.d.block && rnd() * 100 < p.d.block) { dmg *= 0.35; blocked = true; }
     dmg *= 1 - Math.min(60, this.buffSum(p, 'dr')) / 100;
     dmg = Math.max(1, Math.round(dmg));
+    // legendario «Égida»: el escudo absorbe primero
+    if (p.shield > 0) { const a = Math.min(p.shield, dmg); p.shield -= a; dmg -= a; if (p.shield <= 0) p.shield = 0; }
     c.hp -= dmg;
+    if (p.d.leg && p.d.leg.egida && c.hp > 0 && c.hp < p.d.hp * 0.3 && Date.now() >= (p.egidaReady || 0)) {
+      p.shield = Math.round(p.d.hp * 0.35); p.egidaReady = Date.now() + 45000;
+      this.event({ e: 'fx', kind: 'aura', id: p.user.id, until: 2500, radius: 1 });
+      this.event({ e: 'leg', id: p.user.id, name: '🛡️ Égida' });
+    }
     p.fishing = null;
     this.event({ e: 'hit', by: o.by || null, t: p.user.id, dmg, crit: o.crit || undefined, block: blocked || undefined, name: o.name || null, kind: o.kind || 'melee' });
     // desafío «sed de sangre»: el enemigo se cura con lo que hiere

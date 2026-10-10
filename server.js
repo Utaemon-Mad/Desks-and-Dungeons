@@ -448,7 +448,8 @@ function give(room, user, item) {
   user.profile.bag.push(item);
   if (item.rarity === 'unico') track(room, user, 'legend', {});
   saveUser(user); sendMe(user);
-  if (item.rarity === 'unico' || item.rarity === 'conjunto') system(room, `${item.rarity === 'conjunto' ? '🟢' : '🟡'} ${user.name} encuentra «${item.name}».`);
+  if (item.leg) system(room, `🟠★ ¡${user.name} encuentra un LEGENDARIO: «${item.name}» (${RULES.LEGENDARY[item.leg].icon} ${RULES.LEGENDARY[item.leg].name})!`);
+  else if (item.rarity === 'unico' || item.rarity === 'conjunto') system(room, `${item.rarity === 'conjunto' ? '🟢' : '🟡'} ${user.name} encuentra «${item.name}».`);
   return true;
 }
 

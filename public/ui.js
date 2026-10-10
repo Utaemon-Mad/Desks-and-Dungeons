@@ -37,8 +37,8 @@
   function showTip(it, ev, extra) {
     tip.innerHTML = '';
     const R = RULES.RARITIES[it.rarity] || RULES.RARITIES.normal;
-    const name = el('div', 'tip-name', it.name); name.style.color = R.color;
-    tip.append(name, el('div', 'tip-type', RULES.typeLine(it)));
+    const name = el('div', 'tip-name', (it.leg ? '★ ' : '') + it.name); name.style.color = RULES.itemColor ? RULES.itemColor(it) : R.color;
+    tip.append(name, el('div', 'tip-type', it.leg ? RULES.typeLine(it).replace('Único', 'Legendario') : RULES.typeLine(it)));
     const p = me();
     // características que tendrías sin lo que llevas en ese hueco (para los requisitos)
     const stats = p ? RULES.derive({ ...p, equip: { ...p.equip, [it.slot]: p.equip[it.slot] && p.equip[it.slot].id === it.id ? it : undefined } }).stats : null;
@@ -101,7 +101,7 @@
 
   // Casilla de objeto (icono con borde de rareza)
   function itemCell(it, opts = {}) {
-    const b = el('button', 'icell ' + (it ? 'r-' + it.rarity : 'empty'));
+    const b = el('button', 'icell ' + (it ? 'r-' + it.rarity + (it.leg ? ' r-leg' : '') : 'empty'));
     b.type = 'button';
     if (it) {
       let art = null;
