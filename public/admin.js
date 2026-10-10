@@ -63,6 +63,18 @@
   DD.on('welcome-done', (m) => showMotd(m && m.motd));
   motdEl.onclick = () => motdEl.classList.add('hidden');
 
+  // ---------- Instalar como aplicación ----------
+  if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+  let installEvt = null;
+  window.addEventListener('beforeinstallprompt', (e) => { e.preventDefault(); installEvt = e; });
+  window.addEventListener('appinstalled', () => { DD.toast('📱 ¡Instalado! Ya puedes abrir Desks & Dungeons desde tu escritorio o pantalla de inicio.'); installEvt = null; });
+  DD.on('install', async () => {
+    if (matchMedia('(display-mode: standalone), (display-mode: fullscreen)').matches) return DD.toast('Ya estás jugando con la aplicación instalada.');
+    if (installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch { /* nada */ } installEvt = null; return; }
+    const ios = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    DD.toast(ios ? '📱 En iPhone/iPad: pulsa el botón Compartir de Safari y elige «Añadir a pantalla de inicio».' : '📱 Abre el menú del navegador (⋮) y elige «Instalar aplicación» o «Añadir a pantalla de inicio».');
+  });
+
   // ---------- Errores del navegador → servidor ----------
   setInterval(() => {
     const q = window.__errs;

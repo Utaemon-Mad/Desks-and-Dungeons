@@ -740,6 +740,9 @@ async function instanceTests() {
   assert.notStrictEqual(await get('/../server.js'), 200);
   assert.notStrictEqual(await get('/%2e%2e/server.js'), 200);
   assert.strictEqual(await get('/admin'), 404, 'sin ADMIN_KEY no hay panel');
+  assert.strictEqual(await get('/portada'), 200, 'portada');
+  assert.strictEqual(await get('/guia.pdf'), 200, 'guía en PDF');
+  assert.strictEqual(await get('/sw.js'), 200, 'service worker');
 
   console.log('✔ Todas las pruebas pasan');
   a.ws.close();

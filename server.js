@@ -37,6 +37,8 @@ const MIME = {
   '.json': 'application/json; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8',
   '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.pdf': 'application/pdf',
   '.ico': 'image/x-icon',
   '.glb': 'model/gltf-binary',
   '.txt': 'text/plain; charset=utf-8',
@@ -53,6 +55,8 @@ const server = http.createServer((req, res) => {
   if (urlPath === '/healthz') { res.writeHead(200); return res.end('ok'); }
   if (urlPath === '/admin') return adminPage(req, res);
   if (urlPath === '/') urlPath = '/index.html';
+  if (urlPath === '/portada') urlPath = '/portada.html';
+  if (urlPath === '/guia') urlPath = '/guia.pdf';
   const file = path.normalize(path.join(PUBLIC_DIR, urlPath));
   if (!file.startsWith(PUBLIC_DIR + path.sep)) { res.writeHead(403); return res.end(); }
   sendStatic(req, res, file);

@@ -824,6 +824,7 @@
     const h = (t) => body.appendChild(el('h3', '', t));
     const p = (t) => body.appendChild(el('p', '', t));
     if (guideTab === 'jugar') {
+      { const a = el('a', 'btn alt', '📘 Abrir la guía en PDF (para imprimir o enseñar)'); a.href = 'guia.pdf'; a.target = '_blank'; a.rel = 'noopener'; body.appendChild(a); }
       h('La taberna');
       p('Haz clic en el suelo para andar y en las sillas para sentarte. Habla con Enter. Pulsa sobre los comerciantes para comprar y vender: Madre Zarza (pociones), el Maestro Takeshi (armas y armaduras) y el Hombre de la Túnica (pergaminos y bendiciones).');
       p('En la lista de héroes puedes saludar, invitar a una ronda o 🤝 comerciar con tus amigos: cada uno pone objetos y oro y, cuando los dos aceptáis, se intercambian.');

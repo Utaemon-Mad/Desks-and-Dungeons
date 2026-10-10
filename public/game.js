@@ -897,6 +897,8 @@
     } else if (m === 'hero') { C.toTitle(); }
     else if (m === 'help') showHelp();
     else if (m === 'news') DD.emit('open-news');
+    else if (m === 'pdf') window.open('guia.pdf', '_blank');
+    else if (m === 'install') DD.emit('install');
     else if (m === 'gfx') DD.emit('open-options');
     else if (m === 'sound') { SFX.setMuted(!SFX.muted); $('#sound-state').textContent = SFX.muted ? 'no' : 'sí'; return; }
     menuPop.classList.add('hidden');
