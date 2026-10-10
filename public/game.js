@@ -641,6 +641,7 @@
         logEl.innerHTML = '';
         for (const h of m.history) logLine(h);
         renderHeroes();
+        DD.emit('welcome-done', m);
         break;
       }
       case 'join': users.set(m.user.id, makeUser(m.user)); renderHeroes(); sfx('join'); break;
@@ -895,6 +896,7 @@
       catch { prompt('Copia este enlace y pásaselo a tus amigos:', url); }
     } else if (m === 'hero') { C.toTitle(); }
     else if (m === 'help') showHelp();
+    else if (m === 'news') DD.emit('open-news');
     else if (m === 'gfx') DD.emit('open-options');
     else if (m === 'sound') { SFX.setMuted(!SFX.muted); $('#sound-state').textContent = SFX.muted ? 'no' : 'sí'; return; }
     menuPop.classList.add('hidden');
