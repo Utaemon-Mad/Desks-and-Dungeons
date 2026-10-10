@@ -49,12 +49,6 @@
   // Centro de una casilla en coordenadas de la ventana (útil para pruebas automáticas)
   window.__tileToScreen = (x, y) => (T3.stage ? T3.stage.project(x + 0.5, 0, y + 0.5) : { x: 0, y: 0 });
 
-  function screenToTile(cx, cy) {
-    const wx = (cx - view.ox) / view.scale, wy = (cy - view.oy) / view.scale;
-    const a = (wx - OX) / (TW / 2), b = (wy - OY) / (TH / 2);
-    return { x: Math.floor((a + b) / 2), y: Math.floor((b - a) / 2), wx, wy };
-  }
-
   // ======================================================================
   //  Utilidades de dibujo
   // ======================================================================
@@ -119,115 +113,13 @@
   function rand(seed) { const s = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); }
 
   // ======================================================================
-  //  Escenario estático (suelo y paredes) pre-renderizado
+  //  Ventanas de la taberna: relámpagos y ojos en la noche
   // ======================================================================
-  let staticLayer = null;
-
-  function buildStatic() {
-    staticLayer = document.createElement('canvas');
-    const s = 2; // resolución interna
-    staticLayer.width = WORLD_W * s; staticLayer.height = WORLD_H * s;
-    const c = staticLayer.getContext('2d');
-    c.scale(s, s);
-    withCtx(c, () => { drawWalls(); drawFloor(); });
-  }
 
   // Permite reutilizar las funciones de dibujo con otro contexto
   function withCtx(c, fn) {
     const prev = ctx; ctx = c;
     try { fn(); } finally { ctx = prev; }
-  }
-
-  function drawFloor() {
-    // Plataforma con grosor bajo el suelo
-    const A = iso(0, 0), B = iso(MAP.W, 0), C = iso(MAP.W, MAP.H), D = iso(0, MAP.H);
-    poly([D, C, up(C, -18), up(D, -18)], '#2c1a0e', OUT);
-    poly([C, B, up(B, -18), up(C, -18)], '#1f1209', OUT);
-    // Tablones
-    for (let x = 0; x < MAP.W; x++) {
-      for (let y = 0; y < MAP.H; y++) {
-        const base = ['#7a4e2c', '#74492a', '#80522f'][(x * 7 + y * 3) % 3];
-        poly([iso(x, y), iso(x + 1, y), iso(x + 1, y + 1), iso(x, y + 1)], base, null);
-        // vetas en dirección x
-        ctx.strokeStyle = 'rgba(40,20,8,.35)'; ctx.lineWidth = 1;
-        for (let k = 1; k < 3; k++) {
-          const p = iso(x, y + k / 3), q = iso(x + 1, y + k / 3);
-          ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke();
-        }
-        if (rand(x * 31 + y) > 0.8) {
-          const p = iso(x + 0.3 + rand(x + y * 9) * 0.4, y + 0.5);
-          ellipse(p.x, p.y, 1.5, 1, 'rgba(30,15,5,.6)');
-        }
-      }
-    }
-    // Juntas entre casillas (líneas a lo largo de y para marcar los tablones)
-    ctx.strokeStyle = 'rgba(30,14,5,.55)'; ctx.lineWidth = 1.2;
-    for (let x = 0; x <= MAP.W; x++) { const p = iso(x, 0), q = iso(x, MAP.H); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y); ctx.stroke(); }
-    poly([A, B, C, D], null, OUT, 2);
-
-    // Alfombra
-    const r = MAP.rug;
-    poly([iso(r.x0, r.y0), iso(r.x1, r.y0), iso(r.x1, r.y1), iso(r.x0, r.y1)], '#1f4a52', OUT, 2);
-    poly([iso(r.x0 + .25, r.y0 + .25), iso(r.x1 - .25, r.y0 + .25), iso(r.x1 - .25, r.y1 - .25), iso(r.x0 + .25, r.y1 - .25)], '#2a6670', '#c9a54a', 2);
-    poly([iso(r.x0 + .55, r.y0 + .55), iso(r.x1 - .55, r.y0 + .55), iso(r.x1 - .55, r.y1 - .55), iso(r.x0 + .55, r.y1 - .55)], null, 'rgba(201,165,74,.6)', 1);
-  }
-
-  function drawWalls() {
-    const A = iso(0, 0), B = iso(MAP.W, 0), D = iso(0, MAP.H);
-    // Pared izquierda (a lo largo de y): yeso arriba, madera abajo
-    poly([A, D, up(D, WALL_H), up(A, WALL_H)], '#e6dcc4', OUT, 2);
-    poly([A, D, up(D, 38), up(A, 38)], '#5a3a22', OUT, 2);
-    // Pared derecha (a lo largo de x)
-    poly([A, B, up(B, WALL_H), up(A, WALL_H)], '#d9cdb2', OUT, 2);
-    poly([A, B, up(B, 38), up(A, 38)], '#4e321d', OUT, 2);
-    // Tablas del zócalo
-    ctx.strokeStyle = 'rgba(20,10,4,.5)'; ctx.lineWidth = 1;
-    for (let i = 0; i <= MAP.H; i += 0.5) { const p = iso(0, i); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - 38); ctx.stroke(); }
-    for (let i = 0; i <= MAP.W; i += 0.5) { const p = iso(i, 0); ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x, p.y - 38); ctx.stroke(); }
-    // Vigas de entramado
-    const beam = '#4a2e1a';
-    for (const yy of [0.02, 8, 11.95]) { const p = iso(0, yy); rrect(p.x - 4, p.y - WALL_H, 8, WALL_H, 0, beam, OUT, 1.5); }
-    for (const xx of [4, 9.5, 13.95]) { const p = iso(xx, 0); rrect(p.x - 4, p.y - WALL_H, 8, WALL_H, 0, beam, OUT, 1.5); }
-    // Viga superior
-    poly([up(A, WALL_H), up(D, WALL_H), up(D, WALL_H + 10), up(A, WALL_H + 10)], '#3b2414', OUT, 1.5);
-    poly([up(A, WALL_H), up(B, WALL_H), up(B, WALL_H + 10), up(A, WALL_H + 10)], '#3b2414', OUT, 1.5);
-    poly([up(A, 38), up(D, 38), up(D, 42), up(A, 42)], '#3b2414', null);
-    poly([up(A, 38), up(B, 38), up(B, 42), up(A, 42)], '#3b2414', null);
-
-    // --- Decoración de la pared derecha ---
-    // Puerta
-    wallRectX(7.4, 8.9, 0, 92, '#3b2414', OUT);
-    wallRectX(7.55, 8.75, 0, 86, '#6b4528', OUT);
-    for (let k = 0; k < 4; k++) wallRectX(7.6 + k * 0.29, 7.8 + k * 0.29, 4, 82, k % 2 ? '#5f3c22' : '#76502f', null);
-    { const p = iso(8.55, 0); ellipse(p.x, p.y - 44, 2.5, 2.5, '#e0b040', OUT, 1); }
-    // Tablón de misiones
-    wallRectX(5.0, 6.7, 50, 98, '#5a3a22', OUT);
-    for (let k = 0; k < 4; k++) {
-      const x0 = 5.15 + (k % 2) * 0.75, z0 = 54 + Math.floor(k / 2) * 21;
-      wallRectX(x0, x0 + 0.6, z0, z0 + 18, k === 1 ? '#f4e6c0' : '#e8d6a8', OUT, 1);
-      const pin = iso(x0 + 0.3, 0); ellipse(pin.x, pin.y - z0 - 16, 1.6, 1.6, '#c0392b');
-    }
-    // Estanterías con botellas detrás de la barra
-    for (const z of [62, 92]) {
-      wallRectX(10.2, 13.8, z - 4, z, '#4a2e1a', OUT);
-      for (let i = 0; i < 9; i++) {
-        const xx = 10.4 + i * 0.37;
-        const col = ['#2e7d4f', '#7a2a2a', '#c49a3a', '#3a5a9a', '#6a3a8a'][(i * 3 + z) % 5];
-        const p = iso(xx, 0);
-        const hb = 12 + (i % 3) * 3;
-        rrect(p.x - 3, p.y - z - hb, 6, hb, 1.5, col, OUT, 1);
-        rrect(p.x - 1.2, p.y - z - hb - 5, 2.4, 5, 0, shade(col, -0.3), null);
-        ctx.fillStyle = 'rgba(255,255,255,.35)'; ctx.fillRect(p.x - 2, p.y - z - hb + 2, 1, hb - 4);
-      }
-    }
-    // Diana
-    { const p = iso(0, 10.6); ellipse(p.x, p.y - 72, 13, 15, '#2a1a10', OUT); ellipse(p.x, p.y - 72, 9, 11, '#e8d6a8'); ellipse(p.x, p.y - 72, 5, 6, '#c0392b'); ellipse(p.x, p.y - 72, 1.5, 2, '#2a1a10'); }
-  }
-
-  // Rectángulo sobre la pared derecha entre x0..x1 y alturas z0..z1
-  function wallRectX(x0, x1, z0, z1, fill, stroke, lw = 1.5) {
-    const a = iso(x0, 0), b = iso(x1, 0);
-    poly([up(a, z0), up(b, z0), up(b, z1), up(a, z1)], fill, stroke, lw);
   }
 
   // ---------- Ventanas a la noche ----------
@@ -239,21 +131,6 @@
   ];
   const night = { flashUntil: 0, flash2: 0, nextFlash: performance.now() + 9000 + Math.random() * 12000, eyes: null, nextEyes: performance.now() + 20000 + Math.random() * 25000, thunderAt: 0 };
   window.__ddNight = night; // para pruebas automáticas (forzar relámpagos y ojos)
-
-  // Punto de la ventana: t de 0 a 1 a lo ancho, z en altura
-  function winPt(w, t, z) {
-    const s = w.a + (w.b - w.a) * t;
-    return up(w.wall === 'L' ? iso(0, s) : iso(s, 0), z);
-  }
-
-  function winPath(c, w) {
-    const a = winPt(w, 0, w.z0), b = winPt(w, 1, w.z0), c1 = winPt(w, 1, w.z1), d = winPt(w, 0, w.z1), top = winPt(w, 0.5, w.z1 + 18);
-    c.beginPath();
-    c.moveTo(a.x, a.y); c.lineTo(b.x, b.y); c.lineTo(c1.x, c1.y);
-    c.quadraticCurveTo(winPt(w, 0.85, w.z1 + 14).x, winPt(w, 0.85, w.z1 + 14).y, top.x, top.y);
-    c.quadraticCurveTo(winPt(w, 0.15, w.z1 + 14).x, winPt(w, 0.15, w.z1 + 14).y, d.x, d.y);
-    c.closePath();
-  }
 
   function flashLevel(now) {
     if (now < night.flashUntil) return 1;
@@ -277,95 +154,6 @@
     if (night.eyes && now > night.eyes.until) night.eyes = null;
   }
 
-  function drawWindows(now) {
-    const fl = flashLevel(now);
-    WINDOWS.forEach((w, wi) => {
-      const top = winPt(w, 0.5, w.z1 + 18), bottom = winPt(w, 0.5, w.z0);
-      const minX = Math.min(winPt(w, 0, 0).x, winPt(w, 1, 0).x), maxX = Math.max(winPt(w, 0, 0).x, winPt(w, 1, 0).x);
-      const minY = top.y - 12, maxY = Math.max(winPt(w, 0, w.z0).y, winPt(w, 1, w.z0).y);
-      ctx.save();
-      winPath(ctx, w);
-      ctx.clip();
-      // cielo
-      const sky = ctx.createLinearGradient(0, minY, 0, maxY);
-      sky.addColorStop(0, fl ? '#b8c8ff' : '#070a1c'); sky.addColorStop(1, fl ? '#6a78b0' : '#141026');
-      ctx.fillStyle = sky; ctx.fillRect(minX - 4, minY - 4, maxX - minX + 8, maxY - minY + 8);
-      // estrellas
-      if (!fl) for (let i = 0; i < 9; i++) {
-        const sx = minX + rand(wi * 50 + i) * (maxX - minX), sy = minY + 6 + rand(wi * 70 + i) * (maxY - minY) * 0.5;
-        ctx.fillStyle = `rgba(220,225,255,${0.3 + 0.4 * Math.abs(Math.sin(now / 900 + i))})`; ctx.fillRect(sx, sy, 1.2, 1.2);
-      }
-      // luna con nubes
-      if (w.moon) {
-        const mx = minX + (maxX - minX) * 0.62, my = minY + 20;
-        const halo = ctx.createRadialGradient(mx, my, 2, mx, my, 26);
-        halo.addColorStop(0, 'rgba(230,230,200,.45)'); halo.addColorStop(1, 'rgba(230,230,200,0)');
-        ctx.fillStyle = halo; ctx.fillRect(mx - 30, my - 30, 60, 60);
-        ellipse(mx, my, 8, 8, '#efe9c8'); ellipse(mx + 3, my - 2, 2, 2, '#d8d0a8'); ellipse(mx - 3, my + 3, 1.5, 1.5, '#d8d0a8');
-        const cx = ((now / 120) % 90) - 30;
-        ctx.fillStyle = 'rgba(20,18,40,.8)';
-        ellipse(minX + cx, my + 4, 16, 4, 'rgba(20,18,40,.85)'); ellipse(minX + cx + 12, my + 1, 10, 3, 'rgba(20,18,40,.85)');
-      }
-      // colinas y árboles muertos
-      const ground = maxY - 14;
-      ctx.fillStyle = fl ? '#1a1830' : '#040409';
-      ctx.beginPath(); ctx.moveTo(minX - 4, maxY + 4);
-      for (let i = 0; i <= 8; i++) ctx.lineTo(minX + (maxX - minX) * i / 8, ground - Math.sin(i * 1.3 + wi) * 4 - 3);
-      ctx.lineTo(maxX + 4, maxY + 4); ctx.closePath(); ctx.fill();
-      ctx.strokeStyle = ctx.fillStyle; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
-      const tx = minX + (maxX - minX) * (0.25 + rand(wi * 9) * 0.5);
-      ctx.beginPath();
-      ctx.moveTo(tx, ground); ctx.lineTo(tx + 1, ground - 26);
-      ctx.moveTo(tx + 1, ground - 16); ctx.lineTo(tx - 8, ground - 24); ctx.lineTo(tx - 11, ground - 30);
-      ctx.moveTo(tx + 1, ground - 20); ctx.lineTo(tx + 9, ground - 27); ctx.lineTo(tx + 10, ground - 33);
-      ctx.moveTo(tx - 4, ground - 21); ctx.lineTo(tx - 5, ground - 27);
-      ctx.stroke();
-      // ojos que miran desde fuera
-      const ey = night.eyes;
-      if (ey && ey.wi === wi && !fl) {
-        const p = winPt(w, ey.t, ey.z);
-        const blink = Math.floor(now / 140) % 18 === 0;
-        const glow = 0.8 + 0.2 * Math.sin(now / 200);
-        if (!blink) {
-          const halo = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 16);
-          halo.addColorStop(0, `rgba(255,30,20,${0.55 * glow})`); halo.addColorStop(1, 'rgba(255,30,20,0)');
-          ctx.fillStyle = halo; ctx.fillRect(p.x - 16, p.y - 16, 32, 32);
-          ctx.fillStyle = `rgba(255,60,40,${glow})`;
-          ctx.beginPath(); ctx.ellipse(p.x - 5, p.y, 3.4, 2.1, -0.3, 0, Math.PI * 2); ctx.fill();
-          ctx.beginPath(); ctx.ellipse(p.x + 5, p.y, 3.4, 2.1, 0.3, 0, Math.PI * 2); ctx.fill();
-          ctx.fillStyle = '#ffd0a0'; ctx.fillRect(p.x - 5.5, p.y - 0.6, 1.2, 1.2); ctx.fillRect(p.x + 4.5, p.y - 0.6, 1.2, 1.2);
-        }
-      }
-      // niebla
-      for (let i = 0; i < 3; i++) {
-        const fx = minX - 30 + ((now / (60 + i * 25) + i * 40) % (maxX - minX + 60));
-        ctx.fillStyle = 'rgba(120,120,150,.12)';
-        ctx.beginPath(); ctx.ellipse(fx, ground + 2 - i * 3, 22, 4, 0, 0, Math.PI * 2); ctx.fill();
-      }
-      // lluvia
-      ctx.strokeStyle = fl ? 'rgba(255,255,255,.5)' : 'rgba(150,170,230,.35)'; ctx.lineWidth = 1;
-      ctx.beginPath();
-      for (let i = 0; i < 16; i++) {
-        const rx = minX + ((rand(i + wi * 30) * (maxX - minX) + now / 9) % (maxX - minX + 10)) - 5;
-        const ry = minY + ((rand(i * 7 + wi) * (maxY - minY) + now / 3) % (maxY - minY));
-        ctx.moveTo(rx, ry); ctx.lineTo(rx - 2, ry + 6);
-      }
-      ctx.stroke();
-      ctx.restore();
-      // marco, parteluz y alféizar
-      winPath(ctx, w);
-      ctx.strokeStyle = '#24140a'; ctx.lineWidth = 6; ctx.stroke();
-      ctx.strokeStyle = '#5a3a22'; ctx.lineWidth = 3; ctx.stroke();
-      const m0 = winPt(w, 0.5, w.z0), m1 = winPt(w, 0.5, w.z1 + 16);
-      const h0 = winPt(w, 0, (w.z0 + w.z1) / 2), h1 = winPt(w, 1, (w.z0 + w.z1) / 2);
-      ctx.strokeStyle = '#3b2414'; ctx.lineWidth = 2.5;
-      ctx.beginPath(); ctx.moveTo(m0.x, m0.y); ctx.lineTo(m1.x, m1.y); ctx.moveTo(h0.x, h0.y); ctx.lineTo(h1.x, h1.y); ctx.stroke();
-      const s0 = winPt(w, -0.06, w.z0 - 2), s1 = winPt(w, 1.06, w.z0 - 2);
-      poly([s0, s1, up(s1, 5), up(s0, 5)], '#4a2e1a', OUT, 1.5);
-      void bottom;
-    });
-  }
-
   // Trueno: ruido grave que se apaga
   function thunder() {
     if (!sound) return;
@@ -383,103 +171,10 @@
   }
 
   // ---------- Oscuridad y luces ----------
-  const lightCv = document.createElement('canvas');
-  lightCv.width = Math.ceil(WORLD_W); lightCv.height = Math.ceil(WORLD_H);
-  const lightG = lightCv.getContext('2d');
-
-  // Antorchas de pared, velas y el farol de la mesa; las velas siguen a las mesas redondas
-  function lightSources(now) {
-    const list = TORCHES.map((L) => ({ p: up(iso(L.x, L.y), L.z), r: L.r, warm: true, seed: L.x + L.y }));
-    const lamp = up(iso(4.5, 7), 110);
-    list.push({ p: { x: lamp.x, y: lamp.y + 40 }, r: 115, warm: true, seed: 3 });
-    for (const it of MAP.items) {
-      const c = iso(it.x + 0.5, it.y + 0.5);
-      if (it.type === 'roundtable') list.push({ p: { x: c.x - 5, y: c.y - 40 }, r: 70, warm: true, seed: it.x * 3 + it.y });
-      if (it.type === 'fireplace') list.push({ p: { x: c.x, y: c.y - 10 }, r: 190, warm: true, seed: it.x });
-      if (it.type === 'candelabra') list.push({ p: { x: c.x, y: c.y - 56 }, r: 110, warm: true, seed: it.y });
-      if (it.type === 'chandelier') list.push({ p: { x: c.x, y: c.y - 70 }, r: 170, warm: true, seed: it.x + it.y });
-      if (it.type === 'cauldron') list.push({ p: { x: c.x, y: c.y - 24 }, r: 90, color: [70, 255, 120], seed: it.x });
-    }
-    for (const m of Object.values(MAP.MERCHANTS)) {
-      const pr = m.prop, c = iso(pr.x + 0.5, pr.y + 0.5);
-      if (pr.type === 'cauldron') list.push({ p: { x: c.x, y: c.y - 24 }, r: 105, color: [70, 255, 120], seed: 5 });
-      if (pr.type === 'crystal') list.push({ p: { x: c.x, y: c.y - 38 }, r: 95, color: [170, 90, 255], seed: 7 });
-      if (pr.type === 'rack') { const q = iso(m.x + 0.5, m.y + 0.5); list.push({ p: { x: q.x, y: q.y - 50 }, r: 80, warm: true, seed: 9 }); }
-    }
-    for (const L of list) L.r *= 0.92 + Math.sin(now / 130 + L.seed * 3) * 0.05 + Math.sin(now / 47 + L.seed) * 0.03;
-    return list;
-  }
-
-  function drawDarkness(now) {
-    const fl = flashLevel(now);
-    const g = lightG;
-    g.globalCompositeOperation = 'source-over';
-    g.clearRect(0, 0, lightCv.width, lightCv.height);
-    // sólo dentro de la sala (paredes y suelo), para que no se note el borde de la capa
-    const A = iso(0, 0), B = iso(MAP.W, 0), C = iso(MAP.W, MAP.H), D = iso(0, MAP.H);
-    g.beginPath();
-    [up(D, WALL_H + 10), up(A, WALL_H + 10), up(B, WALL_H + 10), up(B, -18), up(C, -18), up(D, -18)].forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)));
-    g.closePath();
-    // al editar se aclara para ver bien dónde va cada mueble
-    g.fillStyle = `rgba(3,3,12,${fl ? 0.2 : editing ? 0.3 : 0.66})`;
-    g.fill();
-    g.globalCompositeOperation = 'destination-out';
-    const hole = (x, y, r, a) => {
-      const gr = g.createRadialGradient(x, y, 0, x, y, r);
-      gr.addColorStop(0, `rgba(0,0,0,${a})`); gr.addColorStop(0.5, `rgba(0,0,0,${a * 0.7})`); gr.addColorStop(1, 'rgba(0,0,0,0)');
-      g.fillStyle = gr; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2); g.fill();
-    };
-    const lights = lightSources(now);
-    for (const L of lights) hole(L.p.x, L.p.y + 20, L.r, 0.95);
-    // cada héroe se ve un poco en la penumbra
-    for (const u of users.values()) {
-      if (u.where) continue;
-      const c = iso(u.px + 0.5, u.py + 0.5);
-      hole(c.x, c.y - 26, 42, 0.45);
-    }
-    // ventanas y la luz de luna que entra al suelo
-    for (const w of WINDOWS) {
-      g.save(); g.globalAlpha = 0.92; winPath(g, w); g.fill(); g.restore();
-      const a = w.wall === 'L' ? [iso(0, w.a + 0.6), iso(0, w.b + 0.6), iso(2.4, w.b + 1.8), iso(2.4, w.a + 1.8)] : [iso(w.a + 0.6, 0), iso(w.b + 0.6, 0), iso(w.b + 1.8, 2.4), iso(w.a + 1.8, 2.4)];
-      g.save(); g.globalAlpha = fl ? 0.6 : 0.15; g.beginPath(); a.forEach((p, i) => (i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y))); g.closePath(); g.fill(); g.restore();
-    }
-    g.globalCompositeOperation = 'source-over';
-    ctx.drawImage(lightCv, 0, 0, lightCv.width, lightCv.height);
-
-    // brillo cálido de las llamas
-    ctx.save();
-    ctx.globalCompositeOperation = 'lighter';
-    for (const L of lights) {
-      const rg = ctx.createRadialGradient(L.p.x, L.p.y, 0, L.p.x, L.p.y, L.r * 0.8);
-      const [r, gg, b] = L.color || [255, 150, 60];
-      rg.addColorStop(0, `rgba(${r},${gg},${b},.2)`); rg.addColorStop(1, `rgba(${r},${gg},${b},0)`);
-      ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(L.p.x, L.p.y, L.r * 0.8, 0, Math.PI * 2); ctx.fill();
-    }
-    // tinte azul de la luna
-    for (const w of WINDOWS) {
-      const p = winPt(w, 0.5, (w.z0 + w.z1) / 2);
-      const rg = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 70);
-      rg.addColorStop(0, `rgba(90,120,220,${fl ? 0.35 : 0.08})`); rg.addColorStop(1, 'rgba(90,120,220,0)');
-      ctx.fillStyle = rg; ctx.beginPath(); ctx.arc(p.x, p.y, 70, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.restore();
-  }
 
   // ======================================================================
-  //  Muebles (objetos con profundidad)
+  //  Muebles dibujados en 2D (iconos de la paleta del editor de la taberna)
   // ======================================================================
-  function furnitureDrawables() {
-    const list = [];
-    for (const it of MAP.items) list.push(...itemDrawables(it));
-    // El tabernero
-    list.push({ depth: MAP.BARKEEP.x + MAP.BARKEEP.y + 0.5, draw: drawBartender });
-    // Los comerciantes y sus puestos
-    for (const [id, m] of Object.entries(MAP.MERCHANTS)) {
-      for (const pr of [m.prop, m.prop2].filter(Boolean)) list.push(...itemDrawables({ type: pr.type, x: pr.x, y: pr.y }));
-      list.push({ depth: m.x + m.y + 0.5, draw: () => drawMerchant(id, m) });
-    }
-    return list;
-  }
 
   function itemDrawables(it, ghost) {
     const d = it.x + it.y;
@@ -784,19 +479,6 @@
     if (!next) { const b = horiz ? [0.05, 0.82, 0.9, 0.16] : [0.82, 0.05, 0.16, 0.9]; isoBox(it.x + b[0], it.y + b[1], b[2], b[3], 10, '#23407a', 14); }
   }
 
-  function drawBartender() {
-    const c = iso(MAP.BARKEEP.x + 0.5, MAP.BARKEEP.y + 0.5);
-    const t = performance.now();
-    drawHero(ctx, c.x, c.y, bartenderLook, { dir: 'W', t, wiping: true });
-  }
-
-  function drawMerchant(id, m) {
-    const c = iso(m.x + 0.5, m.y + 0.5);
-    const t = performance.now();
-    drawHero(ctx, c.x, c.y, { cls: 'mago', skin: id === 'bruja' ? 6 : 1, hair: 0, ...m.look }, { dir: id === 'armero' ? 'S' : 'E', t, idle: true });
-    m._screen = { x: c.x, y: c.y };
-  }
-
   const bartenderLook = { cls: 'picaro', skin: 1, hair: 1, npc: 'tabernero', color: '#7a4a2a', beard: '#6b4226', bald: true, apron: true };
 
   // ======================================================================
@@ -870,22 +552,6 @@
     }
   }
 
-  function userDrawable(u, now) {
-    const seat = !u.path.length && u.px === u.tx && u.py === u.ty ? MAP.seatAt(u.tx, u.ty) : null;
-    const emote = u.emote && u.emote.until > now ? u.emote.e : null;
-    return {
-      depth: u.px + u.py + 0.5,
-      draw: () => {
-        const c = iso(u.px + 0.5, u.py + 0.5);
-        drawHero(ctx, c.x, c.y + (seat && seat.type === 'sofa' ? -2 : 0), u.look, {
-          dir: u.dir, walking: u.path.length > 0, phase: u.phase, t: now, sitting: !!seat,
-          emote, mug: u.mugUntil > now,
-        });
-        u._screen = { x: c.x, y: c.y - (seat ? 14 : 0) };
-      },
-    };
-  }
-
   // ======================================================================
   //  Bocadillos, nombres y efectos
   // ======================================================================
@@ -910,95 +576,6 @@
     return lines.slice(0, 5);
   }
 
-  function drawOverlays(now) {
-    const list = [...users.values()].filter((u) => u._screen).sort((a, b) => (a.px + a.py) - (b.px + b.py));
-    for (const u of list) {
-      const s = u._screen;
-      const isMe = u.id === myId;
-      // nombre
-      ctx.font = '600 11px "Pixelify Sans", sans-serif';
-      const label = u.name;
-      const w = ctx.measureText(label).width + 10;
-      const ny = s.y - 74;
-      rrect(s.x - w / 2, ny - 8, w, 15, 4, isMe ? 'rgba(90,60,10,.85)' : 'rgba(20,10,4,.75)', isMe ? '#f2c94c' : null, 1);
-      ctx.fillStyle = isMe ? '#ffe9a8' : '#f4ead2';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(label, s.x, ny);
-
-      // emoji del gesto
-      if (u.emote && u.emote.until > now) {
-        const left = (u.emote.until - now) / 2600;
-        ctx.font = '22px serif';
-        ctx.globalAlpha = Math.min(1, left * 3);
-        ctx.fillText(EMOJI[u.emote.e] || '', s.x + 18, ny - 14 - (1 - left) * 10);
-        ctx.globalAlpha = 1;
-      }
-
-      // bocadillo
-      if (u.bubble && u.bubble.until > now) {
-        ctx.font = '16px "VT323", monospace';
-        const lines = wrapText(u.bubble.text, 170);
-        const lw = Math.max(...lines.map((l) => ctx.measureText(l).width)) + 16;
-        const lh = 15, bh = lines.length * lh + 10;
-        const by = ny - 14 - bh;
-        const fade = Math.min(1, (u.bubble.until - now) / 400);
-        ctx.globalAlpha = fade;
-        rrect(s.x - lw / 2, by, lw, bh, 6, '#fbf3dc', OUT, 2);
-        poly([{ x: s.x - 6, y: by + bh - 1 }, { x: s.x + 6, y: by + bh - 1 }, { x: s.x, y: by + bh + 8 }], '#fbf3dc', null);
-        ctx.strokeStyle = OUT; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(s.x - 6, by + bh); ctx.lineTo(s.x, by + bh + 8); ctx.lineTo(s.x + 6, by + bh); ctx.stroke();
-        ctx.fillStyle = '#2a1a10'; ctx.textAlign = 'center'; ctx.textBaseline = 'top';
-        lines.forEach((l, i) => ctx.fillText(l, s.x, by + 5 + i * lh));
-        ctx.globalAlpha = 1;
-      }
-    }
-    // textos flotantes
-    for (let i = floaters.length - 1; i >= 0; i--) {
-      const f = floaters[i];
-      const u = users.get(f.id);
-      const life = (now - f.start) / f.dur;
-      if (life >= 1 || !u || !u._screen) { floaters.splice(i, 1); continue; }
-      ctx.font = '700 22px "Pixelify Sans", sans-serif';
-      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.globalAlpha = 1 - Math.max(0, life - 0.7) / 0.3;
-      const y = u._screen.y - 100 - life * 30;
-      ctx.lineWidth = 4; ctx.strokeStyle = '#1a0a04'; ctx.strokeText(f.text, u._screen.x, y);
-      ctx.fillStyle = f.color; ctx.fillText(f.text, u._screen.x, y);
-      ctx.globalAlpha = 1;
-    }
-    // nombres de los comerciantes
-    ctx.font = '600 10px "Pixelify Sans", sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    for (const [id, m] of Object.entries(MAP.MERCHANTS)) {
-      if (!m._screen) continue;
-      const S = RULES.SHOPS[id];
-      const hot = hover && (MAP.merchantAt(hover.x, hover.y) === id);
-      const label = (id === 'bruja' ? '🧪 ' : id === 'armero' ? '⚔️ ' : '✨ ') + S.name;
-      const w = ctx.measureText(label).width + 10;
-      const y = m._screen.y - 76;
-      rrect(m._screen.x - w / 2, y - 8, w, 15, 4, hot ? 'rgba(90,40,110,.95)' : 'rgba(30,14,40,.8)', hot ? '#d8a8ff' : '#6a4a8a', 1);
-      ctx.fillStyle = '#f0e0ff'; ctx.fillText(label, m._screen.x, y);
-    }
-    // nombre del tabernero
-    {
-      const c = iso(MAP.BARKEEP.x + 0.5, MAP.BARKEEP.y + 0.5);
-      ctx.font = '600 10px "Pixelify Sans", sans-serif';
-      const label = '🍺 Alfonso el Tabernero';
-      const w = ctx.measureText(label).width + 10;
-      rrect(c.x - w / 2, c.y - 84, w, 15, 4, 'rgba(60,30,10,.85)', '#c8963a', 1);
-      ctx.fillStyle = '#ffe6b8'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle'; ctx.fillText(label, c.x, c.y - 76);
-    }
-    // bocadillo del tabernero
-    if (barkeep.until > now) {
-      const c = iso(12.5, 4.5);
-      ctx.font = '15px "VT323", monospace';
-      const tw = ctx.measureText(barkeep.text).width + 14;
-      rrect(c.x - tw / 2, c.y - 112, tw, 20, 5, '#f4e6c0', OUT, 1.5);
-      ctx.fillStyle = '#2a1a10'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.fillText(barkeep.text, c.x, c.y - 102);
-    }
-  }
-
   const barkeep = { text: '', until: 0, next: performance.now() + 15000 };
   const BARKEEP_LINES = [
     'Soy Alfonso, y en mi taberna no se pelea.', '¿Otra ronda, aventureros?', 'Alfonso nunca olvida una deuda.', 'Hoy hay estofado de dragón.', 'Nada de magia dentro del local.',
@@ -1012,9 +589,6 @@
       barkeep.next = now + 25000 + Math.random() * 25000;
     }
   }
-
-  // Polvillo flotando
-  const motes = Array.from({ length: 40 }, (_, i) => ({ x: rand(i) * WORLD_W, y: rand(i + 100) * WORLD_H, s: 0.5 + rand(i + 7) * 1.8, v: 4 + rand(i + 3) * 8 }));
 
   // ======================================================================
   //  Bucle de dibujo
@@ -1377,30 +951,6 @@
   const TORCHES = [
     { x: 4, y: 0, z: 82, r: 130 }, { x: 11.5, y: 0, z: 82, r: 125 }, { x: 0, y: 8, z: 82, r: 125 }, { x: 0, y: 4.1, z: 82, r: 115 }, { x: 0, y: 11, z: 82, r: 115 },
   ];
-
-  function drawTorches(now) {
-    for (const L of TORCHES) {
-      const p = up(iso(L.x, L.y), L.z);
-      // soporte de hierro y mango
-      rrect(p.x - 4, p.y + 4, 8, 3, 1, '#2a2a2e', OUT, 1);
-      poly([{ x: p.x - 3, y: p.y - 2 }, { x: p.x + 3, y: p.y - 2 }, { x: p.x + 1.5, y: p.y + 14 }, { x: p.x - 1.5, y: p.y + 14 }], '#4a2e1a', OUT, 1);
-      rrect(p.x - 4, p.y - 4, 8, 4, 1, '#3a2a1a', OUT, 1);
-      // llama
-      const t = now / 90 + L.x * 7;
-      const h = 13 + Math.sin(t) * 2.5 + Math.sin(t * 2.3) * 1.5;
-      const sway = Math.sin(t * 0.7) * 2;
-      ctx.beginPath(); ctx.moveTo(p.x - 5, p.y - 3); ctx.quadraticCurveTo(p.x - 5, p.y - h * 0.6, p.x + sway, p.y - h); ctx.quadraticCurveTo(p.x + 5, p.y - h * 0.6, p.x + 5, p.y - 3); ctx.closePath();
-      ctx.fillStyle = '#e8601c'; ctx.fill();
-      ctx.beginPath(); ctx.moveTo(p.x - 2.5, p.y - 3); ctx.quadraticCurveTo(p.x - 2.5, p.y - h * 0.45, p.x + sway * 0.6, p.y - h * 0.7); ctx.quadraticCurveTo(p.x + 2.5, p.y - h * 0.45, p.x + 2.5, p.y - 3); ctx.closePath();
-      ctx.fillStyle = '#ffd25a'; ctx.fill();
-    }
-    // lámpara colgante sobre la mesa de partida
-    const p = up(iso(4.5, 7), 120);
-    ctx.strokeStyle = '#1a1a1a'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.moveTo(p.x, p.y - 40); ctx.lineTo(p.x, p.y); ctx.stroke();
-    poly([{ x: p.x - 16, y: p.y + 8 }, { x: p.x + 16, y: p.y + 8 }, { x: p.x + 6, y: p.y - 2 }, { x: p.x - 6, y: p.y - 2 }], '#2f5a3a', OUT, 1.5);
-    ellipse(p.x, p.y + 9, 8, 3, '#ffe08a');
-  }
 
   // ======================================================================
   //  Interacción con el escenario
@@ -1851,7 +1401,6 @@
   document.addEventListener('webkitfullscreenchange', fsLabel);
   for (const b of document.querySelectorAll('[data-fs]')) b.addEventListener('click', toggleFullscreen);
   DD.toggleFullscreen = toggleFullscreen;
-
 
   // ======================================================================
   //  Editor de la taberna (sólo el dueño de la sala)
@@ -2316,7 +1865,7 @@
   // ======================================================================
   window.addEventListener('resize', resize);
   resize();
-  if (document.fonts) document.fonts.ready.then(() => { staticLayer = null; if (!loginEl.classList.contains('hidden')) buildPickers(); });
+  if (document.fonts) document.fonts.ready.then(() => { if (!loginEl.classList.contains('hidden')) buildPickers(); });
   toTitle(false);
   requestAnimationFrame(frame);
 })();
