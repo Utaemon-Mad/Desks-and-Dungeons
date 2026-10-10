@@ -26,7 +26,7 @@
   const box = (w, h, d) => geo(`b${w},${h},${d}`, () => new THREE.BoxGeometry(w, h, d));
   const sph = (r, ws = 8, hs = 6) => geo(`s${r},${ws},${hs}`, () => new THREE.SphereGeometry(r, ws, hs));
   const cone = (r, h, s = 7) => geo(`k${r},${h},${s}`, () => new THREE.ConeGeometry(r, h, s));
-  const torus = (r, t) => geo(`t${r},${t}`, () => new THREE.TorusGeometry(r, t, 6, 18));
+  const torus = (r, t) => geo(`t${r},${t}`, () => new THREE.TorusGeometry(r, t, 10, 28));
   const psph = (r, t0, tl) => geo(`ps${r},${t0},${tl}`, () => new THREE.SphereGeometry(r, 9, 7, 0, Math.PI * 2, t0, tl));
   const halfSph = (r) => geo(`hs${r}`, () => new THREE.SphereGeometry(r, 9, 5, 0, Math.PI * 2, 0, Math.PI / 2));
 
@@ -1099,20 +1099,179 @@
   // Rasgos de raza sobre la cabeza del modelo: orejas de elfo y de goblin, colmillos de orco y barba
   // (se colocan con la caja de la cabeza y se pegan al hueso de la cabeza para que se muevan con ella)
   const linHex = (hex) => '#' + new THREE.Color(hex).convertSRGBToLinear().getHexString();
-  // Cabeza sin orejas redondas (para los goblins): los vértices de la oreja se meten en el cráneo
-  const earless = new Map();
-  function earlessHead(geo) {
-    if (earless.has(geo)) return earless.get(geo);
+  // ======================================================================
+  //  Goblins: cara hecha a mano sobre la cabeza KayKit
+  //  (las medidas van en unidades de la geometría de la cabeza: ancho ≈ 1,09, cara en z ≈ 0,44)
+  // ======================================================================
+  // Cabeza sin orejas ni nariz redondas: sus vértices se meten en el cráneo y en el plano de la cara
+  const goblinHeads = new Map();
+  function goblinHead(geo) {
+    if (goblinHeads.has(geo)) return goblinHeads.get(geo);
     const g = geo.clone(), pos = g.attributes.position, uv = g.attributes.uv;
     for (let i = 0; i < pos.count; i++) {
-      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-      if (Math.abs(x) > 0.455 && y > 1.36 && y < 1.68 && z > -0.08 && z < 0.06 && uv.getX(i) < 0.1) pos.setX(i, Math.sign(x) * 0.43);
+      const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i), u = uv.getX(i);
+      if (Math.abs(x) > 0.455 && y > 1.36 && y < 1.68 && z > -0.08 && z < 0.06 && u < 0.1) pos.setX(i, Math.sign(x) * 0.43);
+      const zf = 0.438 - 0.6 * x * x;
+      if (y > 1.43 && y < 1.545 && Math.abs(x) < 0.15 && u < 0.075 && z > zf) pos.setZ(i, zf);
     }
     pos.needsUpdate = true;
-    earless.set(geo, g);
+    goblinHeads.set(geo, g);
     return g;
   }
-  const GOBLIN_FACE = { Knight: { eye: -0.145, nose: -0.21 }, def: { eye: -0.06, nose: -0.13 } };
+  // altura de los ojos pintados en la textura de cada modelo de cabeza
+  const GOBLIN_EYE_Y = { Knight: 1.606, Barbarian: 1.597, Mage: 1.567, Rogue: 1.615, Rogue_Hooded: 1.64 };
+
+  // Tubo que se afila siguiendo una curva (nariz ganchuda, puntas de oreja)
+  function taperTube(pts, r0, r1, rs = 12, seg = 18, flat = 1) {
+    const curve = new THREE.CatmullRomCurve3(pts);
+    const fr = curve.computeFrenetFrames(seg, false);
+    const pos = [], idx = [];
+    for (let i = 0; i <= seg; i++) {
+      const t = i / seg, p = curve.getPointAt(t);
+      const r = r1 + (r0 - r1) * Math.pow(1 - t, 0.85) * (1 + 0.12 * Math.sin(t * Math.PI));
+      for (let j = 0; j < rs; j++) {
+        const a = (j / rs) * Math.PI * 2, cx = Math.cos(a) * r, cy = Math.sin(a) * r * flat;
+        pos.push(p.x + fr.normals[i].x * cx + fr.binormals[i].x * cy, p.y + fr.normals[i].y * cx + fr.binormals[i].y * cy, p.z + fr.normals[i].z * cx + fr.binormals[i].z * cy);
+      }
+    }
+    const tip = curve.getPointAt(1);
+    pos.push(tip.x, tip.y, tip.z);
+    for (let i = 0; i < seg; i++) for (let j = 0; j < rs; j++) {
+      const a = i * rs + j, b = i * rs + (j + 1) % rs, c = a + rs, d = b + rs;
+      idx.push(a, c, b, b, c, d);
+    }
+    const last = seg * rs, tipI = (seg + 1) * rs;
+    for (let j = 0; j < rs; j++) idx.push(last + j, tipI, last + (j + 1) % rs);
+    const g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    g.setIndex(idx);
+    g.computeVertexNormals();
+    return g;
+  }
+
+  // Oreja en forma de hoja larga, con la punta curvada hacia arriba y una muesca de pelea (side: -1 izquierda, 1 derecha)
+  function goblinEarGeo(side, inner) {
+    return geo(`gob-ear${side}${inner ? 'i' : ''}`, () => {
+      const m = -side; // +x de la forma = borde de arriba después de girar la oreja
+      const sc = inner ? 0.68 : 1;
+      const S = new THREE.Shape();
+      const P = (x, y) => [x * m * sc, y * sc];
+      S.moveTo(...P(-0.15, 0));
+      S.bezierCurveTo(...P(-0.19, 0.22), ...P(-0.1, 0.62), ...P(0.07, 0.98));
+      if (side < 0 && !inner) {
+        // muesca en el borde de arriba de la oreja izquierda
+        S.quadraticCurveTo(...P(0.1, 0.78), ...P(0.12, 0.6));
+        S.lineTo(...P(0.065, 0.55));
+        S.lineTo(...P(0.13, 0.5));
+        S.quadraticCurveTo(...P(0.17, 0.25), ...P(0.15, 0));
+      } else S.bezierCurveTo(...P(0.12, 0.7), ...P(0.18, 0.3), ...P(0.15, 0));
+      S.lineTo(...P(-0.15, 0));
+      const g = new THREE.ExtrudeGeometry(S, {
+        depth: inner ? 0.008 : 0.03, curveSegments: 16,
+        bevelEnabled: true, bevelThickness: inner ? 0.008 : 0.022, bevelSize: inner ? 0.01 : 0.018, bevelSegments: 3,
+      });
+      g.translate(0, inner ? 0.06 : 0, inner ? 0.035 : -0.015);
+      // oreja ahuecada: los bordes se curvan hacia delante y la punta hacia atrás
+      const ps = g.attributes.position;
+      for (let i = 0; i < ps.count; i++) { const x = ps.getX(i), y = ps.getY(i); ps.setZ(i, ps.getZ(i) + 1.6 * x * x - 0.06 * y * y); }
+      g.computeVertexNormals();
+      return g;
+    });
+  }
+
+  const smoothCache = new Map();
+  function smoothMat(color, o = {}) {
+    const key = [color, o.metal || 0, o.rough || 0, o.emissive || '', o.ei || 0].join('|');
+    if (!smoothCache.has(key)) smoothCache.set(key, new THREE.MeshStandardMaterial({ color, roughness: o.rough !== undefined ? o.rough : 0.7, metalness: o.metal || 0, emissive: o.emissive || '#000000', emissiveIntensity: o.ei || (o.emissive ? 1 : 0) }));
+    return smoothCache.get(key);
+  }
+  function goblinFace(P, g, o) {
+    P.headMesh.geometry = goblinHead(P.headMesh.geometry);
+    const HM = P.headMesh.matrixWorld;
+    const k = new THREE.Vector3().setFromMatrixScale(HM).x;
+    const W = (x, y, z) => new THREE.Vector3(x, y, z).applyMatrix4(HM);
+    const put = (geom, material, x, y, z, parent = g) => { const m = new THREE.Mesh(geom, material); m.position.copy(W(x, y, z)); m.scale.setScalar(k); m.castShadow = true; m.receiveShadow = true; parent.add(m); return m; };
+    // materiales lisos (sin facetas) para que la cara se vea cuidada de cerca
+    const mat = (color, q = {}) => smoothMat(color, q);
+    const skinC = new THREE.Color(linHex(o.skin));
+    const skin = mat('#' + skinC.getHexString(), { rough: 0.7 });
+    const skinDark = mat('#' + skinC.clone().multiplyScalar(0.72).getHexString(), { rough: 0.75 });
+    const innerEar = mat('#' + skinC.clone().lerp(new THREE.Color(linHex('#c86070')), 0.14).multiplyScalar(0.8).getHexString(), { rough: 0.6 });
+    const gold = mat(linHex('#ffcf4a'), { metal: 0.65, rough: 0.22, emissive: linHex('#4a3000'), ei: 0.45 });
+    const silver = mat(linHex('#d8dce4'), { metal: 0.8, rough: 0.25 });
+    const ruby = mat(linHex('#d8102a'), { rough: 0.15, emissive: linHex('#5a0008'), ei: 0.6 });
+    const ivory = mat(linHex('#efe4c2'), { rough: 0.35 });
+    const eyeY = GOBLIN_EYE_Y[o.head] || 1.6;
+
+    // ---- orejas ----
+    for (const sx of [-1, 1]) {
+      const e = new THREE.Group();
+      e.position.copy(W(sx * 0.425, 1.6, -0.03));
+      e.rotation.set(-0.18, sx * 0.42, -sx * 1.08);
+      e.scale.setScalar(k);
+      g.add(e);
+      const outer = new THREE.Mesh(goblinEarGeo(sx, false), skin);
+      const inner = new THREE.Mesh(goblinEarGeo(sx, true), innerEar);
+      outer.castShadow = inner.castShadow = true;
+      e.add(outer, inner);
+      // raíz de la oreja, para que no quede pegada como un cartón
+      const root = new THREE.Mesh(sph(0.11, 16, 12), skin); root.scale.set(1.2, 0.8, 0.55); root.position.set(0, 0.03, -0.01); e.add(root);
+      // pendientes: aro grande colgando del lóbulo, con un rubí en la derecha
+      const lobe = put(torus(0.085, 0.017), gold, sx * 0.47, 1.47, 0.0);
+      lobe.rotation.y = Math.PI / 2;
+      put(sph(0.022, 8, 6), gold, sx * 0.46, 1.555, 0.0);
+      if (sx > 0) { const drop = put(sph(0.03, 10, 8), ruby, sx * 0.47, 1.375, 0.0); drop.scale.y *= 1.4; }
+      const m = -sx;
+      // aritos pequeños subiendo por el borde de arriba de la oreja (dos a la izquierda, un pendiente de bolita a la derecha)
+      const edge = (y) => 0.16 * m * (1 - y * 0.85);
+      if (sx < 0) {
+        for (const y of [0.3, 0.44]) { const r = new THREE.Mesh(torus(0.05, 0.013), y > 0.35 ? silver : gold); r.position.set(edge(y) - 0.012 * m, y, 0.02); r.rotation.set(Math.PI / 2, 0, 0); e.add(r); }
+      } else {
+        const stud = new THREE.Mesh(sph(0.032, 10, 8), silver); stud.position.set(edge(0.35) - 0.02 * m, 0.35, 0.04); e.add(stud);
+      }
+    }
+
+    // ---- ojos: globo amarillo, iris ámbar, pupila rasgada, brillo y párpado caído ----
+    const yellow = mat(linHex('#ffd21a'), { emissive: linHex('#a07800'), ei: 0.8, rough: 0.2 });
+    const amber = mat(linHex('#f08a10'), { emissive: linHex('#6a2a00'), ei: 0.6, rough: 0.2 });
+    const black = mat('#050403', { rough: 0.15 });
+    const shine = mat('#ffffff', { emissive: '#ffffff', ei: 1.2 });
+    const lidG = geo('gob-lid', () => new THREE.SphereGeometry(0.1, 24, 10, 0, Math.PI * 2, 0, Math.PI * 0.4));
+    for (const sx of [-1, 1]) {
+      const ex = sx * 0.19, ez = 0.452;
+      const eye = put(sph(0.092, 24, 18), yellow, ex, eyeY, ez); eye.scale.multiply(new THREE.Vector3(1.15, 0.92, 0.42));
+      const iris = put(sph(0.06, 20, 14), amber, ex, eyeY - 0.004, ez + 0.012); iris.scale.multiply(new THREE.Vector3(0.95, 1.05, 0.5));
+      const pup = put(sph(0.022, 10, 8), black, ex, eyeY - 0.004, ez + 0.036); pup.scale.multiply(new THREE.Vector3(0.6, 2.4, 0.4));
+      put(sph(0.012, 8, 6), shine, ex - 0.03, eyeY + 0.032, ez + 0.04);
+      const lid = put(lidG, skinDark, ex, eyeY + 0.004, ez - 0.004);
+      lid.scale.multiply(new THREE.Vector3(1.16, 0.95, 0.46));
+      lid.rotation.set(0.5, 0, sx * 0.32);
+    }
+
+    // ---- nariz larga, ganchuda y muy picuda, con aletas y una verruga ----
+    const nb = W(0, 1.525, 0.4);
+    const nosePts = [[0, 0, 0], [0, 0.012, 0.14], [0, 0.005, 0.28], [0, -0.025, 0.4], [0, -0.07, 0.47]].map(([x, y, z]) => new THREE.Vector3(x, y, z));
+    const noseG = geo('gob-nose', () => taperTube(nosePts, 0.088, 0.005, 16, 26, 0.92));
+    const nose = new THREE.Mesh(noseG, skin); nose.position.copy(nb); nose.scale.setScalar(k); nose.castShadow = true; g.add(nose);
+    // aletas de la nariz pegadas a la base y orificios por debajo
+    for (const sx of [-1, 1]) {
+      const al = put(sph(0.042, 16, 12), skin, sx * 0.058, 1.495, 0.452); al.scale.multiply(new THREE.Vector3(1.05, 0.8, 1));
+      const ns = put(sph(0.014, 10, 8), black, sx * 0.052, 1.478, 0.478); ns.scale.multiply(new THREE.Vector3(1.1, 0.55, 0.9));
+    }
+    const wp = nosePts[2].clone().add(new THREE.Vector3(0.022, 0.03, 0)).multiplyScalar(k).add(nb);
+    const wart = new THREE.Mesh(sph(0.016, 8, 6), skinDark); wart.position.copy(wp); wart.scale.setScalar(k); g.add(wart);
+
+    // ---- boca: dientes de arriba torcidos y dos colmillos de abajo que asoman ----
+    const mouthY = 1.415;
+    for (const [tx, th, tw, tilt] of [[-0.13, 0.065, 0.019, 0.12], [-0.065, 0.04, 0.015, -0.05], [-0.012, 0.034, 0.013, 0.04], [0.045, 0.045, 0.015, -0.08], [0.12, 0.068, 0.019, -0.1]]) {
+      const t = put(cone(tw, th, 5), ivory, tx, mouthY - th / 2 + 0.01, 0.44 - 0.5 * tx * tx);
+      t.rotation.set(Math.PI, 0, tilt);
+    }
+    for (const sx of [-1, 1]) {
+      const f = put(cone(0.022, 0.07, 6), ivory, sx * 0.16, mouthY - 0.025, 0.425 - 0.02);
+      f.rotation.set(-0.12, 0, -sx * 0.18);
+    }
+  }
   function raceFeatures(root, species, o) {
     const P = root.userData.parts;
     if (!P.head || !P.headMesh || (species === 'human' && !o.beard)) return;
@@ -1131,51 +1290,7 @@
     if (species === 'orc') {
       for (const sx of [-1, 1]) mesh(cone(size.x * 0.035, size.y * 0.13, 5), mat('#f0e6c8'), c.x + sx * size.x * 0.14, box.min.y + size.y * 0.24, box.max.z - size.z * 0.06, g);
     }
-    if (species === 'goblin') {
-      // fuera las orejas redondas del modelo: se aplastan contra el cráneo
-      P.headMesh.geometry = earlessHead(P.headMesh.geometry);
-      // orejas enormes en forma de hoja, con el interior más oscuro
-      const inner = mat(linHex(o.skin), { emissive: '#3a0a0a', ei: 0.35 });
-      for (const sx of [-1, 1]) {
-        const e = new THREE.Group();
-        e.position.set(c.x + sx * size.x * 0.42, c.y - size.y * 0.06, c.z - size.z * 0.08);
-        e.rotation.set(-0.2, sx * 0.35, -sx * 1.12);
-        g.add(e);
-        const outer = mesh(cone(size.x * 0.16, size.x * 0.8, 6), skin, 0, size.x * 0.4, 0, e);
-        outer.scale.z = 0.38;
-        const inn = mesh(cone(size.x * 0.1, size.x * 0.6, 6), inner, 0, size.x * 0.34, size.z * 0.035, e);
-        inn.scale.z = 0.22;
-      }
-      // pendientes de aro dorado (chicos y chicas): uno en el lóbulo y otro más arriba en la oreja
-      const gold = mat(linHex('#ffcf4a'), { metal: 0.6, rough: 0.25, emissive: linHex('#5a3c00'), ei: 0.5 });
-      for (const sx of [-1, 1]) {
-        const lobe = mesh(torus(size.x * 0.09, size.x * 0.022), gold, c.x + sx * size.x * 0.47, c.y - size.y * 0.22, c.z - size.z * 0.05, g);
-        lobe.rotation.y = Math.PI / 2;
-        const up = mesh(torus(size.x * 0.055, size.x * 0.017), gold, c.x + sx * size.x * 0.66, c.y - size.y * 0.025, c.z - size.z * 0.09, g);
-        up.rotation.set(0, Math.PI / 2, sx * 0.4);
-      }
-      // altura de los ojos pintados en la textura según el modelo de cabeza
-      const F = GOBLIN_FACE[o.head] || GOBLIN_FACE.def;
-      // nariz larga y muy picuda, un poco caída
-      const nose = mesh(cone(size.x * 0.075, size.z * 0.5, 6), skin, c.x, c.y + size.y * F.nose, box.max.z + size.z * 0.15, g);
-      nose.rotation.x = Math.PI / 2 + 0.32;
-      // ojos amarillos con pupila rasgada
-      const eyeM = mat(linHex('#ffd21a'), { emissive: linHex('#c89a00'), ei: 0.9, rough: 0.3 });
-      const pupM = mat('#0a0806', { rough: 0.2 });
-      for (const sx of [-1, 1]) {
-        const ex = c.x + sx * size.x * 0.175, ey = c.y + size.y * F.eye, ez = box.max.z - size.z * 0.07;
-        const eye = mesh(sph(size.x * 0.085, 12, 10), eyeM, ex, ey, ez, g);
-        eye.scale.set(1.15, 0.85, 0.45);
-        const pup = mesh(sph(size.x * 0.02, 8, 6), pupM, ex, ey, ez + size.x * 0.032, g);
-        pup.scale.set(0.7, 2.6, 0.5);
-      }
-      // dientes puntiagudos asomando bajo el labio
-      const tooth = mat('#f4eedc', { rough: 0.4 });
-      for (const [tx, th] of [[-0.15, 0.1], [-0.06, 0.07], [0.06, 0.07], [0.15, 0.1]]) {
-        const t = mesh(cone(size.x * 0.03, size.y * th, 4), tooth, c.x + tx * size.x, box.min.y + size.y * 0.27 - size.y * th / 2, box.max.z - size.z * 0.1, g);
-        t.rotation.x = Math.PI;
-      }
-    }
+    if (species === 'goblin') goblinFace(P, g, o);
     if (o.beard) {
       // barba poblada: una esfera achatada bajo la boca y una punta
       const bm = mat(linHex(o.beard));
