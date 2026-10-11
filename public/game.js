@@ -1,4 +1,4 @@
-/* global MAP, RULES, SPRITES, THREE, MODELS, VIEW3D */
+/* global MAP, RULES, PROG, SPRITES, THREE, MODELS, VIEW3D */
 (() => {
   'use strict';
 
@@ -518,7 +518,7 @@
 
   function makeUser(u) {
     return {
-      id: u.id, name: u.name, title: u.title || null, look: u.look, gold: u.gold, xp: u.xp || 0, level: u.level || 1, where: u.where || null,
+      id: u.id, name: u.name, title: u.title || null, ach: u.ach || 0, look: u.look, gold: u.gold, xp: u.xp || 0, level: u.level || 1, where: u.where || null,
       tx: u.x, ty: u.y,          // casilla destino
       px: u.x, py: u.y,          // posición actual (continua)
       path: [], dir: 'S', phase: 0,
@@ -634,6 +634,7 @@
         history.replaceState(null, '', `?sala=${encodeURIComponent(m.room)}`);
         for (const u of m.users) users.set(u.id, makeUser(u));
         MAP.setItems(m.items);
+        DD.emit('trophies', { list: m.trophies || [] });
         isOwner = !!m.owner;
         document.querySelector('#bar [data-act="edit"]').classList.toggle('hidden', !isOwner);
         if (!isOwner) C.setEditing(false);
@@ -788,7 +789,9 @@
       const lvl = RULES.levelFromXp(u.xp);
       const base = RULES.XP_TABLE[lvl], next = RULES.XP_TABLE[lvl + 1] || base;
       const card = document.createElement('div');
-      card.className = 'hero' + (u.id === myId ? ' me' : '');
+      const fr = PROG.frameFor(u.ach || 0);
+      card.className = 'hero' + (u.id === myId ? ' me' : '') + (fr ? ' frame-' + fr.id : '');
+      if (fr) card.title = `${fr.name} (${u.ach} logros)`;
       card.dataset.id = u.id;
       const name = document.createElement('div'); name.className = 'hname'; name.textContent = u.name + (u.id === myId ? ' (tú)' : '');
       if (u.title) { const tt = document.createElement('small'); tt.className = 'htitle'; tt.textContent = ` «${u.title}»`; name.appendChild(tt); }

@@ -87,7 +87,7 @@ function cleanText(s, max) {
 const levelOf = (u) => RULES.levelFromXp(u.profile.xp);
 
 function publicUser(u) {
-  return { id: u.id, name: u.name, title: u.profile.title || null, look: u.look, gold: u.profile.gold, xp: u.profile.xp, level: levelOf(u), x: u.x, y: u.y, where: u.where ? u.where.name : null };
+  return { id: u.id, name: u.name, title: u.profile.title || null, ach: (u.profile.achievements || []).length, look: u.look, gold: u.profile.gold, xp: u.profile.xp, level: levelOf(u), x: u.x, y: u.y, where: u.where ? u.where.name : null };
 }
 
 function send(ws, msg) {
@@ -309,9 +309,10 @@ function profileChanged(room, user, opts = {}) {
 function reward(room, user, xp, gold) {
   const prof = user.profile;
   // mejoras de la taberna: más experiencia y oro para todos los del servidor
-  const TB = PROG.tavernBonus(room.fund);
-  if (xp > 0 && TB.xp) xp = Math.round(xp * (1 + TB.xp / 100));
-  if (gold > 0 && TB.gold) gold = Math.round(gold * (1 + TB.gold / 100));
+  // y la bendición del objetivo semanal del grupo, si ya se cumplió
+  const TB = PROG.tavernBonus(room.fund), GB = goalBonus(room);
+  if (xp > 0 && (TB.xp || GB.xp)) xp = Math.round(xp * (1 + (TB.xp + GB.xp) / 100));
+  if (gold > 0 && (TB.gold || GB.gold)) gold = Math.round(gold * (1 + (TB.gold + GB.gold) / 100));
   const before = RULES.levelFromXp(prof.xp);
   prof.xp = Math.max(0, prof.xp + xp);
   prof.gold = Math.max(0, prof.gold + gold);
@@ -542,7 +543,7 @@ setInterval(() => {
 const EMOTES = new Set(['wave', 'dance', 'cheers', 'laugh', 'heart', 'fight', 'think', 'sleep']);
 // Módulos de la segunda división: progreso, modos de juego, tiendas y comercio, y los mensajes por temas
 const CTX2 = {};
-for (const [k, get] of Object.entries({ GEN: () => GEN, MAP: () => MAP, PROG: () => PROG, RULES: () => RULES, SHOP_REFRESH_MS: () => SHOP_REFRESH_MS, adminPage: () => adminPage, broadcast: () => broadcast, caughtFish: () => caughtFish, changeChar: () => changeChar, claimLogin: () => claimLogin, cleanText: () => cleanText, crypto: () => crypto, derive: () => derive, detach: () => detach, donate: () => donate, duelEnd: () => duelEnd, endTrade: () => endTrade, ensureBoard: () => ensureBoard, feat: () => feat, getInstance: () => getInstance, give: () => give, giveMats: () => giveMats, gotHerb: () => gotHerb, indexLogin: () => indexLogin, joinInstance: () => joinInstance, levelOf: () => levelOf, logClientError: () => logClientError, makeBackup: () => makeBackup, marketList: () => marketList, marketView: () => marketView, matsText: () => matsText, nextFloor: () => nextFloor, offerLogin: () => offerLogin, onKill: () => onKill, openToken: () => openToken, payOffline: () => payOffline, petXp: () => petXp, profileChanged: () => profileChanged, questState: () => questState, raidDone: () => raidDone, raidInfo: () => raidInfo, ranksView: () => ranksView, restoreBackup: () => restoreBackup, reward: () => reward, rnd: () => rnd, roomInfo: () => roomInfo, saveUser: () => saveUser, sealToken: () => sealToken, seasonAdd: () => seasonAdd, seasonPrize: () => seasonPrize, seasonView: () => seasonView, send: () => send, sendMe: () => sendMe, sendStatic: () => sendStatic, sendTrade: () => sendTrade, shopFor: () => shopFor, startDescent: () => startDescent, startDuel: () => startDuel, startRaid: () => startRaid, statsWithout: () => statsWithout, store: () => store, system: () => system, takeMats: () => takeMats, tavernView: () => tavernView, toTavern: () => toTavern, track: () => track, trades: () => trades, worldBossDown: () => worldBossDown })) Object.defineProperty(CTX2, k, { get, enumerable: true });
+for (const [k, get] of Object.entries({ GEN: () => GEN, MAP: () => MAP, PROG: () => PROG, RULES: () => RULES, SHOP_REFRESH_MS: () => SHOP_REFRESH_MS, adminPage: () => adminPage, broadcast: () => broadcast, caughtFish: () => caughtFish, changeChar: () => changeChar, claimLogin: () => claimLogin, cleanText: () => cleanText, crypto: () => crypto, derive: () => derive, detach: () => detach, donate: () => donate, duelEnd: () => duelEnd, endTrade: () => endTrade, ensureBoard: () => ensureBoard, feat: () => feat, goalAdd: () => goalAdd, trophyAdd: () => trophyAdd, getInstance: () => getInstance, give: () => give, giveMats: () => giveMats, gotHerb: () => gotHerb, indexLogin: () => indexLogin, joinInstance: () => joinInstance, levelOf: () => levelOf, logClientError: () => logClientError, makeBackup: () => makeBackup, marketList: () => marketList, marketView: () => marketView, matsText: () => matsText, nextFloor: () => nextFloor, offerLogin: () => offerLogin, onKill: () => onKill, openToken: () => openToken, payOffline: () => payOffline, petXp: () => petXp, profileChanged: () => profileChanged, questState: () => questState, raidDone: () => raidDone, raidInfo: () => raidInfo, ranksView: () => ranksView, restoreBackup: () => restoreBackup, reward: () => reward, rnd: () => rnd, roomInfo: () => roomInfo, saveUser: () => saveUser, sealToken: () => sealToken, seasonAdd: () => seasonAdd, seasonPrize: () => seasonPrize, seasonView: () => seasonView, send: () => send, sendMe: () => sendMe, sendStatic: () => sendStatic, sendTrade: () => sendTrade, shopFor: () => shopFor, startDescent: () => startDescent, startDuel: () => startDuel, startRaid: () => startRaid, statsWithout: () => statsWithout, store: () => store, system: () => system, takeMats: () => takeMats, tavernView: () => tavernView, toTavern: () => toTavern, track: () => track, trades: () => trades, worldBossDown: () => worldBossDown })) Object.defineProperty(CTX2, k, { get, enumerable: true });
 const { caughtFish, ensureBoard, giveMats, gotHerb, matsText, onKill, petXp, ranksView, takeMats, track, worldBossDown } = require('./server/progress.js')(CTX2);
 const { duelEnd, nextFloor, roomInfo, startDescent, startDuel } = require('./server/modes.js')(CTX2);
 const { endTrade, sendTrade, shopFor, trades } = require('./server/trade.js')(CTX2);
@@ -555,7 +556,7 @@ const CTX = {
 const { adminPage, logClientError, sendStatic } = require('./server/web.js')(CTX);
 const { USER_RE, cleanUser, indexLogin, loginFails, makeBackup, openToken, passHash, restoreBackup, sealToken } = require('./server/accounts.js')(CTX);
 const {
-  claimLogin, donate, feat, marketList, marketView, offerLogin, payOffline,
+  claimLogin, donate, feat, goalAdd, goalBonus, trophyAdd, trophyWall, marketList, marketView, offerLogin, payOffline,
   raidDone, raidInfo, seasonAdd, seasonPrize, seasonView, startRaid, tavernView,
 } = require('./server/social.js')(CTX);
 
@@ -732,6 +733,7 @@ wss.on('connection', (ws) => {
         items: room.map.items,
         users: [...room.users.values()].map(publicUser),
         history: room.history,
+        trophies: trophyWall(room),
       });
       sendMe(user);
       setTimeout(() => {

@@ -279,6 +279,29 @@
     { cost: 35000, name: 'Estandarte de la taberna', icon: '🚩', bonus: { xp: 5, gold: 7, mf: 10 }, text: '+5% de experiencia, +7% de oro y +10 de hallazgo mágico' },
     { cost: 80000, name: 'Salón de los héroes', icon: '🏛️', bonus: { xp: 10, mf: 15 }, text: '+10% de experiencia y +15 de hallazgo mágico' },
   ];
+  // Objetivo semanal del grupo: todo el servidor suma; al cumplirlo, bendición para todos hasta el lunes
+  const GROUP_GOALS = [
+    { id: 'muertos', icon: '💀', text: 'Entre todos, derrotad {n} no-muertos', kind: 'kill', fam: 'muerto', n: 400 },
+    { id: 'demonios', icon: '😈', text: 'Entre todos, derrotad {n} demonios', kind: 'kill', fam: 'demonio', n: 200 },
+    { id: 'bestias', icon: '🐺', text: 'Entre todos, cazad {n} bestias', kind: 'kill', fam: 'bestia', n: 400 },
+    { id: 'pielesverdes', icon: '👺', text: 'Entre todos, derrotad {n} goblins y orcos', kind: 'kill', fam: ['goblin', 'orco'], n: 500 },
+    { id: 'jefes', icon: '👑', text: 'Entre todos, derrotad {n} jefes', kind: 'kill', boss: true, n: 25 },
+    { id: 'cofres', icon: '🧰', text: 'Entre todos, abrid {n} cofres', kind: 'chest', n: 80 },
+    { id: 'mazmorras', icon: '🗝️', text: 'Entre todos, terminad {n} mazmorras', kind: 'dungeon', n: 30 },
+  ];
+  const GOAL_BONUS = { xp: 10, gold: 10 };
+  // Marco del retrato según los logros conseguidos (se ve en la lista de héroes de la taberna)
+  const FRAMES = [{ n: 5, id: 'bronce', name: 'Marco de bronce' }, { n: 12, id: 'plata', name: 'Marco de plata' }, { n: 20, id: 'oro', name: 'Marco de oro' }];
+  const frameFor = (n) => { let f = null; for (const F of FRAMES) if (n >= F.n) f = F; return f; };
+  const groupGoal = (week = weekKey()) => { const L = GROUP_GOALS.length; return GROUP_GOALS[(((week * 5 + 2) % L) + L) % L]; };
+  const goalText = (G) => G.text.replace('{n}', G.n);
+  function goalMatch(G, ev, d = {}) {
+    if (ev !== G.kind) return false;
+    if (G.boss) return !!d.boss;
+    if (G.fam) return [].concat(G.fam).includes(d.fam);
+    return true;
+  }
+
   function tavernBonus(fund) {
     const b = { xp: 0, gold: 0, mf: 0 };
     const lvl = tavernLevel(fund);
@@ -336,7 +359,7 @@
     MATS, FISH_BY_ZONE, HERB_BY_ZONE, matDrops, catchFish,
     MAX_UP, upgradeCost, applyUpgrade, enchantCost, enchant, COMBINE_TO, combineCost, combine, salvage, baseName,
     RECIPES, COOK_PRICE, FOOD_MIN,
-    TAVERN_LEVELS, tavernBonus, tavernLevel, MARKET, SEASON, seasonKey, seasonEnds, seasonNumber, SEASON_PTS, SEASON_PRIZES, AURAS, RAID, raidTheme, raidMod, LOGIN_REWARDS, loginState, DAILY, WEEKLY, FAM, dayKey, weekKey, boardFor, taskDef, taskText, taskMatch, taskReward,
+    GROUP_GOALS, GOAL_BONUS, FRAMES, frameFor, groupGoal, goalText, goalMatch, TAVERN_LEVELS, tavernBonus, tavernLevel, MARKET, SEASON, seasonKey, seasonEnds, seasonNumber, SEASON_PTS, SEASON_PRIZES, AURAS, RAID, raidTheme, raidMod, LOGIN_REWARDS, loginState, DAILY, WEEKLY, FAM, dayKey, weekKey, boardFor, taskDef, taskText, taskMatch, taskReward,
     ACHIEVEMENTS, MAX_STATS, STAT_NAMES, WORLD_BOSSES, WORLD_EVENT,
     WEEKLY_MODS, weekMod, descentTheme, descentLevel, BOARDS, ARENA, arenaTiles,
   };

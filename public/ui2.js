@@ -372,6 +372,15 @@
   tavWin.querySelector('.close-x').onclick = () => closeOverlay('tavwin');
   DD.on('tavern:info', (m) => {
     const body = $('#tav-body'); body.innerHTML = '';
+    // objetivo de la semana de todo el servidor
+    if (m.goal) {
+      const G = m.goal, box = el('div', 'tav-lvl goal' + (G.done ? ' got' : ' cur'));
+      box.append(el('b', '', `${G.icon} Objetivo de la semana`), el('small', '', G.text));
+      const bar = el('div', 'meter'); const fill = el('i'); fill.style.width = Math.round(100 * G.n / G.max) + '%'; bar.appendChild(fill);
+      box.append(bar, el('small', G.done ? 'good' : '', G.done ? `✔ ¡Cumplido! Bendición hasta el lunes: +${PROG.GOAL_BONUS.xp}% de experiencia y +${PROG.GOAL_BONUS.gold}% de oro` : `${G.n} / ${G.max} · al cumplirlo, +${PROG.GOAL_BONUS.xp}% de experiencia y oro para todos hasta el lunes`));
+      if (G.top.length) box.appendChild(el('small', 'muted', 'Quien más aporta: ' + G.top.map((t) => `${t.name} (${t.n})`).join(', ')));
+      body.appendChild(box);
+    }
     body.appendChild(el('p', 'muted small', 'Entre todos podéis mejorar la taberna con donaciones de oro. Cada mejora da su bonificación a todos los que jueguen en este servidor.'));
     let acc = 0;
     PROG.TAVERN_LEVELS.forEach((L, i) => {
@@ -392,6 +401,12 @@
       body.appendChild(dr);
     }
     body.appendChild(el('p', 'muted small', `Has donado ${m.mine} 🪙.${m.donors.length ? ' Mecenas: ' + m.donors.map((d) => `${d.name} (${d.gold})`).join(', ') : ''}`));
+    // muro de trofeos: cada jefe que cae por primera vez en este servidor
+    body.appendChild(el('div', 'field-title', '🏆 Muro de trofeos'));
+    if (!(m.trophies || []).length) body.appendChild(el('p', 'muted', 'La pared está vacía. El primero que derrote a un jefe colgará aquí su cabeza.'));
+    const tw = el('div', 'trophy-wall');
+    for (const t of m.trophies || []) { const c = el('div', 'trophy'); c.append(el('b', '', '🏆 ' + t.name), el('small', '', `${t.by} · ${new Date(t.ts).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' })}`)); tw.appendChild(c); }
+    body.appendChild(tw);
     body.appendChild(el('div', 'field-title', '📜 Tablón de hazañas'));
     if (!m.feats.length) body.appendChild(el('p', 'muted', 'Todavía no hay hazañas. ¡Escribid la primera!'));
     const ul = el('div', 'feats');

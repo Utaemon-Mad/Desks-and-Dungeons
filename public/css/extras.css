@@ -217,3 +217,16 @@ body.cb .dlog-line.loot-conjunto { color: #cc79a7; }
 .sum-table td { text-align: right; padding: 4px 6px; color: var(--parch); border-bottom: 1px solid rgba(140, 96, 56, .35); }
 .sum-table th:first-child, .sum-table td:first-child { text-align: left; }
 .sum-table tr.me td { color: #ffe9a8; font-weight: 700; }
+
+/* ---------- Objetivo semanal y muro de trofeos ---------- */
+.tav-lvl.goal { border-color: #c8a040; }
+.trophy-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; margin-bottom: 10px; }
+.trophy { background: linear-gradient(#3a2414, #24160c); border: 2px solid #6a4a22; border-radius: 6px; padding: 6px 8px; display: flex; flex-direction: column; }
+.trophy b { color: #ffd77a; font-size: 13px; }
+.trophy small { color: #c8b090; font-size: 11px; }
+
+/* ---------- Marcos de retrato por logros ---------- */
+.hero.frame-bronce canvas { border-color: #b8743a; box-shadow: 0 0 0 2px #6a3a14, 0 0 8px rgba(184, 116, 58, .6); }
+.hero.frame-plata canvas { border-color: #d8dce4; box-shadow: 0 0 0 2px #6a6e78, 0 0 10px rgba(216, 220, 228, .7); }
+.hero.frame-oro canvas { border-color: #ffd23f; box-shadow: 0 0 0 2px #8a6a10, 0 0 12px rgba(255, 210, 63, .8); animation: frameGlow 2.4s ease-in-out infinite; }
+@keyframes frameGlow { 50% { box-shadow: 0 0 0 2px #8a6a10, 0 0 20px rgba(255, 210, 63, 1); } }
