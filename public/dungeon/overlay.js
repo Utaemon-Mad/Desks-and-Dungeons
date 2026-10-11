@@ -91,10 +91,15 @@
         if (b && b.until > now) drawBubble(s.x, s.y - 22, b.text);
       }
     }
-    // ficha del objeto del suelo bajo el ratón
+    // objeto del suelo bajo el ratón: sólo su nombre, con el color de su calidad (la ficha completa, en el inventario)
     const lh = hov && game.mouseOnMap && game.loot.find((q) => q.x === hov.x && q.y === hov.y && q.it);
-    if (lh && game.mouse) { if (game.tipFor !== lh.id) { game.tipFor = lh.id; DD.showItemTip(lh.it, { clientX: game.mouse.x, clientY: game.mouse.y }, 'Pásale por encima para recogerlo'); } }
-    else if (game.tipFor) { game.tipFor = null; DD.hideItemTip(); }
+    if (lh) {
+      const s = P(lh.x + 0.5, 0.7, lh.y + 0.5);
+      g.font = '700 13px "Pixelify Sans", sans-serif';
+      g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(lh.it.name, s.x, s.y);
+      g.fillStyle = lh.it.leg ? RULES.LEGENDARY_COLOR : DSPRITES.RARITY[lh.it.rarity] || '#fff'; g.fillText(lh.it.name, s.x, s.y);
+    }
+    if (game.tipFor) { game.tipFor = null; DD.hideItemTip(); }
     // plantas: nombre al pasar por encima
     if (game.mouse && game.mouseOnMap && game.herbs.length) {
       const h = herbUnder(game.mouse.x, game.mouse.y);

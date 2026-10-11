@@ -492,7 +492,7 @@
   //  Ajustes de gráficos y rendimiento
   // ======================================================================
   const GFX_KEY = 'dd-gfx';
-  const defaults = () => ({ quality: 'auto', weather: true, shake: true, fps: false });
+  const defaults = () => ({ quality: 'auto', weather: true, shake: true, fps: false, autoAttack: false });
   let gfx = defaults();
   try { gfx = { ...gfx, ...JSON.parse(localStorage.getItem(GFX_KEY) || '{}') }; } catch { /* sin almacenamiento */ }
   DD.gfx = gfx;
@@ -588,6 +588,8 @@
     const cur = VIEW3D.qualityInfo ? VIEW3D.qualityInfo() : null;
     if (cur) body.appendChild(el('p', 'muted small', `Ahora: calidad ${cur.name}, resolución ×${cur.pr}, ${cur.shadows ? 'con' : 'sin'} sombras, ${cur.lights} luces.`));
 
+    section('⚔️ Combate');
+    toggle('autoAttack', 'Ataque automático: si estás quieto junto a un enemigo, le atacas solo (las habilidades las pulsas tú)');
     section('🔤 Interfaz');
     const zr = el('div', 'title-row');
     for (const [v, name] of [[0.9, 'Pequeño'], [1, 'Normal'], [1.15, 'Grande'], [1.3, 'Muy grande']]) {

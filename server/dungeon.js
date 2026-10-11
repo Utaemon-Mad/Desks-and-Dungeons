@@ -10,6 +10,7 @@ const { PROPS } = require('./gen.js');
 
 const FAST = process.env.DD_TEST_FAST ? 0.25 : 1; // las pruebas automáticas aceleran los tiempos de espera
 const RESPAWN_MS = 3 * 60 * 1000;
+const PORTAL_MS = 60 * 1000; // tiempo para recoger el botín tras derrotar al jefe
 const PROJ_SPEED = 9;          // casillas por segundo
 const AGGRO = 7, LEASH = 14;
 const MAX_SUMMONS = 6;
@@ -595,6 +596,8 @@ class Instance {
   // ---------- Tiempo ----------
   tick(now) {
     const dt = 0.05;
+    // se acabó el minuto tras el jefe: todos salen con su recompensa
+    if (this.portalEnd && now >= this.portalEnd) { this.portalEnd = 0; for (const p of [...this.players.values()]) this.winExit(p); return; }
     for (const g of this.groups) {
       if (!g.alive.size && g.respawnAt && now >= g.respawnAt) {
         const near = [...this.players.values()].some((p) => g.spawn.some((s) => cheb(p, s) < 14));
@@ -737,18 +740,29 @@ class Instance {
     }
     for (const l of [...this.loot.values()]) if (l.x === p.x && l.y === p.y) this.pickUp(p, l);
     for (const h of this.herbs.values()) if (h.x === p.x && h.y === p.y && h.readyAt <= Date.now()) this.takeHerb(p, h);
-    if (this.portal && p.x === this.portal.x && p.y === this.portal.y) {
-      const r = { xp: Math.round(40 * this.level * (1 + 0.1 * this.level)), gold: Math.round(30 + 12 * this.level) };
-      this.hooks.reward(p.user, r.xp, r.gold);
-      this.event({ e: 'loot', id: p.user.id, gold: r.gold, xp: r.xp, x: p.x, y: p.y });
-      if (this.def.descent && this.hooks.nextFloor) {
-        this.players.delete(p.user.id); this.pets.delete(p.user.id);
-        this.event({ e: 'leave', id: p.user.id });
-        return this.hooks.nextFloor(p.user, this.def.descent, r);
-      }
-      if (this.hooks.track) this.hooks.track(p.user, 'dungeon', {});
-      this.leaveTo(p, 'win', r);
+    // en el Descenso el portal lleva al piso siguiente al pisarlo; en las mazmorras normales
+    // se sale con el botón «Salir ya» o al acabar la cuenta atrás (así nadie sale sin querer)
+    if (this.portal && this.def.descent && p.x === this.portal.x && p.y === this.portal.y) this.winExit(p);
+  }
+
+  // Sale con la recompensa de haber terminado la mazmorra
+  winExit(p) {
+    const r = { xp: Math.round(40 * this.level * (1 + 0.1 * this.level)), gold: Math.round(30 + 12 * this.level) };
+    this.hooks.reward(p.user, r.xp, r.gold);
+    this.event({ e: 'loot', id: p.user.id, gold: r.gold, xp: r.xp, x: p.x, y: p.y });
+    if (this.def.descent && this.hooks.nextFloor) {
+      this.players.delete(p.user.id); this.pets.delete(p.user.id);
+      this.event({ e: 'leave', id: p.user.id });
+      return this.hooks.nextFloor(p.user, this.def.descent, r);
     }
+    if (this.hooks.track) this.hooks.track(p.user, 'dungeon', {});
+    this.leaveTo(p, 'win', r);
+  }
+
+  // «Salir ya» después de derrotar al jefe
+  finish(userId) {
+    const p = this.players.get(userId);
+    if (p && this.portal && !this.def.descent) this.winExit(p);
   }
 
   pickUp(p, l) {
@@ -1113,7 +1127,8 @@ class Instance {
       this.bossDead = true;
       const spot = this.freeNear(e.x, e.y, (a, b) => this.walkTile(a, b) && ![...this.loot.values()].some((l) => l.x === a && l.y === b));
       this.portal = spot;
-      this.event({ e: 'portal', x: spot.x, y: spot.y, name: e.m.name });
+      if (!this.def.descent) this.portalEnd = Date.now() + PORTAL_MS;
+      this.event({ e: 'portal', x: spot.x, y: spot.y, name: e.m.name, left: this.def.descent ? 0 : PORTAL_MS });
       if (this.def.raid && this.hooks.raidDone) this.hooks.raidDone(this);
       // el resto de la sala huye: no queda nadie que pelee por su señor
       for (const o of [...this.enemies.values()]) if (o.summoned) { this.enemies.delete(o.id); this.event({ e: 'die', id: o.id, k: o.k, x: o.x, y: o.y, xp: 0 }); }
@@ -1412,6 +1427,7 @@ class Instance {
       chests: [...this.chests.values()],
       loot: [...this.loot.values()].filter(near).map((l) => ({ id: l.id, x: l.x, y: l.y, gold: l.gold ? 1 : undefined, cons: l.cons, mat: l.mat, r: l.item ? l.item.rarity : undefined, slot: l.item ? l.item.slot : undefined, name: l.item ? l.item.name : undefined, it: l.item || undefined })),
       portal: this.portal,
+      portalLeft: this.portalEnd ? Math.max(0, this.portalEnd - now) : undefined,
       start: this.start,
     };
   }

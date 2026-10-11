@@ -239,6 +239,10 @@ async function instanceTests() {
   // matar al jefe abre el portal de salida y suelta botín de conjunto con suerte
   inst.damageEnemy(p, boss, 99999, { noCrit: true });
   assert.ok(inst.portal && inst.bossDead, 'portal tras el jefe');
+  // no se sale al pisar el portal: hay un minuto de cuenta atrás (o el botón «Salir ya»)
+  assert.ok(inst.portalEnd > Date.now() + 50000 && inst.snapshot().portalLeft > 50000, 'cuenta atrás de un minuto tras el jefe');
+  p.x = inst.portal.x; p.y = inst.portal.y; inst.onEnter(p);
+  assert.ok(inst.players.has('u1'), 'pisar el portal no saca de la mazmorra');
 
   // Esquiva: voltereta de dos casillas e invulnerable un instante
   p.x = 3; p.y = 2; p.rollAt = 0; user.combat.en = 50;

@@ -898,6 +898,7 @@ wss.on('connection', (ws) => {
         break;
       }
       case 'dattack': { const i = inst(); if (i && allowGame()) i.attack(user.id, String(msg.id)); break; }
+      case 'dfinish': { const i = inst(); if (i) i.finish(user.id); break; }
       case 'ddir': { const i = inst(); if (i && allowGame()) i.dir(user.id, msg.dx, msg.dy); break; }
       case 'dskill': { const i = inst(); if (i && allowGame()) i.skill(user.id, msg); break; }
       case 'duse': { const i = inst(); if (i && allowGame()) i.use(user.id, String(msg.cid), msg); break; }

@@ -51,7 +51,8 @@
     for (const e of game.ents.values()) if (e.static) e.alive = true;
     for (const ev of m.events || []) onEvent(ev, now);
     for (const [id, e] of game.ents) if (!e.alive) game.ents.delete(id);
-    game.chests = m.chests; game.loot = m.loot; game.portal = m.portal; game.start = m.start; game.herbs = m.herbs || [];
+    game.chests = m.chests; game.loot = m.loot; game.portal = m.portal;
+    if (m.portalLeft && !game.portalEnd) game.portalEnd = performance.now() + m.portalLeft; game.start = m.start; game.herbs = m.herbs || [];
     // jefe a la vista (en la arena, el rival)
     const boss = game.map && game.map.kind === 'arena'
       ? [...game.ents.values()].find((e) => e.kind === 'hero' && e.id !== DD.myId)
@@ -198,7 +199,7 @@
       }
       case 'special': log(`${ev.name}: ${{ slam: '¡golpe sísmico!', nova: '¡nova de muerte!', breath: '¡aliento de fuego!', volley: '¡andanada!', summon: 'llama a sus esbirros', charge: '¡embiste!' }[ev.s] || ''}`, 'hurt'); break;
       case 'summon': for (let i = 0; i < 10; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7cff6a', true); break;
-      case 'portal': log(`¡${ev.name} ha caído! Se abre un portal de salida.`, 'good big'); DD.toast('🏆 ¡Jefe derrotado! Recoge el botín y cruza el portal.'); DD.sfx('portal'); for (let i = 0; i < 30; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7ad0ff', true); break;
+      case 'portal': if (ev.left) game.portalEnd = performance.now() + ev.left; log(`¡${ev.name} ha caído!${ev.left ? ' Tenéis un minuto para recoger el botín.' : ' Se abre el portal al piso siguiente.'}`, 'good big'); if (!ev.left) DD.toast('🏆 ¡Jefe derrotado! Cruza el portal para bajar.'); DD.sfx('portal'); for (let i = 0; i < 30; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7ad0ff', true); break;
       case 'down': log(`${who(ev.id)} cae.`, 'hurt'); DD.sfx('down', { vol: ev.id === me ? 1 : 0.6 }); if (ev.id !== me) DD.toast(`💀 ${who(ev.id)} ha caído y vuelve a la taberna.`); break;
       case 'ping':
         (game.pings = game.pings || []).push({ x: ev.x, y: ev.y, k: ev.k, id: ev.id, start: now });
@@ -226,6 +227,7 @@
   DD.on('dstart', (m) => {
     game.active = true;
     D.rejoinBtn.classList.add('hidden');
+    game.portalEnd = 0;
     game.pings = [];
     game.map = m.dungeon;
     game.props = m.dungeon.props || [];
@@ -295,6 +297,25 @@
 
   // Tiempo del servidor (para las esperas de habilidades)
   const serverNow = () => (game.you ? game.you.now + (performance.now() - game.youAt) : Date.now());
+
+  // ---------- Ataque automático (se activa en Ajustes) ----------
+  // Si estás quieto y hay un enemigo a tu alcance, le atacas solo; las habilidades siguen siendo cosa tuya
+  setInterval(() => {
+    if (!game.active || !DD.gfx || !DD.gfx.autoAttack || !game.map || game.map.kind === 'arena') return;
+    const me = game.ents.get(DD.myId);
+    if (!me || me.moving || game.keys.size || game.joyDir || !game.you || game.you.hp <= 0) { game.autoTarget = null; return; }
+    const arma = DD.me && DD.me.equip && DD.me.equip.arma;
+    const W = arma && RULES.WEAPONS[arma.base];
+    const reach = !W ? 1 : W.kind === 'melee' ? W.range || 1 : Math.min(W.range || 1, 5);
+    let best = null, bd = 99;
+    for (const e of game.ents.values()) {
+      if (e.kind !== 'enemy' || !game.vis[e.y * game.map.w + e.x]) continue;
+      const d = Math.max(Math.abs(e.x - me.x), Math.abs(e.y - me.y));
+      if (d <= reach && d < bd) { bd = d; best = e; }
+    }
+    if (!best) { game.autoTarget = null; return; }
+    if (game.autoTarget !== best.id) { game.autoTarget = best.id; DD.net.send({ t: 'dattack', id: best.id }); }
+  }, 250);
 
   // ---------- Controles ----------
   const KEYDIR = { ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1], ArrowLeft: [-1, 0], a: [-1, 0], ArrowRight: [1, 0], d: [1, 0] };
