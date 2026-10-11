@@ -40,6 +40,14 @@
       for (const st of stages) st.scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
     }
   }
+  // baja la calidad y obliga a recompilar todos los materiales con menos luces y sombras
+  function downTo(id) {
+    applyQuality(id);
+    for (const st of stages) {
+      st.pool.forEach((L, i) => { L.visible = i < Q.lights; });
+      st.scene.traverse((o) => { if (o.material) [].concat(o.material).forEach((m) => { m.needsUpdate = true; }); });
+    }
+  }
   const qualityInfo = () => ({ ...Q, pr: Math.round(Math.min(window.devicePixelRatio || 1, Q.pr) * 100) / 100, auto: autoMode, fps: Math.round(perf.fps) });
   // Calidad automática: si el juego va a tirones (menos de 26 fps durante 4 s) baja un escalón;
   // si va sobrado (más de 57 fps durante 30 s) y no está en la que le toca, sube uno
@@ -69,6 +77,15 @@
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
+    // si la tarjeta no puede compilar un material (demasiadas luces o sombras para el móvil), en vez de dejar la pantalla
+    // negra se baja un escalón de calidad y se avisa al panel de errores
+    renderer.debug.onShaderError = (gl, program, vs, fs) => {
+      const info = String((gl.getProgramInfoLog(program) || '') + ' ' + (gl.getShaderInfoLog(fs) || '') + ' ' + (gl.getShaderInfoLog(vs) || '')).trim().slice(0, 200);
+      console.error('Shader:', info);
+      if (root.__errs) root.__errs.push({ msg: `Shader (${Q.name}): ${info}`, src: 'view3d.js', line: 0 });
+      const i = ORDER.indexOf(Q.name);
+      if (i > 0 && performance.now() - (perf.lastShaderDown || -1e9) > 1500) { perf.lastShaderDown = performance.now(); autoMode = false; downTo(ORDER[i - 1]); }
+    };
     window.addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); if (post) post.resize(); for (const s of stages) s.resize(); });
     // si el navegador pierde los gráficos (memoria de la tarjeta, suspender el portátil, cambiar de pestaña en el móvil…),
     // en vez de quedarse la pantalla en blanco se avisa y se recarga: la partida sigue en el servidor
@@ -255,6 +272,8 @@
         const sorted = sources.map((s) => ({ s, d: (s.x - t.x) ** 2 + (s.z - t.z) ** 2 - (s.shadow ? 1e6 : 0) })).sort((a, b) => a.d - b.d);
         for (let i = 0; i < pool.length; i++) {
           const L = pool[i], it = i < Q.lights ? sorted[i] : null;
+          // las luces que la calidad no usa ni siquiera entran en los shaders (menos trabajo y menos uniformes en el móvil)
+          L.visible = i < Q.lights;
           if (!it) { L.intensity = 0; continue; }
           const s = it.s;
           L.position.set(s.x, s.y, s.z);

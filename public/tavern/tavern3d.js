@@ -226,7 +226,7 @@
       f.obj.position.set(x + 0.5, 0, y + 0.5);
       g.add(f.obj);
       if (type === 'chandelier') hang.push(f.obj);
-      if (f.light) lights.push({ x: x + 0.5, y: f.light.y, z: y + 0.5 + (f.light.z || 0), color: f.light.color, intensity: f.light.intensity, dist: f.light.dist, seed: x * 3 + y, kind: type, bx: x + 0.5, bz: y + 0.5, fire: type === 'fireplace' });
+      if (f.light) lights.push({ x: x + 0.5, y: f.light.y, z: y + 0.5 + (f.light.z || 0), color: f.light.color, intensity: f.light.intensity, dist: f.light.dist, seed: x * 3 + y, kind: type, bx: x + 0.5, bz: y + 0.5 });
     };
     for (const it of MAP.items) if (it.type !== 'staff' && it.type !== 'maptable') place(it.type, it.x, it.y, it.dir);
     // la mesa de partida: las casillas de «mesa con mapa» que se tocan forman una sola mesa grande con el plano encima
@@ -387,7 +387,7 @@
     const fl = flashLevel(now);
     const flick = (s) => 0.85 + Math.sin(now / 130 + s * 3) * 0.08 + Math.sin(now / 47 + s) * 0.05;
     const L = [];
-    for (const t of T3.torches) L.push({ x: t.x, y: 1.85, z: t.z, color: '#ff9a40', intensity: 1.7 * flick(t.seed), dist: 6.5, fire: true });
+    for (const t of T3.torches) L.push({ x: t.x, y: 1.85, z: t.z, color: '#ff9a40', intensity: 1.7 * flick(t.seed), dist: 6.5 });
     for (const l of T3.furn.lights) L.push({ ...l, intensity: l.intensity * flick(l.seed) });
     for (const w of T3.windows) { w.mat.emissiveIntensity = 0.55 + fl * 2.5; if (fl) L.push({ x: w.w.wall === 'L' ? 1 : w.pos.x, y: 2, z: w.w.wall === 'L' ? w.pos.z : 1, color: '#a8c0ff', intensity: fl * 6, dist: 10 }); }
     if (me && !me.where) L.push({ x: me.px + 0.5, y: 2.6, z: me.py + 0.5, color: '#ffe0b8', intensity: 0.9, dist: 6, shadow: true });
