@@ -30,6 +30,46 @@
     return g;
   }
 
+  // Texturas pintadas para la barra (paneles de madera) y la chimenea (piedra); se crean una vez
+  const texCache = {};
+  function paintTex(key, w, h, paint) {
+    if (texCache[key]) return texCache[key];
+    const c = document.createElement('canvas'); c.width = w; c.height = h;
+    paint(c.getContext('2d'), w, h);
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.anisotropy = 4; t.userData.keep = true;
+    return (texCache[key] = t);
+  }
+  const rnd = (n) => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+  const panelTex = () => paintTex('panel', 128, 128, (c, w, h) => {
+    c.fillStyle = '#6a4024'; c.fillRect(0, 0, w, h);
+    for (let x = 0; x < w; x += 32) {
+      c.fillStyle = `hsl(24, 42%, ${30 + rnd(x) * 8}%)`; c.fillRect(x + 4, 14, 24, h - 28);
+      c.fillStyle = 'rgba(255,210,160,.08)'; c.fillRect(x + 4, 14, 24, 2);
+      c.fillStyle = 'rgba(0,0,0,.45)'; c.fillRect(x + 4, h - 16, 24, 2); c.fillRect(x + 27, 14, 2, h - 28);
+      for (let k = 0; k < 6; k++) { c.fillStyle = 'rgba(0,0,0,.18)'; c.fillRect(x + 6 + rnd(x + k) * 18, 18, 1, h - 36); }
+    }
+    c.fillStyle = 'rgba(0,0,0,.5)'; c.fillRect(0, 10, w, 3); c.fillRect(0, h - 13, w, 3);
+  });
+  const topTex = () => paintTex('bartop', 128, 128, (c, w, h) => {
+    c.fillStyle = '#8a5028'; c.fillRect(0, 0, w, h);
+    for (let y = 0; y < h; y += 16) {
+      c.fillStyle = `hsl(22, 48%, ${34 + rnd(y) * 8}%)`; c.fillRect(0, y, w, 15);
+      c.fillStyle = 'rgba(0,0,0,.4)'; c.fillRect(0, y + 15, w, 1);
+      for (let k = 0; k < 4; k++) { c.fillStyle = 'rgba(0,0,0,.15)'; c.fillRect(rnd(y + k) * w, y + 3 + k * 3, 20 + rnd(k + y) * 40, 1); }
+      if (rnd(y * 3) > 0.6) { c.strokeStyle = 'rgba(0,0,0,.25)'; c.beginPath(); c.arc(rnd(y) * w, y + 8, 7, 0, 7); c.stroke(); } // marcas de jarras
+    }
+  });
+  const stoneTex = () => paintTex('stone', 128, 128, (c, w, h) => {
+    c.fillStyle = '#2a2224'; c.fillRect(0, 0, w, h);
+    for (let y = 0, r = 0; y < h; y += 21, r++) for (let x = -(r % 2) * 16; x < w; x += 32) {
+      const l = 26 + rnd(x * 1.3 + y) * 14;
+      c.fillStyle = `hsl(${15 + rnd(x + y) * 20}, 10%, ${l}%)`; c.fillRect(x + 2, y + 2, 28, 17);
+      c.fillStyle = 'rgba(255,255,255,.07)'; c.fillRect(x + 2, y + 2, 28, 2);
+      c.fillStyle = 'rgba(0,0,0,.3)'; c.fillRect(x + 2, y + 17, 28, 2);
+    }
+  });
+  const texMat = (key, make, o = {}) => texCache['m:' + key] || (texCache['m:' + key] = new THREE.MeshStandardMaterial({ map: make(), roughness: o.rough !== undefined ? o.rough : 0.8, metalness: o.metal || 0, color: o.color || '#ffffff' }));
+
   // ======================================================================
   //  Muebles de la taberna y decorado de las mazmorras
   // ======================================================================
@@ -60,7 +100,16 @@
         if (type === 'maptable') { const p = mesh(box(0.86, 0.01, 0.86), mat('#e0cc98'), 0, 0.54, 0, g); p.receiveShadow = true; mesh(box(0.3, 0.012, 0.04), mat('#4a7ab0'), 0.1, 0.55, 0.1, g); mesh(box(0.04, 0.012, 0.35), mat('#6b8a4a'), -0.15, 0.55, -0.05, g); mesh(cyl(0.03, 0.03, 0.06, 6), mat('#d8433b'), 0.2, 0.58, -0.2, g); }
         break;
       case 'roundtable': mesh(cyl(0.42, 0.42, 0.06, 12), wood, 0, 0.5, 0, g); mesh(cyl(0.06, 0.08, 0.48, 6), woodD, 0, 0.24, 0, g); mesh(cyl(0.22, 0.22, 0.04, 8), woodD, 0, 0.02, 0, g); candle(g, -0.12, 0.53, 0.05); { const m = mug(); m.position.set(0.15, 0.58, -0.05); g.add(m); } light = { color: '#ffb060', intensity: 0.8, dist: 3, y: 0.75 }; break;
-      case 'bar': mesh(box(1.0, 0.85, 1.0), woodD, 0, 0.42, 0, g); mesh(box(1.04, 0.07, 1.04), woodL, 0, 0.88, 0, g); mesh(box(1.0, 0.06, 0.02), mat('#c8a040', { metal: 0.6 }), 0, 0.2, 0.51, g); break;
+      case 'bar': {
+        // barra de madera con paneles, encimera barnizada (brilla con las velas) y molduras de latón
+        const brass = mat('#c8963a', { metal: 0.85, rough: 0.3 });
+        mesh(box(1.0, 0.8, 0.9), texMat('panel', panelTex), 0, 0.4, 0, g);
+        mesh(box(1.02, 0.1, 1.0), texMat('bartop', topTex, { rough: 0.32, metal: 0.05 }), 0, 0.85, 0, g);
+        mesh(box(1.0, 0.04, 0.96), mat('#22140a'), 0, 0.03, 0, g);
+        mesh(box(1.03, 0.03, 0.97), brass, 0, 0.785, 0, g);
+        mesh(box(1.01, 0.03, 0.93), brass, 0, 0.12, 0, g);
+        break;
+      }
       case 'bookshelf': {
         const s = new THREE.Group(); g.add(s);
         mesh(box(0.95, 1.7, 0.38), woodD, 0, 0.85, -0.28, s);
@@ -81,9 +130,15 @@
       }
       case 'sofa': { const c = new THREE.Group(); g.add(c); mesh(box(0.95, 0.35, 0.8), mat('#23407a'), 0, 0.25, 0.05, c); mesh(box(0.95, 0.5, 0.2), mat('#1c3466'), 0, 0.55, -0.32, c); c.rotation.y = rotY; break; }
       case 'fireplace': {
-        mesh(box(1.0, 1.4, 0.7), mat('#5a5258'), 0, 0.7, -0.1, g);
-        mesh(box(0.6, 0.6, 0.4), mat('#140a08'), 0, 0.3, 0.12, g);
-        mesh(box(1.1, 0.1, 0.8), mat('#7a6a5a'), 0, 1.0, -0.05, g);
+        const stone = texMat('stone', stoneTex, { rough: 0.95 });
+        mesh(box(1.0, 1.4, 0.7), stone, 0, 0.7, -0.1, g);
+        mesh(box(0.6, 0.6, 0.4), mat('#0a0504'), 0, 0.3, 0.12, g);
+        mesh(box(1.14, 0.1, 0.82), mat('#3a2214'), 0, 1.0, -0.05, g);
+        mesh(box(0.74, 0.08, 0.06), stone, 0, 0.64, 0.33, g);
+        mesh(box(0.08, 0.64, 0.06), stone, -0.34, 0.32, 0.33, g); mesh(box(0.08, 0.64, 0.06), stone, 0.34, 0.32, 0.33, g);
+        mesh(box(0.7, 0.62, 0.62), stone, 0, 1.71, -0.14, g);
+        { const m = mug(); m.position.set(-0.3, 1.11, 0.05); g.add(m); }
+        candle(g, 0.32, 1.05, 0.08);
         for (let i = -1; i <= 1; i++) flame(g, i * 0.13, 0.08, 0.15, 1.6);
         mesh(box(0.5, 0.06, 0.15), mat('#3a1a0a'), 0, 0.05, 0.15, g);
         light = { color: '#ff8a3a', intensity: 2.2, dist: 6, y: 0.5, z: 0.5 };
@@ -223,5 +278,5 @@
     return { obj: g, light };
   }
 
-  Object.assign(MODELS, { furniture, prop, flame, mug, herb, rod });
+  Object.assign(MODELS, { furniture, prop, flame, candle, mug, herb, rod });
 })();

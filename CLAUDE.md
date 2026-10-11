@@ -45,6 +45,7 @@ public/game.js          núcleo de la taberna: estado, red, interfaz (crónica, 
 public/tavern/start.js  pantalla de inicio, casillas, servidores y editor de personaje
 public/tavern/editor.js editor de muebles de la taberna (dueño)
 public/tavern/screen.js zoom del juego y pantalla completa
+public/tavern/ambience.js ambiente de la taberna: haces de luna, halos y charcos de luz, polvo, ascuas (C.tavernFx)
 public/tavern/tavern3d.js taberna en 3D, bucle de dibujo y clics en la sala
 public/tavern/boot.js   arranque (se carga el último de la taberna)
 public/dungeon.js       mazmorra en el navegador: estado, red, eventos, controles y escena 3D; comparte en DD.dg

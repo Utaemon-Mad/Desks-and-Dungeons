@@ -7,6 +7,13 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 8, date: 'Octubre', title: 'Una taberna con alma', items: [
+      '🌙 La luz de la luna entra por las ventanas y dibuja la cruz del marco en el suelo.',
+      '🔥 Chimenea de piedra con brasas que laten y ascuas que suben; cada llama brilla y deja su charco de luz.',
+      '🍺 Barra nueva de madera barnizada con velas, jarras y botellas; estandartes de la casa y el letrero de Desks & Dungeons.',
+      '✨ Motas de polvo flotando en el aire y sombras de verdad de las antorchas cercanas (calidad alta).',
+      '🛠️ Arreglada la pantalla en blanco tras varias mazmorras y el movimiento es más suave.',
+    ] },
     { v: 7, date: 'Octubre', title: 'Para engancharse', items: [
       '🟠 Objetos LEGENDARIOS con poderes: Rebote, Estallido, Sed de sangre, Frenesí, Égida, Trueno y Eco.',
       '✨ El botín bueno cae con un haz de luz de su color y suena al caer.',
