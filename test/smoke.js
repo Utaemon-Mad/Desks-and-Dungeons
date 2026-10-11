@@ -309,6 +309,26 @@ async function instanceTests() {
     assert.ok(gi.summaryStats().some((x) => x.name === 'gb' && x.revives === 1) && gi.summaryStats().some((x) => x.name === 'ga' && x.downs === 1), 'resumen: reanimaciones y caídas');
   }
 
+  // Sala secreta (muro agrietado que se rompe) y mímico (cofre que muerde)
+  {
+    const t2 = rows.join('').split('');
+    t2[1 * W + 7] = 'S';
+    const si = new Instance({ ...def, id: 'sec', tiles: t2.join(''), spawns: [], chests: [{ x: 10, y: 3 }] }, { ...hooks, send: () => {}, kill: () => {} });
+    const us = { id: 'us', name: 'S', look: { cls: 'guerrero' }, profile: { xp: 0, gold: 0, char: RULES.newChar('guerrero'), equip: {}, buffs: {} } };
+    si.join(us);
+    const ps = si.players.get('us');
+    ps.x = 7; ps.y = 3;
+    si.breakWall('us', 7, 1);
+    assert.strictEqual(si.tile(7, 1), 'S', 'el muro no se rompe desde lejos');
+    ps.y = 2;
+    si.breakWall('us', 7, 1);
+    assert.strictEqual(si.tile(7, 1), '.', 'el muro agrietado se rompe al lado');
+    const ch = [...si.chests.values()][0];
+    ch.mimic = true;
+    si.openChest(ps, ch);
+    assert.ok(!si.chests.has(ch.id) && [...si.enemies.values()].some((e) => e.k === 'mimico' && e.mimic), 'el cofre era un mímico');
+  }
+
   // Arena: los golpes al rival le quitan vida de verdad, y al caer termina el duelo
   let ended = null;
   const ahooks = { ...hooks, send: () => {}, duelEnd: (loser) => { ended = loser.id; } };

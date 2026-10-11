@@ -4,6 +4,8 @@
 (function (root) {
   'use strict';
   const MONSTERS = {
+    // el mímico no sale en ninguna sala: aparece al abrir algunos cofres
+    'mimico':          { name: 'Mímico', fam: 'bestia', sprite: 'mimic', hp: 60, dmg: [4, 8], armor: 5, ms: 380, atk: 1500, xp: 30, gold: [10, 25] },
     'goblin-minion':   { name: 'Goblin enclenque', fam: 'goblin', sprite: 'goblin', scale: 0.85, hp: 14, dmg: [1, 3], armor: 1, ms: 330, atk: 1300, xp: 6, gold: [1, 3] },
     'goblin-warrior':  { name: 'Goblin', fam: 'goblin', sprite: 'goblin', hp: 20, dmg: [2, 4], armor: 2, ms: 330, atk: 1300, xp: 8, gold: [1, 4] },
     'goblin-archer':   { name: 'Goblin arquero', fam: 'goblin', sprite: 'goblin', weapon: 'bow', hp: 15, dmg: [2, 4], armor: 1, ms: 330, atk: 2100, range: 6, proj: 'arrow', ai: 'ranged', xp: 9, gold: [1, 4] },

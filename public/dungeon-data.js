@@ -3,6 +3,7 @@
   // Un carácter por casilla
   const TILES = {
     '#': { name: 'Muro', walk: false },
+    'S': { name: 'Muro agrietado', walk: false, secret: true },
     '.': { name: 'Suelo', walk: true },
     '+': { name: 'Puerta', walk: true },
     '^': { name: 'Pinchos', walk: true, trap: true },

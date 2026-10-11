@@ -216,7 +216,7 @@
   }
 
   // Minimapa (sólo lo explorado)
-  const MINI = { ',': '#2f4a2a', ';': '#3a5a32', T: '#1a3018', P: '#16281e', w: '#14284a', v: '#24426a', s: '#7a6a4a', h: '#4a6a3a', M: '#5a5a62', '=': '#8a6a3a', b: '#8a6a3a', g: '#3a3430', t: '#6a6a72', R: '#7a7a7e', F: '#ff7a2a', C: '#000000', H: '#ffcf6a', k: '#8a5a3a', D: '#b83a2a', '#': '#1a1618', '.': '#6a6058', '+': '#8a5a2a', '^': '#a04040', '~': '#24427a', '%': '#c8400a', f: '#7a6a2a', x: '#5a4a2a', u: '#6a6258', m: '#4a4a2e', q: '#24301e', y: '#2a2a1a', r: '#4e5a2e', d: '#a8643a', z: '#8a5a3a', o: '#6a4a3a', c: '#3a7a3a', n: '#d8e0e8', i: '#a8c8e0', p: '#8a9aa8', a: '#4a3e3c', e: '#2a2222', l: '#c8400a', W: '#7ad0ff' };
+  const MINI = { S: '#1a1618', ',': '#2f4a2a', ';': '#3a5a32', T: '#1a3018', P: '#16281e', w: '#14284a', v: '#24426a', s: '#7a6a4a', h: '#4a6a3a', M: '#5a5a62', '=': '#8a6a3a', b: '#8a6a3a', g: '#3a3430', t: '#6a6a72', R: '#7a7a7e', F: '#ff7a2a', C: '#000000', H: '#ffcf6a', k: '#8a5a3a', D: '#b83a2a', '#': '#1a1618', '.': '#6a6058', '+': '#8a5a2a', '^': '#a04040', '~': '#24427a', '%': '#c8400a', f: '#7a6a2a', x: '#5a4a2a', u: '#6a6258', m: '#4a4a2e', q: '#24301e', y: '#2a2a1a', r: '#4e5a2e', d: '#a8643a', z: '#8a5a3a', o: '#6a4a3a', c: '#3a7a3a', n: '#d8e0e8', i: '#a8c8e0', p: '#8a9aa8', a: '#4a3e3c', e: '#2a2222', l: '#c8400a', W: '#7ad0ff' };
   function drawMinimap() {
     const map = game.map;
     const big = map.kind === 'world' && game.bigMap;

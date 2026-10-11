@@ -290,6 +290,7 @@
   // ======================================================================
   // st: { moving, phase, t, attack (0..1), sit, emote, hit }
   function animate(model, st) {
+    if (model.userData.anim) return model.userData.anim(st); // modelos con animación propia (el mímico)
     if (model.userData.gl) return animateGL(model, st);
     const P = model.userData.parts;
     if (!P) return;

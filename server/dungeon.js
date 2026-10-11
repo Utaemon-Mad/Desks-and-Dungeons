@@ -26,7 +26,7 @@ const randInt = (a, b) => crypto.randomInt(Math.min(a, b), Math.max(a, b) + 1);
 const roll = (r) => r[0] + rnd() * (r[1] - r[0]);
 const cheb = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
-const OPAQUE = new Set(['#', 'T', 'P', 'M', 'R', 'k', 'y', 'p']);
+const OPAQUE = new Set(['#', 'S', 'T', 'P', 'M', 'R', 'k', 'y', 'p']);
 const dirName = (dx, dy) => (Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N');
 
 class Instance {
@@ -62,9 +62,18 @@ class Instance {
     this.blocked = new Set();
     this.created = Date.now();
     this.npcs = def.npcs || [];
+    // mercader errante de las mazmorras: vende como el Maestro Takeshi, pero en plena mazmorra
+    if (def.merchant && !def.descent && !def.raid) this.npcs = [...this.npcs, { id: 'errante', name: 'Ulf el errante', x: def.merchant.x, y: def.merchant.y, shop: 'armero', look: { cls: 'explorador', skin: 1, hair: 2, beard: 1, gear: { pecho: 'cuero', casco: 'tela' }, color: '#3a4a2a' }, lines: ['¡Eh, aventurero! No te asustes: sólo soy un mercader que se perdió… y que vende muy bien.'] }];
     this.waystones = def.waystones || [];
     this.pets = new Map(); // dueño -> mascota
     this.mod = def.descent ? def.descent.mod : def.raid ? def.raid.mod : null; // desafío semanal del Descenso o del Asalto
+    // la mitad de las mazmorras normales traen un afijo al azar: más difíciles, pero con más botín y experiencia
+    this.modMf = 0;
+    if (!this.mod && def.theme && this.kind === 'dungeon' && rnd() < 0.5) {
+      const AFFIXES = ['frenesi', 'elites', 'explosivos', 'vampiros', 'gigantes'];
+      this.mod = AFFIXES[Math.floor(rnd() * AFFIXES.length)];
+      this.modMf = 40;
+    }
     this.duel = def.duel || null;                     // arena: { a, b, bet, startAt }
     this.herbs = new Map((def.herbs || []).map((h) => [h.id, { ...h, readyAt: 0 }]));
     this.worldBoss = null;
@@ -72,7 +81,8 @@ class Instance {
     for (const n of this.npcs) this.blocked.add(n.y * this.w + n.x);
     const now = Date.now();
     for (const p of def.props || []) if (PROPS[p.k] && PROPS[p.k].b) this.blocked.add(p.y * this.w + p.x);
-    for (const c of def.chests || []) { const id = 'c' + ++this.seq; this.chests.set(id, { id, x: c.x, y: c.y, open: false }); }
+    // en las mazmorras generadas, alguno de los cofres normales es un mímico
+    for (const c of def.chests || []) { const id = 'c' + ++this.seq; this.chests.set(id, { id, x: c.x, y: c.y, open: false, secret: c.secret || undefined, mimic: !c.secret && def.theme && this.kind === 'dungeon' && rnd() < 0.12 || undefined }); }
     for (const p of def.potions || []) this.dropAt(p.x, p.y, { cons: 'pocion-vida-p' });
     if (def.spawns) {
       const packs = new Map();
@@ -207,7 +217,7 @@ class Instance {
     const def = this.def;
     this.hooks.send(user, {
       t: 'dstart',
-      dungeon: { id: this.id, name: def.name, tiles: def.tiles, w: this.w, h: this.h, kind: this.kind, theme: def.theme || null, level: this.level, labels: def.labels || [], props: def.props || [], zones: def.zones || null, waystones: this.waystones, npcs: this.npcs.map(({ id, name, x, y, look, shop }) => ({ id, name, x, y, look, shop })), descent: def.descent || null, doors: [...this.openDoors], duel: this.duel ? { startAt: this.duel.startAt, bet: this.duel.bet } : null },
+      dungeon: { id: this.id, name: def.name, tiles: def.tiles, w: this.w, h: this.h, kind: this.kind, theme: def.theme || null, level: this.level, labels: def.labels || [], props: def.props || [], zones: def.zones || null, waystones: this.waystones, npcs: this.npcs.map(({ id, name, x, y, look, shop }) => ({ id, name, x, y, look, shop })), descent: def.descent || null, mod: this.mod || null, modBonus: !!this.modMf, doors: [...this.openDoors], duel: this.duel ? { startAt: this.duel.startAt, bet: this.duel.bet } : null },
       ...this.snapshot(p), you: this.privateState(p),
     });
     this.event({ e: 'join', id: user.id });
@@ -795,6 +805,18 @@ class Instance {
     this.leaveTo(p, 'win', r);
   }
 
+  // Rompe un muro agrietado (sala secreta) si estás a su lado
+  breakWall(userId, x, y) {
+    const p = this.players.get(userId);
+    if (!p || p.downed || this.tile(x, y) !== 'S' || cheb(p, { x, y }) > 1) return;
+    const i = y * this.w + x;
+    this.def.tiles = this.def.tiles.slice(0, i) + '.' + this.def.tiles.slice(i + 1);
+    this.def.props = (this.def.props || []).filter((q) => !(q.k === 'secret' && q.x === x && q.y === y));
+    this.event({ e: 'wallbreak', x, y, by: userId });
+    this.whisper(p, '🧱 ¡Has encontrado una sala secreta!');
+    this.dirty = true;
+  }
+
   // «Salir ya» después de derrotar al jefe
   finish(userId) {
     const p = this.players.get(userId);
@@ -832,10 +854,21 @@ class Instance {
 
   openChest(p, ch) {
     if (ch.open) return;
+    // ¡era un mímico! el cofre desaparece y salta a morder; al matarlo suelta el botín del cofre
+    if (ch.mimic) {
+      this.chests.delete(ch.id);
+      const id = this.addEnemy('mimico', ch.x, ch.y, this.level, Date.now(), { elite: this.level >= 8 });
+      const m = id && this.enemies.get(id);
+      if (m) { m.mimic = true; m.aggro = p.user.id; m.nextAttack = Date.now() + 600; }
+      this.event({ e: 'mimic', id, x: ch.x, y: ch.y, by: p.user.id });
+      this.dirty = true;
+      return;
+    }
     ch.open = true;
     const gold = Math.round(randInt(12, 25) * (1 + 0.4 * (this.level - 1)));
     this.dropAt(ch.x, ch.y, { gold });
-    for (const o of this.lootParty(p, ch)) for (const it of RULES.rollLoot(rnd, { ilvl: this.level, mf: o.d.mf, classes: [o.d.cls], chest: true })) this.dropAt(ch.x, ch.y, { item: it, owner: o.user.id });
+    // el cofre de la sala secreta trae mejor botín
+    for (const o of this.lootParty(p, ch)) for (const it of RULES.rollLoot(rnd, { ilvl: this.level + (ch.secret ? 2 : 0), mf: o.d.mf + (ch.secret ? 60 : 0), classes: [o.d.cls], chest: true, elite: !!ch.secret })) this.dropAt(ch.x, ch.y, { item: it, owner: o.user.id });
     if (rnd() < 0.5) this.dropAt(ch.x, ch.y, { cons: rnd() < 0.7 ? 'pocion-vida-p' : 'pocion-energia' });
     this.event({ e: 'chest', id: ch.id, by: p.user.id, x: ch.x, y: ch.y });
     if (this.hooks.track) this.hooks.track(p.user, 'chest', {});
@@ -1151,7 +1184,7 @@ class Instance {
     if (e.group) { e.group.alive.delete(e.id); if (!e.group.alive.size) e.group.respawnAt = Date.now() + RESPAWN_MS; }
     const party = [...this.players.values()];
     const total = e.summoned ? e.m.xp / 3 : e.m.xp;
-    const share = total * (1 + 0.2 * (party.length - 1)) / Math.max(1, party.length);
+    const share = total * (1 + 0.2 * (party.length - 1)) / Math.max(1, party.length) * (this.modMf ? 1.2 : 1);
     let shown = 0;
     for (const o of party) {
       const xp = Math.max(1, Math.round(share * RULES.xpPenalty(o.d.level, e.m.level)));
@@ -1195,7 +1228,7 @@ class Instance {
     if (this.mod === 'sobrios') gold = Math.round(gold * 1.5);
     if (gold > 0) this.dropAt(e.x, e.y, { gold });
     for (const o of this.lootParty(p, e)) {
-      const items = RULES.rollLoot(rnd, { ilvl: e.m.level, mf: o.d.mf, classes: [o.d.cls], elite: e.m.elite, boss: e.m.boss, sets: e.m.sets });
+      const items = RULES.rollLoot(rnd, { ilvl: e.m.level, mf: o.d.mf + this.modMf, classes: [o.d.cls], elite: e.m.elite || e.mimic, boss: e.m.boss, sets: e.m.sets, chest: !!e.mimic });
       for (const it of items) this.dropAt(e.x, e.y, { item: it, owner: o.user.id });
     }
     if (rnd() < (e.m.boss ? 1 : 0.08)) this.dropAt(e.x, e.y, { cons: e.m.boss ? 'pocion-vida-g' : 'pocion-vida-p', n: 1 });
