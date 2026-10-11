@@ -51,6 +51,10 @@
     const m = await lobby.call({ t: 'hello' });
     if (m.t === 'account') acct = m;
     renderMenu();
+    // vuelta automática a la partida tras recargar por haber perdido los gráficos
+    let resume = false;
+    try { resume = sessionStorage.getItem('dd-resume') === '1'; sessionStorage.removeItem('dd-resume'); } catch { /* sin almacenamiento */ }
+    if (resume && acct && acct.last) enterGame(acct.last.slot, acct.last.server);
     return acct;
   }
 

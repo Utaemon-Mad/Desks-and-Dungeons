@@ -16,7 +16,7 @@ const PORTAL_MS = 60 * 1000; // tiempo para recoger el botín tras derrotar al j
 const PROJ_SPEED = 9;          // casillas por segundo
 const AGGRO = 7, LEASH = 14;
 const MAX_SUMMONS = 6;
-const FLUSH_MS = 100;
+const FLUSH_MS = 50; // cada cuánto se mandan las posiciones (más a menudo = movimiento más fluido)
 const WATER = new Set(['w', 'v', 'q', '~']);
 const EVENT_MS = Number(process.env.DD_EVENT_MS) || 0; // las pruebas adelantan los jefes de mundo
 const PVP_MULT = 0.55; // en la arena los golpes duelen menos: los duelos duran más
