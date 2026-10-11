@@ -8,6 +8,7 @@
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
     { v: 8, date: 'Octubre', title: 'Una taberna con alma', items: [
+      '🗺️ MESA DE PARTIDA: la mesa grande es una sola. Siéntate y la cámara la mira desde arriba con todos los jugadores; se abre el plano de la próxima mazmorra (¡la de verdad!). Marcad el plano, elegid tema y nivel, jugad a los dados o comerciad, y cuando todos digáis «listo» bajáis juntos.',
       '🌙 La luz de la luna entra por las ventanas y dibuja la cruz del marco en el suelo.',
       '🔥 Chimenea de piedra con brasas que laten y ascuas que suben; cada llama brilla y deja su charco de luz.',
       '🍺 Barra nueva de madera barnizada con velas, jarras y botellas; estandartes de la casa y el letrero de Desks & Dungeons.',

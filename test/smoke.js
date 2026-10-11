@@ -527,6 +527,27 @@ async function instanceTests() {
   b.send({ t: 'dleave' });
   await b.next((m) => m.t === 'dexit');
 
+  // Mesa de partida: los sentados ven el plano de la mazmorra, lo marcan y, cuando todos están listos, bajan juntos a esa misma
+  a.send({ t: 'move', x: 4, y: 5 });
+  b.send({ t: 'move', x: 4, y: 8 });
+  await a.next((m) => m.t === 'mesa' && m.seated.length === 2);
+  b.send({ t: 'mesa:set', theme: 'cripta', level: 1 });
+  const mesa = await a.next((m) => m.t === 'mesa' && m.plan && m.theme === 'cripta');
+  assert.strictEqual(mesa.plan.tiles.length, mesa.plan.w * mesa.plan.h);
+  assert.ok(!/[S^]/.test(mesa.plan.tiles), 'el plano no enseña la sala secreta ni las trampas');
+  a.send({ t: 'mesa:mark', x: mesa.plan.boss[0], y: mesa.plan.boss[1] });
+  const marked = await b.next((m) => m.t === 'mesa' && m.marks[wa.id]);
+  assert.deepStrictEqual(marked.marks[wa.id], [mesa.plan.boss]);
+  a.send({ t: 'mesa:ready' });
+  await b.next((m) => m.t === 'mesa' && m.ready.includes(wa.id));
+  b.send({ t: 'mesa:ready' });
+  const [dmA, dmB] = await Promise.all([a.next((m) => m.t === 'dstart'), b.next((m) => m.t === 'dstart')]);
+  assert.strictEqual(dmA.dungeon.id, dmB.dungeon.id, 'bajan juntos a la misma partida');
+  assert.strictEqual(dmA.dungeon.name, mesa.plan.name, 'es la mazmorra del plano');
+  assert.strictEqual(dmA.dungeon.w, mesa.plan.w);
+  a.send({ t: 'dleave' }); b.send({ t: 'dleave' });
+  await a.next((m) => m.t === 'dexit'); await b.next((m) => m.t === 'dexit');
+
   // Mundo abierto: cuevas a mazmorras de cada tema
   b.send({ t: 'wenter' });
   const wd = await b.next((m) => m.t === 'dstart');

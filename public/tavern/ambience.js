@@ -65,7 +65,7 @@
     s.position.set(x, y, z); s.scale.setScalar(size); s.renderOrder = 6;
     VIEW3D.fxLayer(s);
     A.group.add(s);
-    A.halos.push({ s, size, seed, base: 0.6 });
+    A.halos.push({ s, size, seed, base: 0.6, high: y > 1.6 });
   }
   function addPool(x, z, color, r, strength, seed) {
     const m = new THREE.Mesh(new THREE.PlaneGeometry(r * 2, r * 2), own(new THREE.MeshBasicMaterial({ map: GLOW, color, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, opacity: strength })));
@@ -152,15 +152,16 @@
   }
 
   // fl: nivel del relámpago (0..1)
-  function update(now, fl) {
+  // top: 0..1, cuánto se ve la sala desde arriba (sentado a la mesa de partida)
+  function update(now, fl, top = 0) {
     if (!A.group) return;
     const dt = Math.min(0.1, (now - (A.lastT || now)) / 1000); A.lastT = now;
     A.time.value = now / 1000;
     const flick = (s) => 0.85 + Math.sin(now / 130 + s * 3) * 0.08 + Math.sin(now / 47 + s) * 0.05 + Math.sin(now / 311 + s * 7) * 0.04;
-    for (const h of A.halos) { const f = flick(h.seed); h.s.material.opacity = h.base * f; h.s.scale.setScalar(h.size * (0.92 + f * 0.1)); }
+    for (const h of A.halos) { const f = flick(h.seed); h.s.material.opacity = h.base * f * (h.high ? 1 - top : 1); h.s.scale.setScalar(h.size * (0.92 + f * 0.1)); }
     for (const p of A.pools) p.m.material.opacity = p.base * flick(p.seed);
     for (const h of A.hearths) h.m.material.opacity = 0.55 + 0.35 * flick(h.seed);
-    for (const b of A.beams) { b.mat.uniforms.strength.value = 0.2 + fl * 0.3; b.pm.opacity = 0.32 + fl * 0.3; }
+    for (const b of A.beams) { b.mat.uniforms.strength.value = (0.2 + fl * 0.3) * (1 - top); b.pm.opacity = 0.32 + fl * 0.3; }
     // motas: siempre unas cuantas a la deriva por la sala
     if (A.motes.count < 200 * (VIEW3D.qualityInfo().particles || 1)) for (let i = 0; i < 3; i++) {
       A.motes.emit({ x: 0.3 + Math.random() * (MAP.W - 0.6), y: 0.3 + Math.random() * 2.1, z: 0.3 + Math.random() * (MAP.H - 0.6), vx: (Math.random() - 0.5) * 0.08, vy: (Math.random() - 0.4) * 0.05, vz: (Math.random() - 0.5) * 0.08, color: Math.random() < 0.25 ? '#b8c8ff' : '#ffd9a0', size: 0.025 + Math.random() * 0.03, life: 6 + Math.random() * 6, alpha: 0.55 });

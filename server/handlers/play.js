@@ -3,9 +3,10 @@
 // Cada mensaje recibe cx = { ws, user, room, err, allow, allowGame, isOwner, inst, nearShopNpc, roll, command } (la conexión) y el mensaje.
 const DICE_BETS = [10, 50, 100, 500];
 const DICE_MS = 20000; // tiempo para unirse a la ronda
+const MESA_MARKS = 3; // marcas por jugador en el plano
 
 module.exports = function (ctx) {
-  const { PROG, RULES, broadcast, crypto, levelOf, profileChanged, questState, reward, rnd, saveUser, send, sendMe, store, system } = ctx;
+  const { GEN, PROG, RULES, broadcast, crypto, levelOf, profileChanged, questState, reward, rnd, saveUser, send, sendMe, store, system } = ctx;
   const claimLogin = (...a) => ctx.claimLogin(...a); // de server/social.js
   const donate = (...a) => ctx.donate(...a); // de server/social.js
   const ensureBoard = (...a) => ctx.ensureBoard(...a); // de server/progress.js
@@ -23,6 +24,8 @@ module.exports = function (ctx) {
   const startRaid = (...a) => ctx.startRaid(...a); // de server/social.js
   const tavernView = (...a) => ctx.tavernView(...a); // de server/social.js
   const track = (...a) => ctx.track(...a); // de server/progress.js
+  const joinInstance = (...a) => ctx.joinInstance(...a); // de server.js
+  const newDungeon = (...a) => ctx.newDungeon(...a); // de server.js
 
   return {
     'quest:accept'(cx, msg) {
@@ -249,7 +252,103 @@ module.exports = function (ctx) {
       broadcast(room, { t: 'dice:state', round: diceView(room) });
     },
     'dice:get'(cx) { send(cx.ws, { t: 'dice:state', round: diceView(cx.room) }); },
+
+    // ---------- Mesa de partida: los sentados ven el plano de la próxima mazmorra, lo marcan y bajan juntos ----------
+    'mesa:get'(cx) { send(cx.ws, { t: 'mesa', ...mesaView(cx.room, true) }); },
+    'mesa:refresh'(cx) {
+      // alguien se ha movido, ha bajado a una partida o se ha ido: si cambian los sentados, se avisa
+      const room = cx.room, m = mesa(room);
+      const ids = seated(room).map((u) => u.id), key = ids.join(',');
+      if (key === m.seatKey) return;
+      m.seatKey = key;
+      for (const id of [...m.ready]) if (!ids.includes(id)) m.ready.delete(id);
+      for (const id of [...m.marks.keys()]) if (!ids.includes(id)) m.marks.delete(id);
+      broadcast(room, { t: 'mesa', ...mesaView(room, false) });
+    },
+    'mesa:set'(cx, msg) {
+      const { user, room, err, allow } = cx;
+      if (!isSeated(room, user) || !allow()) return;
+      const m = mesa(room);
+      const themes = Object.keys(RULES.THEMES);
+      if (msg.theme !== undefined) m.theme = RULES.THEMES[msg.theme] ? msg.theme : themes[crypto.randomInt(0, themes.length)];
+      if (msg.level !== undefined) m.level = Math.floor(Number(msg.level)) || 1;
+      m.level = Math.max(1, Math.min(maxLevel(room), m.level));
+      if (msg.reroll || msg.theme !== undefined || msg.level !== undefined) newPlan(m);
+      if (msg.reroll) system(room, `🗺️ ${user.name} despliega otro plano en la mesa de partida.`);
+      broadcast(room, { t: 'mesa', ...mesaView(room, true) });
+      void err;
+    },
+    'mesa:mark'(cx, msg) {
+      const { user, room } = cx;
+      if (!isSeated(room, user)) return;
+      const m = mesa(room), p = plan(m);
+      const x = Math.floor(Number(msg.x)), y = Math.floor(Number(msg.y));
+      if (!(x >= 0 && y >= 0 && x < p.w && y < p.h)) return;
+      const now = Date.now();
+      if (now - (user.lastMark || 0) < 300) return;
+      user.lastMark = now;
+      const list = (m.marks.get(user.id) || []).filter((k) => k[0] !== x || k[1] !== y);
+      if (list.length === (m.marks.get(user.id) || []).length) list.push([x, y]); // otra vez en el mismo sitio la quita
+      m.marks.set(user.id, list.slice(-MESA_MARKS));
+      broadcast(room, { t: 'mesa', ...mesaView(room, false) });
+    },
+    'mesa:ready'(cx) {
+      const { user, room, err } = cx;
+      if (!isSeated(room, user)) return err('Siéntate a la mesa de partida para prepararla.');
+      const m = mesa(room);
+      if (m.ready.has(user.id)) m.ready.delete(user.id); else m.ready.add(user.id);
+      const list = seated(room);
+      if (list.length && list.every((u) => m.ready.has(u.id))) return mesaStart(room, list);
+      broadcast(room, { t: 'mesa', ...mesaView(room, false) });
+    },
   };
+
+  // estado de la mesa de la sala (tema, nivel y semilla del plano: la mazmorra será justo esa)
+  function mesa(room) {
+    if (!room.mesa) {
+      const themes = Object.keys(RULES.THEMES);
+      room.mesa = { theme: themes[crypto.randomInt(0, themes.length)], level: 1, seed: '', ready: new Set(), marks: new Map(), seatKey: '' };
+      newPlan(room.mesa);
+    }
+    return room.mesa;
+  }
+  function newPlan(m) { m.seed = crypto.randomBytes(6).toString('hex'); m.plan = null; m.ready.clear(); m.marks.clear(); }
+  function plan(m) {
+    if (m.plan && m.plan.key === `${m.theme}|${m.level}|${m.seed}`) return m.plan;
+    const d = GEN.generate({ theme: m.theme, level: m.level, seed: m.seed });
+    // lo que se ve en el plano: muros y suelo (la sala secreta y las trampas no salen), entrada, jefe, cofres y grupos de enemigos
+    const packs = new Map();
+    for (const sp of d.spawns) if (!packs.has(sp.pack)) packs.set(sp.pack, [sp.x, sp.y, 0, sp.elite ? 1 : 0]);
+    for (const sp of d.spawns) packs.get(sp.pack)[2]++;
+    m.plan = {
+      key: `${m.theme}|${m.level}|${m.seed}`, name: d.name, w: d.w, h: d.h,
+      tiles: d.tiles.replace(/S/g, '#').replace(/\^/g, '.'),
+      start: [d.start.x, d.start.y], boss: [d.boss.x, d.boss.y], chests: d.chests.map((c) => [c.x, c.y]), packs: [...packs.values()],
+    };
+    return m.plan;
+  }
+  function seated(room) { return [...room.users.values()].filter((u) => !u.where && room.map.atMapTable(u.x, u.y)); }
+  function isSeated(room, user) { return !user.where && room.map.atMapTable(user.x, user.y); }
+  // el nivel lo marca quien menos tiene (+3, como en el menú de mazmorras)
+  function maxLevel(room) { const l = seated(room).map((u) => levelOf(u)); return (l.length ? Math.min(...l) : 1) + 3; }
+  function mesaView(room, withPlan) {
+    const m = mesa(room), p = plan(m), list = seated(room);
+    return {
+      theme: m.theme, level: m.level, maxLevel: maxLevel(room), key: p.key, name: p.name,
+      seated: list.map((u) => u.id), ready: [...m.ready], marks: Object.fromEntries(m.marks),
+      plan: withPlan ? p : undefined,
+    };
+  }
+  function mesaStart(room, list) {
+    const m = mesa(room);
+    m.level = Math.max(1, Math.min(maxLevel(room), m.level));
+    const i = newDungeon(room, m.theme, m.level, null, m.seed);
+    system(room, `🗺️ ${list.map((u) => u.name).join(', ')} se levantan de la mesa de partida y bajan juntos a «${i.def.name}» (nivel ${m.level}).`);
+    newPlan(m);
+    m.seatKey = '';
+    for (const u of list) joinInstance(room, u, i);
+    broadcast(room, { t: 'mesa', ...mesaView(room, true) });
+  }
 
   // oro directo (sin bonificaciones de la taberna, que sólo cuentan para lo que se gana jugando)
   function payGold(room, user, delta) {

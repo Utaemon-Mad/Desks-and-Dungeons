@@ -115,7 +115,7 @@
       inBounds,
       setItems(list) {
         this.items = sanitizeItems(list);
-        this.seats = new Map(); this.blocked = new Set(); this.byTile = new Map();
+        this.seats = new Map(); this.blocked = new Set(); this.byTile = new Map(); this._tables = null;
         for (const k of FIXED) this.blocked.add(k);
         for (const it of this.items) {
           this.byTile.set(key(it.x, it.y), it);
@@ -134,6 +134,34 @@
       // Casilla por la que se puede pasar de camino (los asientos sólo valen como destino)
       isPassable(x, y) { return this.isStandable(x, y) && !this.isSeat(x, y); },
       findPath(sx, sy, tx, ty) { return findPath(this, sx, sy, tx, ty); },
+      // Mesas de partida: grupos de casillas «maptable» que se tocan (se dibujan como una sola mesa grande)
+      mapTables() {
+        if (this._tables) return this._tables;
+        const seen = new Set(), out = [];
+        for (const it of this.items) {
+          if (it.type !== 'maptable' || seen.has(key(it.x, it.y))) continue;
+          const t = { x0: it.x, y0: it.y, x1: it.x, y1: it.y, tiles: [] }, stack = [[it.x, it.y]];
+          seen.add(key(it.x, it.y));
+          while (stack.length) {
+            const [x, y] = stack.pop();
+            t.tiles.push({ x, y }); t.x0 = Math.min(t.x0, x); t.y0 = Math.min(t.y0, y); t.x1 = Math.max(t.x1, x); t.y1 = Math.max(t.y1, y);
+            for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+              const o = this.byTile.get(key(x + dx, y + dy));
+              if (o && o.type === 'maptable' && !seen.has(key(o.x, o.y))) { seen.add(key(o.x, o.y)); stack.push([o.x, o.y]); }
+            }
+          }
+          out.push(t);
+        }
+        // la más grande primero: es «la» mesa de partida
+        out.sort((a, b) => b.tiles.length - a.tiles.length);
+        return (this._tables = out);
+      },
+      // ¿Este asiento da a la mesa de partida? (silla, taburete o sofá pegado a una casilla de la mesa)
+      atMapTable(x, y) {
+        const t = this.mapTables()[0];
+        if (!t || !this.isSeat(x, y)) return false;
+        return t.tiles.some((c) => Math.abs(c.x - x) + Math.abs(c.y - y) === 1);
+      },
     };
     return map.setItems(initialItems || defaultItems());
   }

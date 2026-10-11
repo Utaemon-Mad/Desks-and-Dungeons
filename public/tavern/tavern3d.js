@@ -219,15 +219,18 @@
 
   function buildFurniture() {
     const g = new THREE.Group();
-    const lights = [];
+    const lights = [], hang = [];
     const place = (type, x, y, dir) => {
       const f = MODELS.furniture(type, dir);
       if (!f) return;
       f.obj.position.set(x + 0.5, 0, y + 0.5);
       g.add(f.obj);
+      if (type === 'chandelier') hang.push(f.obj);
       if (f.light) lights.push({ x: x + 0.5, y: f.light.y, z: y + 0.5 + (f.light.z || 0), color: f.light.color, intensity: f.light.intensity, dist: f.light.dist, seed: x * 3 + y, kind: type, bx: x + 0.5, bz: y + 0.5, fire: type === 'fireplace' });
     };
-    for (const it of MAP.items) if (it.type !== 'staff') place(it.type, it.x, it.y, it.dir);
+    for (const it of MAP.items) if (it.type !== 'staff' && it.type !== 'maptable') place(it.type, it.x, it.y, it.dir);
+    // la mesa de partida: las casillas de «mesa con mapa» que se tocan forman una sola mesa grande con el plano encima
+    MAP.mapTables().forEach((t, i) => g.add(buildMapTable(t, i === 0, lights)));
     // sobre la barra: alguna vela, jarras y botellas (siempre en el mismo sitio)
     for (const it of MAP.items) if (it.type === 'bar') {
       const r = rand(it.x * 13.1 + it.y * 7.7), dx = it.x + 0.5 + (r - 0.5) * 0.4, dz = it.y + 0.5 + (rand(it.y * 3.3 + it.x) - 0.5) * 0.4;
@@ -236,7 +239,51 @@
       else { const b = MODELS.mesh(MODELS.cyl(0.04, 0.05, 0.24, 6), MODELS.mat(['#2e7d4f', '#7a2a2a', '#3a5a9a'][Math.floor(r * 30) % 3], { rough: 0.25, metal: 0.1, opacity: 0.85 }), dx, 1.02, dz, g); b.castShadow = false; }
     }
     for (const m of Object.values(MAP.MERCHANTS)) for (const pr of [m.prop, m.prop2].filter(Boolean)) place(pr.type, pr.x, pr.y);
-    return { g, lights };
+    return { g, lights, hang };
+  }
+
+  // Mesa grande de madera con el plano de la próxima mazmorra en pergamino, velas en las esquinas y unas figuritas
+  const planTex = { canvas: null, tex: null, version: -1 };
+  function buildMapTable(t, main, lights) {
+    const g = new THREE.Group();
+    const w = t.x1 - t.x0 + 1, d = t.y1 - t.y0 + 1, cx = t.x0 + w / 2, cz = t.y0 + d / 2, H = 0.56;
+    const wood = MODELS.mat('#5a3418', { rough: 0.55 }), dark = MODELS.mat('#2e1a0c'), brass = MODELS.mat('#c8963a', { metal: 0.85, rough: 0.3 });
+    MODELS.mesh(MODELS.box(w - 0.06, 0.08, d - 0.06), wood, 0, H, 0, g);
+    MODELS.mesh(MODELS.box(w + 0.02, 0.05, d + 0.02), dark, 0, H - 0.06, 0, g);
+    MODELS.mesh(MODELS.box(w - 0.3, 0.12, d - 0.3), dark, 0, H - 0.14, 0, g); // faldón
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      MODELS.mesh(MODELS.cyl(0.07, 0.05, H - 0.08, 8), dark, sx * (w / 2 - 0.22), (H - 0.08) / 2, sz * (d / 2 - 0.22), g);
+      MODELS.mesh(MODELS.box(0.1, 0.02, 0.1), brass, sx * (w / 2 - 0.05), H + 0.045, sz * (d / 2 - 0.05), g); // cantoneras
+    }
+    // pergamino: en la mesa principal es el plano de verdad (se repinta cuando cambia)
+    if (!planTex.canvas) { planTex.canvas = document.createElement('canvas'); planTex.canvas.width = 768; planTex.canvas.height = 512; planTex.tex = new THREE.CanvasTexture(planTex.canvas); planTex.tex.colorSpace = THREE.SRGBColorSpace; planTex.tex.anisotropy = 8; planTex.tex.userData.keep = true; planTex.version = -1; }
+    const pw = w - 0.36, pd = d - 0.3;
+    const paper = new THREE.Mesh(new THREE.PlaneGeometry(pw, pd), new THREE.MeshStandardMaterial({ map: main ? planTex.tex : null, color: main ? '#ffffff' : '#e0cc98', roughness: 0.9 }));
+    paper.rotation.x = -Math.PI / 2; paper.position.set(0, H + 0.042, 0); paper.receiveShadow = true;
+    g.add(paper);
+    // velas en dos esquinas (con su luz) y unas figuritas de plomo
+    for (const [sx, sz] of [[-1, -1], [1, 1]]) {
+      const c = new THREE.Group(); MODELS.candle(c, 0, 0, 0); c.position.set(sx * (w / 2 - 0.1), H + 0.04, sz * (d / 2 - 0.1)); g.add(c);
+      lights.push({ x: cx + sx * (w / 2 - 0.1), y: H + 0.3, z: cz + sz * (d / 2 - 0.1), color: '#ffc070', intensity: 0.9, dist: 3, seed: t.x0 + sx * 3 + sz, kind: 'barcandle' });
+    }
+    ['#c8463a', '#3a7ac8', '#4aa84a'].forEach((col, i) => {
+      const f = new THREE.Group();
+      MODELS.mesh(MODELS.cyl(0.035, 0.04, 0.02, 8), MODELS.mat('#2a2a2e', { metal: 0.5 }), 0, 0.01, 0, f);
+      MODELS.mesh(MODELS.cone(0.03, 0.09, 6), MODELS.mat(col), 0, 0.065, 0, f);
+      MODELS.mesh(MODELS.sph(0.022, 6, 5), MODELS.mat('#e8c8a0'), 0, 0.12, 0, f);
+      f.position.set(w / 2 - 0.13, H + 0.04, -d / 2 + 0.35 + i * 0.12); g.add(f);
+    });
+    // un dado de veinte caras junto al plano
+    const d20 = MODELS.mesh(new THREE.IcosahedronGeometry(0.05), MODELS.mat('#b03030', { rough: 0.4 }), -w / 2 + 0.12, H + 0.09, d / 2 - 0.3, g); d20.rotation.set(0.4, 0.7, 0.2);
+    g.position.set(cx, 0, cz);
+    if (main) T3.mainTable = { cx, cz, w, d };
+    return g;
+  }
+  function refreshPlanTexture() {
+    if (!planTex.canvas || planTex.version === C.mesa.M.version) return;
+    planTex.version = C.mesa.M.version;
+    C.mesa.drawPlan(planTex.canvas.getContext('2d'), planTex.canvas.width, planTex.canvas.height, { title: true, pad: 26 });
+    planTex.tex.needsUpdate = true;
   }
 
   // Modelo de un personaje (se rehace si cambia su aspecto)
@@ -347,18 +394,48 @@
     else L.push({ x: 5, y: 2.6, z: 6, color: '#ffe0b8', intensity: 0.6, dist: 8, shadow: true });
     st.hemi.intensity = C.editing ? 0.95 : 0.4 + fl * 0.6;
     st.setLights(L);
-    C.tavernFx.update(now, fl);
+    C.tavernFx.update(now, fl, T3.top || 0);
     // cámara: la sala entera a la vista (en móvil, más cerca y siguiendo al héroe)
     const mobile = innerWidth <= 820;
     const zoom = (mobile ? 1.15 : Math.max(1.05, Math.min(1.45, (1280 / innerWidth) * 1.3 * Math.max(1, 780 / innerHeight)))) * DD.camZoom;
     st.offset.set(8.2 * zoom, 10.5 * zoom, 8.2 * zoom);
     // con la cámara cerca (móvil o zoom), sigue al héroe; si no, se ve la sala entera
     const follow = (mobile || DD.camZoom < 0.9) && me && !me.where;
-    const fx = follow ? me.px + 0.5 : 7.4, fz = follow ? me.py + 0.5 : 6.4;
+    let fx = follow ? me.px + 0.5 : 7.4, fz = follow ? me.py + 0.5 : 6.4;
+    // sentado a la mesa de partida: la cámara sube y mira la mesa desde arriba (el panel del plano queda al lado)
+    const atMesa = C.mesa.tick() && T3.mainTable;
+    let off = [st.offset.x, st.offset.y, st.offset.z];
+    if (atMesa) {
+      // altura para que quepan la mesa y los sentados en la parte de la pantalla que deja libre el panel
+      const t = T3.mainTable, tan = Math.tan(st.camera.fov * Math.PI / 360);
+      const freeW = mobile ? innerWidth : innerWidth - 440, freeH = mobile ? innerHeight * 0.42 : innerHeight - 150;
+      const hw = (t.w + 2.6) / 2, hd = (t.d + 2.8) / 2;
+      const hgt = Math.max(hd / (tan * freeH / innerHeight), hw / (tan * freeW / innerHeight));
+      off = [0, hgt, hgt * 0.16];
+      fx = t.cx; fz = t.cz;
+    }
+    // la imagen se corre hacia el hueco libre (sin girar la cámara, así la mesa no se deforma)
+    const vo = atMesa ? (mobile ? [0, innerHeight * 0.5 - innerHeight * 0.42 * 0.55] : [220, 20]) : [0, 0];
+    T3.off = T3.off || off.slice();
+    const dtc = Math.min(0.1, (now - (T3.camT || now)) / 1000); T3.camT = now;
+    const k = atMesa || T3.leaving ? 1 - Math.exp(-dtc * 4.5) : 1;
+    for (let i = 0; i < 3; i++) T3.off[i] += (off[i] - T3.off[i]) * k;
+    T3.leaving = atMesa || (T3.leaving && Math.abs(T3.off[1] - off[1]) > 0.05);
+    // vista de arriba: se apagan los haces de luna y se quitan las lámparas del techo, que tapan la mesa
+    T3.top = (T3.top || 0) + ((atMesa ? 1 : 0) - (T3.top || 0)) * (atMesa || T3.leaving ? k : 1);
+    for (const o of T3.furn.hang) o.visible = T3.top < 0.5;
+    T3.vo = T3.vo || [0, 0];
+    for (let i = 0; i < 2; i++) T3.vo[i] += (vo[i] - T3.vo[i]) * (atMesa || T3.leaving ? k : 1);
+    if (Math.abs(T3.vo[0]) + Math.abs(T3.vo[1]) > 0.5) st.camera.setViewOffset(innerWidth, innerHeight, T3.vo[0], T3.vo[1], innerWidth, innerHeight);
+    else if (st.camera.view && st.camera.view.enabled) st.camera.clearViewOffset();
+    st.offset.set(T3.off[0], T3.off[1], T3.off[2]);
     T3.cam = T3.cam || { x: fx, z: fz };
-    T3.cam.x += (fx - T3.cam.x) * 0.08; T3.cam.z += (fz - T3.cam.z) * 0.08;
-    const panelShift = !mobile && !heroesEl.classList.contains('closed') ? 0.9 : 0;
+    { const kc = atMesa || T3.leaving ? k : 0.08; T3.cam.x += (fx - T3.cam.x) * kc; T3.cam.z += (fz - T3.cam.z) * kc; }
+    const panelShift = !atMesa && !mobile && !heroesEl.classList.contains('closed') ? 0.9 : 0;
     st.lookAt(T3.cam.x + panelShift, T3.cam.z - panelShift);
+    // con la vista de arriba no hace falta el efecto maqueta
+    st.grade.tilt = atMesa ? 0 : 0.8;
+    refreshPlanTexture();
     st.render();
   }
 
