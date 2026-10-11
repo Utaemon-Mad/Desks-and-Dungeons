@@ -200,6 +200,14 @@
       case 'special': log(`${ev.name}: ${{ slam: '¡golpe sísmico!', nova: '¡nova de muerte!', breath: '¡aliento de fuego!', volley: '¡andanada!', summon: 'llama a sus esbirros', charge: '¡embiste!' }[ev.s] || ''}`, 'hurt'); break;
       case 'summon': for (let i = 0; i < 10; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7cff6a', true); break;
       case 'portal': if (ev.left) game.portalEnd = performance.now() + ev.left; log(`¡${ev.name} ha caído!${ev.left ? ' Tenéis un minuto para recoger el botín.' : ' Se abre el portal al piso siguiente.'}`, 'good big'); if (!ev.left) DD.toast('🏆 ¡Jefe derrotado! Cruza el portal para bajar.'); DD.sfx('portal'); for (let i = 0; i < 30; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7ad0ff', true); break;
+      case 'combo': {
+        const t = game.ents.get(ev.id);
+        float(ev.x, ev.y, ev.name, '#ffd23f', true);
+        if (t) { ring(t.rx ?? t.x, t.ry ?? t.y, '#7ad0ff'); for (let i = 0; i < 16; i++) spark(t.x + 0.5, t.y + 0.4, i % 2 ? '#bfe8ff' : '#ffd23f', true); }
+        log(`${who(ev.by)}: ${ev.name}`, ev.by === me ? 'mine' : '');
+        if (ev.by === me) DD.sfx('hit', { crit: true });
+        break;
+      }
       case 'downed': {
         log(`${who(ev.id)} ha caído. ${ev.id === me ? 'Un compañero puede reanimarte.' : '¡Ponte a su lado para reanimarlo!'}`, 'hurt');
         DD.sfx('down', { vol: ev.id === me ? 1 : 0.6 });
@@ -217,7 +225,7 @@
       case 'ping':
         (game.pings = game.pings || []).push({ x: ev.x, y: ev.y, k: ev.k, id: ev.id, start: now });
         DD.sfx('ping', { vol: ev.id === me ? 0.6 : 1 });
-        if (ev.id !== me) log(`${who(ev.id)} ${ev.k === 'danger' ? '⚠️ avisa de peligro' : '📍 marca un sitio'}.`, 'mine');
+        if (ev.id !== me) log(`${who(ev.id)} ${{ danger: '⚠️ avisa: ¡cuidado!', help: '🆘 pide ayuda', omw: '🏃 dice: ¡voy!' }[ev.k] || '📍 marca un sitio'}.`, ev.k === 'help' ? 'hurt' : 'mine');
         break;
       case 'petdown': log(`${ev.name} huye malherido; volverá en 30 s.`, 'hurt'); break;
       case 'petskill': { const pt = game.ents.get(ev.id); if (pt) { float(pt.x, pt.y, ev.name + '!', '#ffb040', ev.owner === me); for (let i = 0; i < 10; i++) spark(pt.x + 0.5, pt.y + 0.4, '#ffb040', true); } break; }
@@ -815,6 +823,8 @@
     DD.net.send({ t: 'droll', dx: Math.sign(dx), dy: Math.sign(dy) });
   }
   $('#droll').onclick = () => doRoll();
+  // señales rápidas: se marcan donde estás
+  for (const b of document.querySelectorAll('#dsignals .btn')) b.onclick = () => { const me = game.ents.get(DD.myId); if (me) DD.net.send({ t: 'dping', x: me.x, y: me.y, k: b.dataset.k }); };
   $('#dfish').onclick = () => DD.net.send({ t: 'dfish' });
   game.particles = { push() {} }; // compatibilidad: las chispas viven en 3D
 

@@ -302,6 +302,10 @@ async function instanceTests() {
     const t0 = Date.now();
     for (let i = 0; i < 70 && pa.downed; i++) gi.tickPlayer(pa, t0 + i * 50, 0.05);
     assert.ok(!pa.downed && ua.combat.hp > 0, 'el compañero lo reanima');
+    const gg = [...gi.enemies.values()][0];
+    gg.slowUntil = Date.now() + 5000; gg.slowBy = 'gb';
+    gi.damageEnemy(pa, gg, 3, { noCrit: true });
+    assert.ok(gi.events.some((ev) => ev.e === 'combo' && ev.by === 'ga'), 'combo: el compañero rompe al congelado');
     assert.ok(gi.summaryStats().some((x) => x.name === 'gb' && x.revives === 1) && gi.summaryStats().some((x) => x.name === 'ga' && x.downs === 1), 'resumen: reanimaciones y caídas');
   }
 

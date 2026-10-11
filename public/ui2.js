@@ -476,7 +476,7 @@
     body.appendChild(el('p', 'tag', `«${m.name}» · nivel ${m.level} · ${mins}:${String(secs).padStart(2, '0')}`));
     // premios de la partida (también los de broma)
     const best = (k) => rows.reduce((a, b) => (b[k] > (a ? a[k] : 0) ? b : a), null);
-    const awards = [['dmg', '🗡️ Más daño'], ['heal', '💚 Más curas'], ['kills', '☠️ Más bajas'], ['revives', '🤝 Ángel de la guarda'], ['downs', '🪦 Besó el suelo']];
+    const awards = [['dmg', '🗡️ Más daño'], ['heal', '💚 Más curas'], ['kills', '☠️ Más bajas'], ['revives', '🤝 Ángel de la guarda'], ['combos', '⚡ Rey del combo'], ['downs', '🪦 Besó el suelo']];
     const aw = el('div', 'sum-awards');
     for (const [k, label] of awards) { const b = best(k); if (b && b[k] > 0) aw.appendChild(el('span', 'sum-award', `${label}: ${b.name}`)); }
     if (rows.length > 1 && aw.children.length) body.appendChild(aw);

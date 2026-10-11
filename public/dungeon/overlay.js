@@ -12,7 +12,7 @@
     game.pings = game.pings.filter((p) => now - p.start < 4000);
     for (const p of game.pings) {
       const s = D.stage.project(p.x + 0.5, 0, p.y + 0.5), t = (now - p.start) / 1000;
-      const col = p.k === 'danger' ? '255,80,60' : '255,215,90';
+      const col = p.k === 'danger' ? '255,80,60' : p.k === 'help' ? '255,120,200' : p.k === 'omw' ? '120,220,255' : '255,215,90';
       for (let r = 0; r < 2; r++) {
         const ph = (t * 1.4 + r * 0.5) % 1;
         g.strokeStyle = `rgba(${col},${(1 - ph) * Math.min(1, (4 - t))})`; g.lineWidth = 3;
@@ -20,7 +20,7 @@
       }
       const bob = Math.sin(t * 6) * 4;
       g.font = '26px sans-serif'; g.textAlign = 'center';
-      g.fillText(p.k === 'danger' ? '⚠️' : '📍', s.x, s.y - 30 + bob);
+      g.fillText({ danger: '⚠️', help: '🆘', omw: '🏃' }[p.k] || '📍', s.x, s.y - 30 + bob);
       g.font = '600 12px "Pixelify Sans", sans-serif'; g.fillStyle = `rgb(${col})`;
       g.fillText(who(p.id), s.x, s.y - 54 + bob);
     }

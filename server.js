@@ -894,7 +894,7 @@ wss.on('connection', (ws) => {
         const x = Math.floor(Number(msg.x)), y = Math.floor(Number(msg.y));
         if (!(x >= 0 && y >= 0 && x < i.w && y < i.h)) break;
         user.lastPing = now;
-        i.event({ e: 'ping', id: user.id, x, y, k: msg.k === 'danger' ? 'danger' : 'here' });
+        i.event({ e: 'ping', id: user.id, x, y, k: ['danger', 'help', 'omw'].includes(msg.k) ? msg.k : 'here' });
         break;
       }
       case 'dattack': { const i = inst(); if (i && allowGame()) i.attack(user.id, String(msg.id)); break; }

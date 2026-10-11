@@ -912,11 +912,14 @@ class Instance {
     let crit = false;
     if (!o.noCrit && (p.critNext || rnd() * 100 < p.d.crit)) { crit = true; dmg *= p.d.critMult; p.critNext = false; }
     if (e.vulnUntil > Date.now()) dmg *= 1 + e.vuln / 100;
+    // combos entre compañeros: aprovechar lo que ha preparado otro
+    const combo = this.combo(p, e, o);
+    if (combo) { dmg *= combo.mult; if (combo.crit) crit = true; }
     if (o.undead && e.m.undead) dmg *= 1 + o.undead;
     dmg *= 1 - RULES.reduction(o.magic ? e.m.armor * 0.5 : e.m.armor, p.d.level);
     if (o.elem) {
       dmg += o.elem.dmg;
-      if (o.elem.slow && !e.pvp) e.slowUntil = Math.max(e.slowUntil, Date.now() + RULES.ELEMENTS.frio.slow);
+      if (o.elem.slow && !e.pvp) { e.slowUntil = Math.max(e.slowUntil, Date.now() + RULES.ELEMENTS.frio.slow); e.slowBy = p.user.id; }
       if (o.elem.poison > 0 && !e.pvp) e.dots.push({ by: p.user.id, per: o.elem.poison / 3, left: 3, next: Date.now() + 1000 });
     }
     if (e.pvp) {
@@ -992,7 +995,7 @@ class Instance {
         if (ab.flank && [...this.players.values()].some((o) => o !== p && cheb(o, enemy) <= 1)) mult += ab.flank;
         const dealt = this.damageEnemy(p, enemy, dmgFor() * mult, { name: ab.name, leech: ab.leech, kind: 'ability' });
         if (ab.dot && this.enemies.has(enemy.id)) this.addDot(p, enemy, this.weaponRoll(p) * ab.dot, ab.dur);
-        if (ab.stun && this.enemies.has(enemy.id)) enemy.stunUntil = now + ab.stun;
+        if (ab.stun && this.enemies.has(enemy.id)) { enemy.stunUntil = now + ab.stun; enemy.stunBy = p.user.id; }
         void dealt;
         break;
       }
@@ -1004,7 +1007,7 @@ class Instance {
         break;
       }
       case 'mark': {
-        enemy.vuln = ab.vuln; enemy.vulnUntil = now + ab.dur;
+        enemy.vuln = ab.vuln; enemy.vulnUntil = now + ab.dur; enemy.vulnBy = p.user.id;
         if (ab.dot) this.addDot(p, enemy, this.spellRoll(p) * ab.dot, ab.dur);
         this.event({ e: 'fx', kind: 'mark', x: enemy.x, y: enemy.y, id: enemy.id, color: ab.dot ? '#a05aff' : '#ff4a4a' });
         enemy.aggro = enemy.aggro || p.user.id;
@@ -1016,8 +1019,8 @@ class Instance {
         for (const e of this.enemiesNear(c0, ab.radius, p)) {
           if (ab.mult) this.damageEnemy(p, e, dmgFor(), { magic, name: ab.name, fx: ab.fx });
           if (!this.enemies.has(e.id)) continue;
-          if (ab.stun) e.stunUntil = now + ab.stun;
-          if (ab.slow) e.slowUntil = now + ab.slow;
+          if (ab.stun) { e.stunUntil = now + ab.stun; e.stunBy = p.user.id; }
+          if (ab.slow) { e.slowUntil = now + ab.slow; e.slowBy = p.user.id; }
           if (ab.dot) this.addDot(p, e, this.spellRoll(p) * ab.dot, ab.dur);
         }
         break;
@@ -1079,7 +1082,7 @@ class Instance {
         p.x = options[0].x; p.y = options[0].y; p.sm = 120; p.path = [];
         this.event({ e: 'fx', kind: ab.kind, from, to: { x: p.x, y: p.y }, id: p.user.id });
         if (ab.kind === 'blink') p.critNext = true;
-        else { this.damageEnemy(p, enemy, dmgFor(), { name: ab.name }); if (this.enemies.has(enemy.id)) enemy.stunUntil = now + ab.stun; }
+        else { this.damageEnemy(p, enemy, dmgFor(), { name: ab.name }); if (this.enemies.has(enemy.id)) { enemy.stunUntil = now + ab.stun; enemy.stunBy = p.user.id; } }
         p.target = enemy.id;
         this.onEnter(p);
         break;
@@ -1105,11 +1108,24 @@ class Instance {
   }
 
   // ---------- Muerte de un enemigo: experiencia, oro y botín ----------
+  // Combos entre clases: el congelado se rompe con un golpe físico de otro (crítico), el aturdido recibe más
+  // y el marcado por un compañero, todavía más. Sólo cuentan los preparativos de otro jugador.
+  combo(p, e, o) {
+    if (this.players.size < 2 || e.pvp || !p.user) return null;
+    const now = Date.now(), me = p.user.id;
+    let c = null;
+    if (e.slowUntil > now && e.slowBy && e.slowBy !== me && !o.magic) { c = { name: '❄️ ¡Hielo roto!', mult: 1.5, crit: true }; e.slowUntil = 0; }
+    else if (e.stunUntil > now && e.stunBy && e.stunBy !== me && e.stunCombo !== e.stunUntil) { c = { name: '💫 ¡Golpe al indefenso!', mult: 1.35, crit: true }; e.stunCombo = e.stunUntil; }
+    else if (e.vulnUntil > now && e.vulnBy && e.vulnBy !== me && now - (e.vulnCombo || 0) > 2500) { c = { name: '🎯 ¡Marca aprovechada!', mult: 1.25 }; e.vulnCombo = now; }
+    if (c) { this.event({ e: 'combo', id: e.id, by: me, name: c.name, x: e.x, y: e.y }); this.stat(p, 'combos', 1); }
+    return c;
+  }
+
   // Cuenta para el resumen al acabar la mazmorra
   stat(p, k, v) {
     if (!p || !p.user) return;
     let st = this.stats.get(p.user.id);
-    if (!st) this.stats.set(p.user.id, st = { name: p.user.name, dmg: 0, heal: 0, kills: 0, downs: 0, revives: 0 });
+    if (!st) this.stats.set(p.user.id, st = { name: p.user.name, dmg: 0, heal: 0, kills: 0, downs: 0, revives: 0, combos: 0 });
     st[k] += v;
   }
   summaryStats() {
