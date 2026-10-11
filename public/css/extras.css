@@ -207,3 +207,13 @@ body.cb .dlog-line.loot-conjunto { color: #cc79a7; }
 @media (prefers-reduced-motion: reduce) {
   .overlay:not(.hidden):not(.title-screen), .overlay:not(.hidden):not(.title-screen) > .panel { animation: none; }
 }
+
+/* ---------- Resumen de la partida ---------- */
+#sumwin .panel { width: min(560px, calc(100% - 24px)); }
+.sum-awards { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.sum-award { background: rgba(0, 0, 0, .25); border: 1px solid #8c6038; border-radius: 12px; padding: 2px 10px; font-size: 13px; color: #ffe0a0; }
+.sum-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.sum-table th { text-align: right; color: #e0c090; font-weight: 600; padding: 4px 6px; border-bottom: 1px solid #8c6038; }
+.sum-table td { text-align: right; padding: 4px 6px; color: var(--parch); border-bottom: 1px solid rgba(140, 96, 56, .35); }
+.sum-table th:first-child, .sum-table td:first-child { text-align: left; }
+.sum-table tr.me td { color: #ffe9a8; font-weight: 700; }

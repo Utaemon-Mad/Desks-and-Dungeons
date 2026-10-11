@@ -89,6 +89,15 @@
         if (!isMe) { g.fillStyle = '#120a08'; g.fillRect(s.x - bw / 2 - 1, s.y - 1, bw + 2, 6); g.fillStyle = '#4cc85c'; g.fillRect(s.x - bw / 2, s.y, bw * Math.max(0, e.hp / e.maxHp), 4); }
         const b = game.bubbles.get(e.id);
         if (b && b.until > now) drawBubble(s.x, s.y - 22, b.text);
+        // tumbado: anillo que se llena mientras un compañero lo reanima
+        if (e.down) {
+          const f = P(e._top.x, 0.3, e._top.z), k = (e.down - 1) / 100;
+          g.lineWidth = 5; g.strokeStyle = 'rgba(0,0,0,.6)'; g.beginPath(); g.arc(f.x, f.y - 30, 16, 0, Math.PI * 2); g.stroke();
+          g.strokeStyle = '#7dff8a'; g.beginPath(); g.arc(f.x, f.y - 30, 16, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2); g.stroke();
+          g.font = '18px serif'; g.fillText('💀', f.x, f.y - 30);
+          const txt = isMe ? 'Esperando a un compañero…' : '¡Ponte a su lado para reanimarlo!';
+          g.font = '600 12px "Pixelify Sans", sans-serif'; g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(txt, f.x, f.y - 56); g.fillStyle = '#b8ffb0'; g.fillText(txt, f.x, f.y - 56);
+        }
       }
     }
     // objeto del suelo bajo el ratón: sólo su nombre, con el color de su calidad (la ficha completa, en el inventario)
@@ -131,6 +140,17 @@
       g.globalAlpha = 1;
     }
     // cuenta atrás del duelo
+    // has caído: cuánto queda para que te reanimen antes de volver a la taberna
+    const meE = game.ents.get(DD.myId);
+    if (meE && meE.down) {
+      if (meE._dl !== meE.downLeft) { meE._dl = meE.downLeft; meE.downEnd = now + (meE.downLeft || 0); }
+      const left = Math.max(0, Math.ceil((meE.downEnd - now) / 1000));
+      g.fillStyle = 'rgba(40,0,0,.35)'; g.fillRect(0, 0, innerWidth, innerHeight);
+      g.font = '64px "Jacquard 12", serif'; g.lineWidth = 6; g.strokeStyle = '#000';
+      g.strokeText('Has caído', innerWidth / 2, innerHeight * 0.32); g.fillStyle = '#ff7a6a'; g.fillText('Has caído', innerWidth / 2, innerHeight * 0.32);
+      const sub = meE.down > 1 ? '¡Te están reanimando!' : `Un compañero puede reanimarte · ${left} s`;
+      g.font = '600 18px "Pixelify Sans", sans-serif'; g.lineWidth = 4; g.strokeText(sub, innerWidth / 2, innerHeight * 0.32 + 46); g.fillStyle = '#f4ead2'; g.fillText(sub, innerWidth / 2, innerHeight * 0.32 + 46);
+    }
     if (game.duelAt) {
       const left = game.duelAt - now;
       if (left > -900) {
@@ -148,7 +168,6 @@
     if (now - game.fps.t > 1000) { game.fps.v = game.fps.n; game.fps.n = 0; game.fps.t = now; }
     if (DD.gfx && DD.gfx.fps) { g.textAlign = 'left'; g.font = '600 12px monospace'; g.fillStyle = '#7dff8a'; g.fillText(`${game.fps.v} fps`, 10, innerHeight - 12); g.textAlign = 'center'; }
     // botón de pescar junto al agua
-    const meE = game.ents.get(DD.myId);
     const nearWater = map.kind === 'world' && meE && [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]].some(([dx, dy]) => WATER_T.has(map.tiles[(meE.y + dy) * map.w + meE.x + dx]));
     const fb = $('#dfish');
     if (fb.classList.contains('hidden') === !!nearWater) fb.classList.toggle('hidden', !nearWater);

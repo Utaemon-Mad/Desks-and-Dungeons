@@ -276,8 +276,34 @@ async function instanceTests() {
   linst.damageEnemy(lp, g2, 99999, { noCrit: true, kind: 'melee' });
   assert.ok(linst.events.some((e) => e.e === 'fx' && e.color === '#ff8a1a') || lsent.some((m) => (m.events || []).some((e) => e.color === '#ff8a1a')), 'el enemigo estalla al morir');
   lu.combat.hp = Math.round(lp.d.hp * 0.32);
-  linst.hurtPlayer(lp, 5, { raw: true });
+  linst.hurtPlayer(lp, 5, { raw: true, magic: true }); // mágico: sin bloqueo con escudo (que lo haría al azar)
   assert.ok(lp.shield > 0, 'la égida se levanta al bajar del 30%');
+
+  // En grupo: botín para cada uno, reanimar al caído y resumen al acabar
+  {
+    const gi = new Instance({ ...def, id: 'grp', spawns: [{ k: 'goblin-minion', x: 9, y: 2 }], chests: [] }, { ...hooks, send: () => {}, kill: () => {} });
+    const mk = (id) => ({ id, name: id, look: { cls: 'guerrero' }, profile: { xp: 0, gold: 0, char: RULES.newChar('guerrero'), equip: {}, buffs: {} } });
+    const ua = mk('ga'), ub = mk('gb');
+    gi.join(ua); gi.join(ub);
+    const pa = gi.players.get('ga'), pb = gi.players.get('gb');
+    pb.x = 6; pb.y = 3;
+    gi.dropAt(3, 1, { item: RULES.makeItem(RULES.seeded('own'), { ilvl: 1, rarity: 'magico', slot: 'pecho' }), owner: 'ga' });
+    assert.ok(gi.snapshot(pa).loot.length === 1 && gi.snapshot(pb).loot.length === 0, 'cada uno ve sólo su botín');
+    const own = [...gi.loot.values()][0];
+    gi.pickUp(pb, own);
+    assert.ok(gi.loot.has(own.id), 'nadie coge el botín de otro');
+    gi.dropAt(pa.x, pa.y + 1, { gold: 5 });
+    gi.tick(Date.now());
+    assert.ok(![...gi.loot.values()].some((l) => l.gold), 'el oro cercano se recoge solo');
+    ua.combat.hp = 1;
+    gi.hurtPlayer(pa, 999, { raw: true, magic: true });
+    assert.ok(pa.downed && gi.players.has('ga'), 'en grupo se queda tumbado en vez de volver a la taberna');
+    pb.x = pa.x + 1; pb.y = pa.y;
+    const t0 = Date.now();
+    for (let i = 0; i < 70 && pa.downed; i++) gi.tickPlayer(pa, t0 + i * 50, 0.05);
+    assert.ok(!pa.downed && ua.combat.hp > 0, 'el compañero lo reanima');
+    assert.ok(gi.summaryStats().some((x) => x.name === 'gb' && x.revives === 1) && gi.summaryStats().some((x) => x.name === 'ga' && x.downs === 1), 'resumen: reanimaciones y caídas');
+  }
 
   // Arena: los golpes al rival le quitan vida de verdad, y al caer termina el duelo
   let ended = null;

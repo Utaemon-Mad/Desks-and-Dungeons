@@ -200,6 +200,19 @@
       case 'special': log(`${ev.name}: ${{ slam: '¡golpe sísmico!', nova: '¡nova de muerte!', breath: '¡aliento de fuego!', volley: '¡andanada!', summon: 'llama a sus esbirros', charge: '¡embiste!' }[ev.s] || ''}`, 'hurt'); break;
       case 'summon': for (let i = 0; i < 10; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7cff6a', true); break;
       case 'portal': if (ev.left) game.portalEnd = performance.now() + ev.left; log(`¡${ev.name} ha caído!${ev.left ? ' Tenéis un minuto para recoger el botín.' : ' Se abre el portal al piso siguiente.'}`, 'good big'); if (!ev.left) DD.toast('🏆 ¡Jefe derrotado! Cruza el portal para bajar.'); DD.sfx('portal'); for (let i = 0; i < 30; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7ad0ff', true); break;
+      case 'downed': {
+        log(`${who(ev.id)} ha caído. ${ev.id === me ? 'Un compañero puede reanimarte.' : '¡Ponte a su lado para reanimarlo!'}`, 'hurt');
+        DD.sfx('down', { vol: ev.id === me ? 1 : 0.6 });
+        if (ev.id === me) game.lastHurt = now;
+        break;
+      }
+      case 'revive': {
+        const t = game.ents.get(ev.id);
+        log(`${who(ev.by)} reanima a ${who(ev.id)}.`, 'good');
+        if (t) { for (let i = 0; i < 24; i++) spark(t.x + 0.5, t.y + 0.4, i % 2 ? '#7dff8a' : '#fff6a0', true); game.fx.push({ kind: 'heal', x: t.x, y: t.y, start: now, dur: 700 }); }
+        DD.sfx('heal');
+        break;
+      }
       case 'down': log(`${who(ev.id)} cae.`, 'hurt'); DD.sfx('down', { vol: ev.id === me ? 1 : 0.6 }); if (ev.id !== me) DD.toast(`💀 ${who(ev.id)} ha caído y vuelve a la taberna.`); break;
       case 'ping':
         (game.pings = game.pings || []).push({ x: ev.x, y: ev.y, k: ev.k, id: ev.id, start: now });
@@ -904,7 +917,10 @@
       if (e.stun) o.rotation.z = Math.sin(now / 90) * 0.06; else o.rotation.z = 0;
       const castK = e.castAt ? (now - e.castAt) / 450 : 1;
       if (o.userData.rod) o.userData.rod.visible = !!e.fishing;
-      MODELS.animate(o.userData.mount ? o.children[1] : o, { moving: e.moving, run: (e.dur || 200) < 330, phase: e.phase || 0, t: now, attack: atk, sit: !!o.userData.mount, cast: castK < 1 ? castK : 0, fish: !!e.fishing, attackAt: e.lunge, castAt: e.castAt, hitAt: e.hitUntil, rollAt: e.rollAt });
+      // tumbado esperando a que lo reanimen
+      if (e.down) { e.downAt = e.downAt || now; } else e.downAt = 0;
+      if (e.down && !gl) o.rotation.z = Math.PI / 2;
+      MODELS.animate(o.userData.mount ? o.children[1] : o, { deadAt: e.downAt || undefined, moving: e.moving, run: (e.dur || 200) < 330, phase: e.phase || 0, t: now, attack: atk, sit: !!o.userData.mount, cast: castK < 1 ? castK : 0, fish: !!e.fishing, attackAt: e.lunge, castAt: e.castAt, hitAt: e.hitUntil, rollAt: e.rollAt });
       if (e.wb && Math.random() < 0.5) fxp.emit({ x: e.rx + 0.5 + (Math.random() - 0.5), y: 0.1, z: e.ry + 0.5 + (Math.random() - 0.5), vy: 1 + Math.random(), color: '#a05aff', size: 0.12, life: 0.9 });
       if (e.kind === 'pet' && e.evo === 2 && Math.random() < 0.15) fxp.emit({ x: e.rx + 0.5, y: 0.4, z: e.ry + 0.5, vy: 0.6, vx: (Math.random() - 0.5) * 0.4, color: '#7affff', size: 0.06, life: 0.6 });
       if (o.userData.mount) {

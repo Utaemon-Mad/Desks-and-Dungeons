@@ -49,3 +49,6 @@
   .inv2 { grid-template-columns: 1fr; }
   .inv-doll { grid-template-columns: 80px 110px 80px; grid-template-rows: 90px 150px 90px; }
 }
+
+/* objeto que te haría más fuerte */
+.icell .upg-mark { position: absolute; left: 3px; top: 1px; font-size: 11px; color: #5aff6a; text-shadow: 0 1px 0 #000, 0 0 4px rgba(90, 255, 106, .6); pointer-events: none; }

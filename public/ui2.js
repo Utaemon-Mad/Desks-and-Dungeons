@@ -462,6 +462,37 @@
   }
 
   // ======================================================================
+  //  Resumen al acabar una mazmorra: daño, curas, bajas, caídas y reanimaciones de cada uno
+  // ======================================================================
+  const sumWin = el('div', 'overlay win hidden'); sumWin.id = 'sumwin';
+  sumWin.innerHTML = '<div class="panel card"><button class="mini close-x" type="button" title="Cerrar">✕</button><div class="panel-title">🏆 RESUMEN DE LA PARTIDA</div><div id="sum-body"></div></div>';
+  document.body.appendChild(sumWin);
+  sumWin.querySelector('.close-x').onclick = () => closeOverlay('sumwin');
+  DD.on('dsummary', (m) => {
+    const rows = (m.stats || []).slice().sort((a, b) => b.dmg - a.dmg);
+    if (!rows.length) return;
+    const body = $('#sum-body'); body.innerHTML = '';
+    const mins = Math.floor((m.ms || 0) / 60000), secs = Math.floor(((m.ms || 0) % 60000) / 1000);
+    body.appendChild(el('p', 'tag', `«${m.name}» · nivel ${m.level} · ${mins}:${String(secs).padStart(2, '0')}`));
+    // premios de la partida (también los de broma)
+    const best = (k) => rows.reduce((a, b) => (b[k] > (a ? a[k] : 0) ? b : a), null);
+    const awards = [['dmg', '🗡️ Más daño'], ['heal', '💚 Más curas'], ['kills', '☠️ Más bajas'], ['revives', '🤝 Ángel de la guarda'], ['downs', '🪦 Besó el suelo']];
+    const aw = el('div', 'sum-awards');
+    for (const [k, label] of awards) { const b = best(k); if (b && b[k] > 0) aw.appendChild(el('span', 'sum-award', `${label}: ${b.name}`)); }
+    if (rows.length > 1 && aw.children.length) body.appendChild(aw);
+    const t = el('table', 'sum-table');
+    t.innerHTML = '<tr><th>Héroe</th><th>Daño</th><th>Curas</th><th>Bajas</th><th>Caídas</th><th>Reanim.</th></tr>';
+    for (const r of rows) {
+      const tr = el('tr', r.name === (DD.me && DD.me.name) ? 'me' : '');
+      for (const v of [r.name, r.dmg, r.heal, r.kills, r.downs, r.revives]) tr.appendChild(el('td', '', String(v)));
+      t.appendChild(tr);
+    }
+    body.appendChild(t);
+    // se abre al volver a la taberna, después del fundido
+    setTimeout(() => openOverlay('sumwin'), 900);
+  });
+
+  // ======================================================================
   //  Asalto semanal: mismo mapa para todos, más duro, cofre semanal y clasificación por tiempo
   // ======================================================================
   const raidWin = el('div', 'overlay win hidden'); raidWin.id = 'raidwin';
