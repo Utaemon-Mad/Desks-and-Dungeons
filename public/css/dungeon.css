@@ -9,6 +9,13 @@
 #dboss { position: absolute; left: 50%; top: 74px; transform: translateX(-50%); width: min(460px, calc(100% - 40px)); z-index: 3; text-align: center; }
 #dboss-name { font-family: 'Jacquard 12', var(--font); font-size: 26px; color: #ff9a7a; text-shadow: 0 2px 0 #000, 0 0 10px #a0201a; }
 #dboss .meter { height: 14px; border-color: #1a0604; }
+/* cuenta atrás para salir después del jefe */
+#dportal { position: absolute; left: 50%; top: 74px; transform: translateX(-50%); z-index: 4; display: flex; flex-direction: column; align-items: center; gap: 4px;
+  background: rgba(14, 8, 4, .82); border: 2px solid #c8a040; border-radius: 8px; padding: 8px 18px 10px; box-shadow: 0 0 18px rgba(122, 208, 255, .35); text-align: center; }
+#dportal.hidden { display: none; }
+#dportal b { font-family: 'Jacquard 12', var(--font); font-size: 24px; color: #ffd77a; text-shadow: 0 2px 0 #000; font-weight: 400; }
+#dportal span { font-size: 14px; color: #cfe8ff; }
+#dportal .btn { margin-top: 2px; padding: 6px 22px; }
 body.in-dungeon #heroes, body.in-dungeon #log { display: none; }
 .dlog { position: absolute; left: 12px; bottom: 170px; width: min(520px, calc(100% - 24px)); z-index: 3; display: flex; flex-direction: column; gap: 1px; pointer-events: none;
   font-family: var(--mono); font-size: 16px; line-height: 1.05; text-shadow: 0 2px 0 #000; }

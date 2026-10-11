@@ -108,3 +108,6 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Talentos en `char.talents` (`TALENTS` en engine.js); `derive` los suma como el equipo y da `d.abBoost` por habilidad.
 - progress.js: recompensa diaria (`LOGIN_REWARDS`, `acct.daily`), Asalto semanal (`RAID`, mapa con semilla de la semana), temporadas (`season:<n>` en meta), mejoras de la taberna (`room.fund`) y mercado (`market` en meta).
 - Los archivos estáticos se sirven con gzip y ETag; `assets/` y `vendor/` se guardan un día en el navegador.
+
+## Pendiente (para más adelante)
+- Pasar de Render a Railway: no se duerme y permite disco que se conserva. Pasos: conectar el repo (rama `main`, arranque `npm start`, puerto en `PORT`), añadir un volumen en `/data` y las variables `DATA_DIR=/data`, `SAVE_SECRET` y `ADMIN_KEY`. Opcional: `railway.json` y comprobar que `data/` se crea en el volumen. Coste estimado: plan Hobby (~5 $/mes) para un grupo de amigos.

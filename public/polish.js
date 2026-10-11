@@ -61,9 +61,7 @@
     loot.style.setProperty('--rc', RULES.itemColor(it));
     loot.querySelector('small').textContent = it.leg ? `★ ¡LEGENDARIO! · ${RULES.LEGENDARY[it.leg].icon} ${RULES.LEGENDARY[it.leg].name}` : it.rarity === 'conjunto' ? '¡OBJETO DE CONJUNTO!' : '¡OBJETO ÚNICO!';
     loot.querySelector('b').textContent = it.name;
-    let line = '';
-    try { line = RULES.typeLine ? RULES.typeLine(it) : ''; } catch { line = ''; }
-    loot.querySelector('span').textContent = line;
+    loot.querySelector('span').textContent = 'Míralo en tu equipo (🎒)';
     loot.classList.remove('hidden');
     loot.classList.remove('play'); void loot.offsetWidth; loot.classList.add('play');
     clearTimeout(lootT); lootT = setTimeout(() => loot.classList.add('hidden'), 4200);

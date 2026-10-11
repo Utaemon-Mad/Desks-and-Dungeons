@@ -126,7 +126,20 @@
     return c;
   }
 
+  // Cuenta atrás para salir después de derrotar al jefe (el servidor saca a todos al llegar a cero)
+  const portalEl = $('#dportal');
+  $('#dportal-go').onclick = () => DD.net.send({ t: 'dfinish' });
+  function updatePortal() {
+    const left = game.portalEnd ? game.portalEnd - performance.now() : 0;
+    const on = left > 0 && game.active;
+    portalEl.classList.toggle('hidden', !on);
+    if (!on) return;
+    const s = Math.ceil(left / 1000);
+    $('#dportal-t').textContent = `Recoge el botín. Volvéis a la taberna en ${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  }
+
   function updateBar() {
+    updatePortal();
     const y = game.you;
     if (!y) return;
     const now = serverNow();
