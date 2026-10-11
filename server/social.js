@@ -14,7 +14,7 @@ module.exports = function (ctx) {
   function tavernView(room, user) {
     const f = room.fund || { gold: 0, donors: {} };
     const donors = Object.values(f.donors || {}).sort((a, b) => b.gold - a.gold).slice(0, 8);
-    return { t: 'tavern:info', gold: f.gold, level: PROG.tavernLevel(f), bonus: PROG.tavernBonus(f), donors, feats: store.meta('feats:' + room.name) || [], mine: ((f.donors || {})[user.cid] || {}).gold || 0 };
+    return { t: 'tavern:info', gold: f.gold, level: PROG.tavernLevel(f), bonus: PROG.tavernBonus(f), donors, feats: store.meta('feats:' + room.name) || [], mine: ((f.donors || {})[user.cid] || {}).gold || 0, goal: goalView(room), trophies: trophyWall(room) };
   }
   function donate(room, user, amount) {
     const n = Math.max(1, Math.min(user.profile.gold, Math.floor(Number(amount) || 0)));
@@ -36,6 +36,51 @@ module.exports = function (ctx) {
     }
     return true;
   }
+
+  // ---------- Objetivo semanal del grupo ----------
+  function goalState(room) {
+    const week = PROG.weekKey(), key = 'goal:' + room.name;
+    let g = store.meta(key);
+    if (!g || g.week !== week) { g = { week, id: PROG.groupGoal(week).id, n: 0, done: false, who: {} }; store.setMeta(key, g); }
+    return g;
+  }
+  function goalAdd(room, user, ev, d = {}) {
+    if (!room) return;
+    const G = PROG.groupGoal();
+    if (!PROG.goalMatch(G, ev, d)) return;
+    const g = goalState(room);
+    if (g.done) return;
+    g.n += d.n || 1;
+    const w = g.who[user.cid] || { name: user.name, n: 0 };
+    w.name = user.name; w.n += d.n || 1; g.who[user.cid] = w;
+    if (g.n >= G.n) {
+      g.done = true;
+      system(room, `🎉 ¡Objetivo de la semana cumplido! ${G.icon} ${PROG.goalText(G)}. Bendición para todos hasta el lunes: +${PROG.GOAL_BONUS.xp}% de experiencia y +${PROG.GOAL_BONUS.gold}% de oro.`);
+      feat(room, `${G.icon} El grupo cumple el objetivo de la semana.`);
+    }
+    store.setMeta('goal:' + room.name, g);
+  }
+  // bendición del objetivo cumplido (se suma a las mejoras de la taberna)
+  function goalBonus(room) { const g = room && store.meta('goal:' + room.name); return g && g.done && g.week === PROG.weekKey() ? PROG.GOAL_BONUS : { xp: 0, gold: 0 }; }
+  function goalView(room) {
+    const g = goalState(room), G = PROG.groupGoal();
+    return { icon: G.icon, text: PROG.goalText(G), n: Math.min(g.n, G.n), max: G.n, done: g.done, top: Object.values(g.who).sort((a, b) => b.n - a.n).slice(0, 5) };
+  }
+
+  // ---------- Muro de trofeos de la taberna: la cabeza de cada jefe que cae por primera vez en este servidor ----------
+  function trophyAdd(room, user, k) {
+    if (!room) return;
+    const key = 'trophies:' + room.name;
+    const list = store.meta(key) || [];
+    if (list.some((t) => t.k === k)) return;
+    const M = RULES.MONSTERS[k] || {};
+    list.push({ k, name: M.name || k, by: user.name, ts: Date.now() });
+    store.setMeta(key, list);
+    broadcast(room, { t: 'trophies', list });
+    system(room, `🏆 La cabeza de ${M.name || k} ya cuelga en la pared de la taberna. ¡Obra de ${user.name}!`);
+    feat(room, `🏆 ${user.name} derriba a ${M.name || k} por primera vez en este servidor.`);
+  }
+  const trophyWall = (room) => store.meta('trophies:' + room.name) || [];
 
   // ---------- Mercado entre jugadores (común a todos los servidores) ----------
   function marketList() { return store.meta('market') || []; }
@@ -165,5 +210,5 @@ module.exports = function (ctx) {
     }
   }
 
-  return { claimLogin, donate, feat, marketList, marketView, offerLogin, payOffline, raidDone, raidInfo, seasonAdd, seasonPrize, seasonView, startRaid, tavernView };
+  return { claimLogin, donate, feat, goalAdd, goalBonus, trophyAdd, trophyWall, marketList, marketView, offerLogin, payOffline, raidDone, raidInfo, seasonAdd, seasonPrize, seasonView, startRaid, tavernView };
 };

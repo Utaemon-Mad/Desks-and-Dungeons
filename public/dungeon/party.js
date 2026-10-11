@@ -129,7 +129,10 @@
   // Cuenta atrás para salir después de derrotar al jefe (el servidor saca a todos al llegar a cero)
   const portalEl = $('#dportal');
   $('#dportal-go').onclick = () => DD.net.send({ t: 'dfinish' });
+  // las señales rápidas sólo tienen sentido con compañeros
+  function updateSignals() { $('#dsignals').classList.toggle('hidden', !(game.active && game.mates > 0 && game.map && game.map.kind !== 'arena')); }
   function updatePortal() {
+    updateSignals();
     const left = game.portalEnd ? game.portalEnd - performance.now() : 0;
     const on = left > 0 && game.active;
     portalEl.classList.toggle('hidden', !on);

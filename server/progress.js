@@ -4,6 +4,8 @@
 module.exports = function (ctx) {
   const { PROG, RULES, broadcast, give, levelOf, profileChanged, reward, rnd, saveUser, send, sendMe, store, system } = ctx;
   const seasonAdd = (...a) => ctx.seasonAdd(...a); // de server/social.js
+  const goalAdd = (...a) => ctx.goalAdd(...a); // de server/social.js
+  const trophyAdd = (...a) => ctx.trophyAdd(...a); // de server/social.js
 
   // ---------- Tablón, logros, títulos y clasificaciones ----------
   function ensureBoard(p) {
@@ -30,6 +32,8 @@ module.exports = function (ctx) {
       else p.stats[st] = (p.stats[st] || 0) + n;
     }
     if (ev === 'kill' && d.boss) { p.stats.bosses = (p.stats.bosses || 0) + 1; rankAdd(user, 'bosses', 1); }
+    // objetivo semanal de todo el servidor
+    goalAdd(room, user, ev, d);
     // puntos de temporada
     const SP = PROG.SEASON_PTS;
     seasonAdd(user, ev === 'kill' ? (d.boss ? SP.boss : d.elite ? SP.elite : SP.kill) * n : ev === 'floor' ? SP.floor : SP[ev] ? SP[ev] * n : 0);
@@ -114,7 +118,8 @@ module.exports = function (ctx) {
   const matsText = (need) => Object.entries(need).filter(([k, n]) => n && PROG.MATS[k]).map(([k, n]) => `${n} ${PROG.MATS[k].icon} ${PROG.MATS[k].name}`).join(', ');
 
   function onKill(room, user, k, info) {
-    track(room, user, 'kill', info);
+    track(room, user, 'kill', { ...info, k });
+    if (info.boss) trophyAdd(room, user, k);
     if (info.boss && !user.profile.trophies.includes(k)) {
       user.profile.trophies.push(k);
       send(user.ws, { t: 'dwhisper', text: `🏆 Nuevo trofeo para tu habitación: ${(RULES.MONSTERS[k] || {}).name || k}.` });

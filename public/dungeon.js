@@ -51,6 +51,9 @@
     for (const e of game.ents.values()) if (e.static) e.alive = true;
     for (const ev of m.events || []) onEvent(ev, now);
     for (const [id, e] of game.ents) if (!e.alive) game.ents.delete(id);
+    // al llegar junto al muro agrietado que se pinchó, se rompe
+    const pb = game.pendingBreak, meP = pb && game.ents.get(DD.myId);
+    if (meP && Math.max(Math.abs(meP.x - pb.x), Math.abs(meP.y - pb.y)) <= 1) { DD.net.send({ t: 'dbreak', x: pb.x, y: pb.y }); game.pendingBreak = null; }
     game.chests = m.chests; game.loot = m.loot; game.portal = m.portal;
     if (m.portalLeft && !game.portalEnd) game.portalEnd = performance.now() + m.portalLeft; game.start = m.start; game.herbs = m.herbs || [];
     // jefe a la vista (en la arena, el rival)
@@ -68,7 +71,7 @@
   }
 
   // Visión: lo que ven los héroes (línea de visión) se ilumina; lo explorado queda en penumbra
-  const OPAQUE = new Set(['#', 'T', 'P', 'M', 'R', 'k', 'y', 'p']);
+  const OPAQUE = new Set(['#', 'S', 'T', 'P', 'M', 'R', 'k', 'y', 'p']);
   function updateVision() {
     const { w, h, tiles } = game.map;
     const vis = game.vis;
@@ -200,11 +203,32 @@
       case 'special': log(`${ev.name}: ${{ slam: '¡golpe sísmico!', nova: '¡nova de muerte!', breath: '¡aliento de fuego!', volley: '¡andanada!', summon: 'llama a sus esbirros', charge: '¡embiste!' }[ev.s] || ''}`, 'hurt'); break;
       case 'summon': for (let i = 0; i < 10; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7cff6a', true); break;
       case 'portal': if (ev.left) game.portalEnd = performance.now() + ev.left; log(`¡${ev.name} ha caído!${ev.left ? ' Tenéis un minuto para recoger el botín.' : ' Se abre el portal al piso siguiente.'}`, 'good big'); if (!ev.left) DD.toast('🏆 ¡Jefe derrotado! Cruza el portal para bajar.'); DD.sfx('portal'); for (let i = 0; i < 30; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7ad0ff', true); break;
+      case 'combo': {
+        const t = game.ents.get(ev.id);
+        float(ev.x, ev.y, ev.name, '#ffd23f', true);
+        if (t) { ring(t.rx ?? t.x, t.ry ?? t.y, '#7ad0ff'); for (let i = 0; i < 16; i++) spark(t.x + 0.5, t.y + 0.4, i % 2 ? '#bfe8ff' : '#ffd23f', true); }
+        log(`${who(ev.by)}: ${ev.name}`, ev.by === me ? 'mine' : '');
+        if (ev.by === me) DD.sfx('hit', { crit: true });
+        break;
+      }
+      case 'downed': {
+        log(`${who(ev.id)} ha caído. ${ev.id === me ? 'Un compañero puede reanimarte.' : '¡Ponte a su lado para reanimarlo!'}`, 'hurt');
+        DD.sfx('down', { vol: ev.id === me ? 1 : 0.6 });
+        if (ev.id === me) game.lastHurt = now;
+        break;
+      }
+      case 'revive': {
+        const t = game.ents.get(ev.id);
+        log(`${who(ev.by)} reanima a ${who(ev.id)}.`, 'good');
+        if (t) { for (let i = 0; i < 24; i++) spark(t.x + 0.5, t.y + 0.4, i % 2 ? '#7dff8a' : '#fff6a0', true); game.fx.push({ kind: 'heal', x: t.x, y: t.y, start: now, dur: 700 }); }
+        DD.sfx('heal');
+        break;
+      }
       case 'down': log(`${who(ev.id)} cae.`, 'hurt'); DD.sfx('down', { vol: ev.id === me ? 1 : 0.6 }); if (ev.id !== me) DD.toast(`💀 ${who(ev.id)} ha caído y vuelve a la taberna.`); break;
       case 'ping':
         (game.pings = game.pings || []).push({ x: ev.x, y: ev.y, k: ev.k, id: ev.id, start: now });
         DD.sfx('ping', { vol: ev.id === me ? 0.6 : 1 });
-        if (ev.id !== me) log(`${who(ev.id)} ${ev.k === 'danger' ? '⚠️ avisa de peligro' : '📍 marca un sitio'}.`, 'mine');
+        if (ev.id !== me) log(`${who(ev.id)} ${{ danger: '⚠️ avisa: ¡cuidado!', help: '🆘 pide ayuda', omw: '🏃 dice: ¡voy!' }[ev.k] || '📍 marca un sitio'}.`, ev.k === 'help' ? 'hurt' : 'mine');
         break;
       case 'petdown': log(`${ev.name} huye malherido; volverá en 30 s.`, 'hurt'); break;
       case 'petskill': { const pt = game.ents.get(ev.id); if (pt) { float(pt.x, pt.y, ev.name + '!', '#ffb040', ev.owner === me); for (let i = 0; i < 10; i++) spark(pt.x + 0.5, pt.y + 0.4, '#ffb040', true); } break; }
@@ -220,6 +244,17 @@
       }
       case 'join': if (ev.id !== me) log(`${who(ev.id)} entra.`); break;
       case 'leg': { const h = game.ents.get(ev.id); if (h) float(h.x, h.y, ev.name + '!', RULES.LEGENDARY_COLOR, ev.id === me); if (ev.id === me) DD.sfx('cast', { kind: 'holy', vol: 0.6 }); break; }
+      case 'wallbreak': {
+        const i = ev.y * game.map.w + ev.x;
+        game.map = { ...game.map, tiles: game.map.tiles.slice(0, i) + '.' + game.map.tiles.slice(i + 1), props: (game.map.props || []).filter((q) => !(q.k === 'secret' && q.x === ev.x && q.y === ev.y)) };
+        game.props = game.map.props;
+        puff(ev.x + 0.5, ev.y + 0.5, '#8a8070', 18, 1); for (let k = 0; k < 20; k++) spark(ev.x + 0.5, ev.y + 0.5, '#ffd27a', true);
+        if (!DD.gfx || DD.gfx.shake) game.shake = now + 300;
+        DD.sfx('boom'); log(`🧱 ${who(ev.by)} encuentra una sala secreta.`, 'good');
+        updateVision(); fogDirty = true;
+        break;
+      }
+      case 'mimic': log('😱 ¡El cofre era un mímico!', 'hurt big'); DD.sfx('boom', { vol: 0.6 }); if (!DD.gfx || DD.gfx.shake) game.shake = now + 250; break;
       case 'door': DD.sfx('door', { vol: 0.8 }); game.openDoors.add(ev.y * game.map.w + ev.x); updateVision(); fogDirty = true; break;
     }
   }
@@ -246,6 +281,9 @@
     game.duelAt = m.dungeon.duel ? performance.now() + (m.dungeon.duel.startAt - (m.you ? m.you.now : Date.now())) : 0;
     $('#dbite').classList.add('hidden');
     if (dsc) banner(`🌀 Piso ${dsc.floor}`, `${MOD.icon} ${MOD.name}: ${MOD.desc}`);
+    // afijo al azar de esta mazmorra
+    const AFX = !dsc && m.dungeon.modBonus && PROG.WEEKLY_MODS[m.dungeon.mod];
+    if (AFX) { banner(`${AFX.icon} ${AFX.name}`, `${AFX.desc} A cambio: más botín y +20% de experiencia.`); $('#dname').textContent += ` · ${AFX.icon} ${AFX.name}`; }
     $('#dlog').innerHTML = '';
     viewEl.classList.remove('hidden');
     viewEl.classList.toggle('world', m.dungeon.kind === 'world');
@@ -372,8 +410,15 @@
   }
 
   let holding = null;
+  // muro agrietado en esa casilla o justo encima (al pinchar en su cara se cae en la de delante)
+  function secretAt(x, y) {
+    const t = game.map.tiles, w = game.map.w;
+    for (const yy of [y, y - 1]) if (yy >= 0 && t[yy * w + x] === 'S' && game.seen[yy * w + x]) return { x, y: yy };
+    return null;
+  }
   function clickAt(cx, cy, repeat) {
     const { x, y } = screenToTile(cx, cy);
+    if (!repeat) game.pendingBreak = null;
     const { w, h } = game.map;
     if (x < 0 || y < 0 || x >= w || y >= h) return;
     const npc = !repeat && entUnder(cx, cy, ['npc']);
@@ -387,6 +432,9 @@
     const herb = !repeat && herbUnder(cx, cy);
     if (herb) { DD.net.send({ t: 'dgather', id: herb.id }); game.marker = { x: herb.x, y: herb.y, at: performance.now() }; return 'gather'; }
     if (enemy && repeat) return;
+    // muro agrietado (sala secreta): se va a su lado y se rompe al llegar
+    const sec = !repeat && secretAt(x, y);
+    if (sec) { game.pendingBreak = sec; DD.net.send({ t: 'dgo', x: sec.x, y: sec.y + 1 }); game.marker = { x: sec.x, y: sec.y + 1, at: performance.now() }; return 'use'; }
     if (!game.seen[y * w + x]) return;
     DD.net.send({ t: 'dgo', x, y });
     if (!repeat) game.marker = { x, y, at: performance.now() };
@@ -405,7 +453,7 @@
     const h = game.hover;
     if (!cur && h && game.map) {
       const t = game.map.tiles[h.y * game.map.w + h.x];
-      if (t === '+' && !game.openDoors.has(h.y * game.map.w + h.x)) cur = 'use';
+      if ((t === '+' && !game.openDoors.has(h.y * game.map.w + h.x)) || secretAt(h.x, h.y)) cur = 'use';
       else if ((game.chests || []).some((c) => c.x === h.x && c.y === h.y && !c.open) || (game.loot || []).some((l) => l.x === h.x && l.y === h.y)) cur = 'use';
     }
     if (cv.dataset.cur !== cur) cv.dataset.cur = cur;
@@ -482,7 +530,8 @@
     ensureStage();
     clearScene();
     const world = game.map.kind === 'world';
-    built = VIEW3D.buildMap(game.map);
+    // los muros agrietados se dibujan como muros (su grieta con luz es un adorno aparte)
+    built = VIEW3D.buildMap(game.map.tiles.includes('S') ? { ...game.map, tiles: game.map.tiles.replace(/S/g, '#') } : game.map);
     stage.scene.add(built.group);
     fog = VIEW3D.fogLayer(game.map);
     if (built.gl) fog.mesh.position.y = 0.18; // por encima de las losas con piedras
@@ -802,6 +851,8 @@
     DD.net.send({ t: 'droll', dx: Math.sign(dx), dy: Math.sign(dy) });
   }
   $('#droll').onclick = () => doRoll();
+  // señales rápidas: se marcan donde estás
+  for (const b of document.querySelectorAll('#dsignals .btn')) b.onclick = () => { const me = game.ents.get(DD.myId); if (me) DD.net.send({ t: 'dping', x: me.x, y: me.y, k: b.dataset.k }); };
   $('#dfish').onclick = () => DD.net.send({ t: 'dfish' });
   game.particles = { push() {} }; // compatibilidad: las chispas viven en 3D
 
@@ -904,7 +955,10 @@
       if (e.stun) o.rotation.z = Math.sin(now / 90) * 0.06; else o.rotation.z = 0;
       const castK = e.castAt ? (now - e.castAt) / 450 : 1;
       if (o.userData.rod) o.userData.rod.visible = !!e.fishing;
-      MODELS.animate(o.userData.mount ? o.children[1] : o, { moving: e.moving, run: (e.dur || 200) < 330, phase: e.phase || 0, t: now, attack: atk, sit: !!o.userData.mount, cast: castK < 1 ? castK : 0, fish: !!e.fishing, attackAt: e.lunge, castAt: e.castAt, hitAt: e.hitUntil, rollAt: e.rollAt });
+      // tumbado esperando a que lo reanimen
+      if (e.down) { e.downAt = e.downAt || now; } else e.downAt = 0;
+      if (e.down && !gl) o.rotation.z = Math.PI / 2;
+      MODELS.animate(o.userData.mount ? o.children[1] : o, { deadAt: e.downAt || undefined, moving: e.moving, run: (e.dur || 200) < 330, phase: e.phase || 0, t: now, attack: atk, sit: !!o.userData.mount, cast: castK < 1 ? castK : 0, fish: !!e.fishing, attackAt: e.lunge, castAt: e.castAt, hitAt: e.hitUntil, rollAt: e.rollAt });
       if (e.wb && Math.random() < 0.5) fxp.emit({ x: e.rx + 0.5 + (Math.random() - 0.5), y: 0.1, z: e.ry + 0.5 + (Math.random() - 0.5), vy: 1 + Math.random(), color: '#a05aff', size: 0.12, life: 0.9 });
       if (e.kind === 'pet' && e.evo === 2 && Math.random() < 0.15) fxp.emit({ x: e.rx + 0.5, y: 0.4, z: e.ry + 0.5, vy: 0.6, vx: (Math.random() - 0.5) * 0.4, color: '#7affff', size: 0.06, life: 0.6 });
       if (o.userData.mount) {

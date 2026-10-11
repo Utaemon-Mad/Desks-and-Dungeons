@@ -99,6 +99,15 @@
   DD.hideItemTip = hideTip;
   DD.ui = { el, openOverlay, closeOverlay, itemCell: (it, o) => itemCell(it, o), actionMenu: (e, a) => actionMenu(e, a), hideTip };
 
+  // ¿Te haría más fuerte? Compara el héroe con y sin el objeto (daño, defensa, vida, energía y suerte)
+  const power = (d) => (d.dmg ? (d.dmg[0] + d.dmg[1]) : 0) + (d.spell ? (d.spell[0] + d.spell[1]) * 0.8 : 0) + (d.armor || 0) * 0.4 + (d.hp || 0) * 0.15 + (d.en || 0) * 0.05 + (d.crit || 0) * 0.6 + (d.mf || 0) * 0.05;
+  function isUpgrade(p, it) {
+    try {
+      const base = power(RULES.derive(p));
+      return power(RULES.derive({ ...p, equip: { ...p.equip, [it.slot]: it } })) > base * 1.01;
+    } catch { return false; }
+  }
+
   // Casilla de objeto (icono con borde de rareza)
   function itemCell(it, opts = {}) {
     const b = el('button', 'icell ' + (it ? 'r-' + it.rarity + (it.leg ? ' r-leg' : '') : 'empty'));
@@ -113,6 +122,8 @@
       if (p && RULES.SLOTS[it.slot] && !(p.equip[it.slot] && p.equip[it.slot].id === it.id)) {
         const st = RULES.derive({ ...p, equip: { ...p.equip, [it.slot]: undefined } }).stats;
         if (!RULES.canEquip(it, p.char, RULES.levelFromXp(p.xp), st).ok) b.classList.add('cant');
+        // flecha verde si te haría más fuerte que lo que llevas en ese hueco
+        else if (!opts.price && isUpgrade(p, it)) { b.classList.add('upg'); b.appendChild(el('span', 'upg-mark', '▲')); }
       }
       tipOn(b, it, opts.tipExtra);
       if (opts.price !== undefined) { const pr = el('span', 'price', `${opts.price}🪙`); b.appendChild(pr); }

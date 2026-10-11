@@ -140,7 +140,37 @@
 
   const tintHex = (base, t) => (t ? mix(base, t, 0.55) : base);
   // sprite (clave de RULES.MONSTERS) → modelo
+  // Mímico: un cofre con dientes y lengua que muerde abriendo y cerrando la tapa
+  function mimic() {
+    const g = new THREE.Group();
+    const wood = mat('#6a3e1e'), woodD = mat('#4a2a12'), gold = mat('#c8a040', { metal: 0.7 });
+    const teeth = mat('#f0ead8'), tongue = mat('#c83a4a');
+    const body = pivot(g, 0, 0, 0);
+    mesh(box(0.7, 0.36, 0.5), wood, 0, 0.18, 0, body);
+    mesh(box(0.72, 0.05, 0.52), gold, 0, 0.05, 0, body); mesh(box(0.72, 0.04, 0.52), gold, 0, 0.34, 0, body);
+    for (let i = 0; i < 6; i++) mesh(cone(0.035, 0.09, 4), teeth, -0.28 + i * 0.112, 0.4, 0.22, body);
+    const tg = mesh(box(0.22, 0.04, 0.34), tongue, 0, 0.34, 0.12, body); tg.rotation.x = -0.25;
+    // la tapa gira sobre la bisagra de atrás
+    const lid = pivot(g, 0, 0.36, -0.25);
+    mesh(box(0.7, 0.14, 0.5), woodD, 0, 0.07, 0.25, lid);
+    mesh(box(0.72, 0.04, 0.52), gold, 0, 0.12, 0.25, lid);
+    for (let i = 0; i < 6; i++) { const t = mesh(cone(0.035, 0.09, 4), teeth, -0.28 + i * 0.112, -0.03, 0.47, lid); t.rotation.x = Math.PI; }
+    for (const x of [-0.14, 0.14]) mesh(sph(0.04, 6, 4), mat('#ffde3a', { emissive: '#ffb020', ei: 1.6 }), x, 0.02, 0.4, lid);
+    g.userData.parts = { body, lid };
+    g.userData.anim = (st) => {
+      const t = (st.t || 0) / 1000;
+      if (st.deadAt) { lid.rotation.x = -1.2; return; }
+      // muerde al atacar; al moverse da saltitos con la tapa entreabierta
+      const atk = st.attackAt ? Math.max(0, 1 - ((st.t || 0) - st.attackAt) / 350) : 0;
+      lid.rotation.x = -(0.25 + 0.1 * Math.sin(t * 3)) - atk * 0.9 * Math.abs(Math.sin(atk * Math.PI * 2)) - (st.moving ? 0.35 * Math.abs(Math.sin(t * 10)) : 0);
+      body.position.y = st.moving ? Math.abs(Math.sin(t * 10)) * 0.08 : 0;
+      lid.position.y = 0.36 + body.position.y;
+    };
+    return g;
+  }
+
   function buildEnemy(k) {
+    if (k === 'mimico') return mimic();
     if (GL.ready) { const g = buildEnemyGL(k); if (g) return g; }
     const M = RULES.MONSTERS[k] || { sprite: 'goblin' };
     const s = M.sprite || 'goblin';

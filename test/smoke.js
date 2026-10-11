@@ -157,7 +157,10 @@ function progressTests() {
   assert.ok(PROG.salvage(RULES.makeItem(rng, { ilvl: 4, rarity: 'raro' })).esencia >= 2, 'desguazar da materiales');
   const b1 = PROG.boardFor(100, 14), b2 = PROG.boardFor(100, 14);
   assert.deepStrictEqual(b1, b2, 'el tablón es igual para todos el mismo día');
-  assert.ok(b1.daily.length === 3 && b1.weekly.length === 2);
+  assert.ok(b1.daily.length === 3 && b1.weekly.length === 3);
+  // el encargo de Alfonso de la semana: un jefe concreto
+  const st = PROG.taskDef(b1.weekly[0]);
+  assert.ok(st && st.story && st.lore && PROG.taskMatch(st, 'kill', { k: st.f.slice(4), boss: true }) && !PROG.taskMatch(st, 'kill', { k: 'goblin-minion' }), 'capítulo de la historia con su jefe');
   assert.ok(RULES.petStats('lobo', 10, 10).fue > RULES.petStats('lobo', 10, 9).fue * 1.15, 'la mascota evoluciona en el nivel 10');
   assert.strictEqual(RULES.petLevelFromXp(0), 1);
   assert.ok(RULES.petLevelFromXp(RULES.petXpFor(10)) === 10);
@@ -276,8 +279,58 @@ async function instanceTests() {
   linst.damageEnemy(lp, g2, 99999, { noCrit: true, kind: 'melee' });
   assert.ok(linst.events.some((e) => e.e === 'fx' && e.color === '#ff8a1a') || lsent.some((m) => (m.events || []).some((e) => e.color === '#ff8a1a')), 'el enemigo estalla al morir');
   lu.combat.hp = Math.round(lp.d.hp * 0.32);
-  linst.hurtPlayer(lp, 5, { raw: true });
+  linst.hurtPlayer(lp, 5, { raw: true, magic: true }); // mágico: sin bloqueo con escudo (que lo haría al azar)
   assert.ok(lp.shield > 0, 'la égida se levanta al bajar del 30%');
+
+  // En grupo: botín para cada uno, reanimar al caído y resumen al acabar
+  {
+    const gi = new Instance({ ...def, id: 'grp', spawns: [{ k: 'goblin-minion', x: 9, y: 2 }], chests: [] }, { ...hooks, send: () => {}, kill: () => {} });
+    const mk = (id) => ({ id, name: id, look: { cls: 'guerrero' }, profile: { xp: 0, gold: 0, char: RULES.newChar('guerrero'), equip: {}, buffs: {} } });
+    const ua = mk('ga'), ub = mk('gb');
+    gi.join(ua); gi.join(ub);
+    const pa = gi.players.get('ga'), pb = gi.players.get('gb');
+    pb.x = 6; pb.y = 3;
+    gi.dropAt(3, 1, { item: RULES.makeItem(RULES.seeded('own'), { ilvl: 1, rarity: 'magico', slot: 'pecho' }), owner: 'ga' });
+    assert.ok(gi.snapshot(pa).loot.length === 1 && gi.snapshot(pb).loot.length === 0, 'cada uno ve sólo su botín');
+    const own = [...gi.loot.values()][0];
+    gi.pickUp(pb, own);
+    assert.ok(gi.loot.has(own.id), 'nadie coge el botín de otro');
+    gi.dropAt(pa.x, pa.y + 1, { gold: 5 });
+    gi.tick(Date.now());
+    assert.ok(![...gi.loot.values()].some((l) => l.gold), 'el oro cercano se recoge solo');
+    ua.combat.hp = 1;
+    gi.hurtPlayer(pa, 999, { raw: true, magic: true });
+    assert.ok(pa.downed && gi.players.has('ga'), 'en grupo se queda tumbado en vez de volver a la taberna');
+    pb.x = pa.x + 1; pb.y = pa.y;
+    const t0 = Date.now();
+    for (let i = 0; i < 70 && pa.downed; i++) gi.tickPlayer(pa, t0 + i * 50, 0.05);
+    assert.ok(!pa.downed && ua.combat.hp > 0, 'el compañero lo reanima');
+    const gg = [...gi.enemies.values()][0];
+    gg.slowUntil = Date.now() + 5000; gg.slowBy = 'gb';
+    gi.damageEnemy(pa, gg, 3, { noCrit: true });
+    assert.ok(gi.events.some((ev) => ev.e === 'combo' && ev.by === 'ga'), 'combo: el compañero rompe al congelado');
+    assert.ok(gi.summaryStats().some((x) => x.name === 'gb' && x.revives === 1) && gi.summaryStats().some((x) => x.name === 'ga' && x.downs === 1), 'resumen: reanimaciones y caídas');
+  }
+
+  // Sala secreta (muro agrietado que se rompe) y mímico (cofre que muerde)
+  {
+    const t2 = rows.join('').split('');
+    t2[1 * W + 7] = 'S';
+    const si = new Instance({ ...def, id: 'sec', tiles: t2.join(''), spawns: [], chests: [{ x: 10, y: 3 }] }, { ...hooks, send: () => {}, kill: () => {} });
+    const us = { id: 'us', name: 'S', look: { cls: 'guerrero' }, profile: { xp: 0, gold: 0, char: RULES.newChar('guerrero'), equip: {}, buffs: {} } };
+    si.join(us);
+    const ps = si.players.get('us');
+    ps.x = 7; ps.y = 3;
+    si.breakWall('us', 7, 1);
+    assert.strictEqual(si.tile(7, 1), 'S', 'el muro no se rompe desde lejos');
+    ps.y = 2;
+    si.breakWall('us', 7, 1);
+    assert.strictEqual(si.tile(7, 1), '.', 'el muro agrietado se rompe al lado');
+    const ch = [...si.chests.values()][0];
+    ch.mimic = true;
+    si.openChest(ps, ch);
+    assert.ok(!si.chests.has(ch.id) && [...si.enemies.values()].some((e) => e.k === 'mimico' && e.mimic), 'el cofre era un mímico');
+  }
 
   // Arena: los golpes al rival le quitan vida de verdad, y al caer termina el duelo
   let ended = null;
@@ -510,7 +563,7 @@ async function instanceTests() {
   c.send({ t: 'join', room: SRV, name: 'Cris', look: { cls: 'guerrero' }, token: tokC });
   const wc = await c.next((m) => m.t === 'welcome');
   let meC = await c.next((m) => m.t === 'me');
-  assert.ok(meC.mats.hierro === 30 && meC.board.daily.length === 3 && meC.board.weekly.length === 2, 'materiales y tablón');
+  assert.ok(meC.mats.hierro === 30 && meC.board.daily.length === 3 && meC.board.weekly.length === 3, 'materiales y tablón');
   const sw = meC.equip.arma;
   c.send({ t: 'forge:up', id: sw.id });
   const fr = await c.next((m) => m.t === 'forge:result');

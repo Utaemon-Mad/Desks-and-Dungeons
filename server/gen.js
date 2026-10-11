@@ -11,7 +11,7 @@ const PROPS = {
   throne: { b: 1 }, eggs: { b: 1 }, stalagmite: { b: 1 }, mushrooms: { b: 0, light: '#5affc8' }, tent: { b: 1 }, campfire: { b: 1, light: '#ff8a2a' },
   bones: { b: 0 }, skull: { b: 0 }, blood: { b: 0 }, rubble: { b: 0 }, web: { b: 0 }, candles: { b: 0, light: '#ffc86a' }, rug: { b: 0 },
   crystal: { b: 1, light: '#c86aff' }, lavarock: { b: 0, light: '#ff5a1a' }, puddle: { b: 0 },
-  torch: { wall: 1, light: '#ffa040' }, banner: { wall: 1 }, chains: { wall: 1 }, shield: { wall: 1 }, crack: { wall: 1 },
+  torch: { wall: 1, light: '#ffa040' }, banner: { wall: 1 }, chains: { wall: 1 }, shield: { wall: 1 }, crack: { wall: 1 }, secret: { wall: 1, light: '#ffcf6a' },
 };
 
 // Qué decorado lleva cada tema (peso relativo)
@@ -256,10 +256,38 @@ function generate(o) {
     const potions = [];
     for (let i = 0; i < 3; i++) { const p = freeCell(pickR(others), new Set([...taken, ...used])); if (p) { taken.add(key(p.x, p.y)); potions.push(p); } }
 
+    // ---------- Sala secreta: detrás de un muro agrietado por el que se filtra luz (S), un cuartito con un cofre ----------
+    if (rand() < 0.65) {
+      const cands = rooms.filter((r) => !r.start && !r.boss).sort(() => rand() - 0.5);
+      outer: for (const r of cands) {
+        for (let x = r.x + 1; x < r.x + r.w - 1; x++) {
+          const sy = r.y - 1; // el muro norte de la sala (su cara se ve desde dentro)
+          if (sy - 3 < 1 || get(x, sy) !== '#' || get(x - 1, sy) !== '#' || get(x + 1, sy) !== '#') continue;
+          let ok = true;
+          for (let yy = sy - 4; yy <= sy - 1 && ok; yy++) for (let xx = x - 2; xx <= x + 2; xx++) if (!(yy === sy && Math.abs(xx - x) <= 1) && get(xx, yy) !== '#') { ok = false; break; }
+          if (!ok || props.some((p) => p.x === x && p.y === sy)) continue;
+          for (let yy = sy - 3; yy <= sy - 2; yy++) for (let xx = x - 1; xx <= x + 1; xx++) set(xx, yy, '.');
+          set(x, sy, 'S');
+          props.push({ k: 'secret', x, y: sy });
+          chests.push({ x, y: sy - 3, secret: true });
+          potions.push({ x: x - 1, y: sy - 2 });
+          break outer;
+        }
+      }
+    }
+
+    // ---------- Mercader errante: a veces espera en una sala tranquila con género de su tierra ----------
+    let merchant = null;
+    if (rand() < 0.3) {
+      const r = pickR(others.filter((q) => !q.boss));
+      const p = r && freeCell(r, new Set([...taken, ...used]));
+      if (p && !nearDoor(p.x, p.y)) { taken.add(key(p.x, p.y)); merchant = p; }
+    }
+
     const name = `${pickR(T.names)} ${pickR(T.of)}`;
     return {
       kind: 'dungeon', theme, level, name, w: W, h: H, tiles: t.join(''),
-      start: startPos, boss: { x: bossRoom.cx, y: bossRoom.cy }, props, spawns, chests, potions,
+      start: startPos, boss: { x: bossRoom.cx, y: bossRoom.cy }, props, spawns, chests, potions, merchant,
     };
   }
 }

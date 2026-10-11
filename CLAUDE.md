@@ -72,6 +72,9 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Mensajes del cliente al servidor: `server/handlers/*.js` (`'nombre:accion'(cx, msg)`); los que quedan, en el `switch (msg.t)` de server.js.
 - Luz y ambiente de cada tema (luz ambiente, rebote, neblina): `THEME` (view3d.js); neblina `mistLayer`, agua y lava `liquidMaterial`, suciedad del suelo `grime`; luces de la escena en `renderGame` (dungeon.js).
 - Efectos de golpe y muerte: `gore`, `hitBurst`, `splat`, `slash`, `setFlash` (dungeon.js). Calidad automática por fps: `trackFps` (view3d.js).
+- Juego en grupo (server/dungeon.js): botín personal `lootParty` (+ `owner` en el botín), recogida automática en `tick`, tumbado y reanimar `tickDowned` (`DOWN_MS`, `REVIVE_S`), combos `combo`, resumen `stat`/`summaryStats` (mensaje `dsummary`), salida tras el jefe `PORTAL_MS`/`finish`.
+- Sorpresas de mazmorra: afijo al azar (`this.mod`/`modMf` en el constructor de Instance), sala secreta (casilla `S` en server/gen.js, `breakWall`), mímico (`mimico` en monsters-data.js, `ch.mimic` en `openChest`, modelo `mimic` en models-creatures.js), mercader errante (`def.merchant`).
+- Objetivo semanal del grupo `GROUP_GOALS` (progress.js) y `goalAdd`/`goalBonus` (social.js); muro de trofeos `trophyAdd` (social.js) y `buildTrophies` (tavern3d.js); marcos por logros `FRAMES`; encargos de Alfonso `STORY` (progress.js, tarea semanal `h_<semana>`); ronda de dados `dice:*` (server/handlers/play.js, ventana en ui2.js).
 - Sonidos y música: `FX` y `TRACKS` (audio.js). Iconos: `P` (icons.js). Novedades: `NEWS` (admin.js).
 - Ventanas: ui.js (ficha, inventario, talentos, tiendas, guía) y ui2.js (pueblo, forja, fama, ajustes, asalto, taberna, mercado).
 

@@ -10,6 +10,8 @@ const { PROPS } = require('./gen.js');
 
 const FAST = process.env.DD_TEST_FAST ? 0.25 : 1; // las pruebas automáticas aceleran los tiempos de espera
 const RESPAWN_MS = 3 * 60 * 1000;
+const DOWN_MS = 30 * 1000;  // tiempo tumbado esperando a que te reanimen
+const REVIVE_S = 3;         // segundos que un compañero tiene que estar al lado para reanimar
 const PORTAL_MS = 60 * 1000; // tiempo para recoger el botín tras derrotar al jefe
 const PROJ_SPEED = 9;          // casillas por segundo
 const AGGRO = 7, LEASH = 14;
@@ -24,7 +26,7 @@ const randInt = (a, b) => crypto.randomInt(Math.min(a, b), Math.max(a, b) + 1);
 const roll = (r) => r[0] + rnd() * (r[1] - r[0]);
 const cheb = (a, b) => Math.max(Math.abs(a.x - b.x), Math.abs(a.y - b.y));
 const DIRS = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]];
-const OPAQUE = new Set(['#', 'T', 'P', 'M', 'R', 'k', 'y', 'p']);
+const OPAQUE = new Set(['#', 'S', 'T', 'P', 'M', 'R', 'k', 'y', 'p']);
 const dirName = (dx, dy) => (Math.abs(dx) >= Math.abs(dy) ? (dx > 0 ? 'E' : 'W') : dy > 0 ? 'S' : 'N');
 
 class Instance {
@@ -43,6 +45,8 @@ class Instance {
     this.enemies = new Map();
     this.chests = new Map();
     this.loot = new Map();
+    this.startedAt = Date.now();
+    this.stats = new Map(); // para el resumen al acabar: daño, curas, muertes, bajas y reanimaciones de cada uno
     this.projectiles = [];
     this.teles = [];
     this.auras = [];
@@ -58,9 +62,18 @@ class Instance {
     this.blocked = new Set();
     this.created = Date.now();
     this.npcs = def.npcs || [];
+    // mercader errante de las mazmorras: vende como el Maestro Takeshi, pero en plena mazmorra
+    if (def.merchant && !def.descent && !def.raid) this.npcs = [...this.npcs, { id: 'errante', name: 'Ulf el errante', x: def.merchant.x, y: def.merchant.y, shop: 'armero', look: { cls: 'explorador', skin: 1, hair: 2, beard: 1, gear: { pecho: 'cuero', casco: 'tela' }, color: '#3a4a2a' }, lines: ['¡Eh, aventurero! No te asustes: sólo soy un mercader que se perdió… y que vende muy bien.'] }];
     this.waystones = def.waystones || [];
     this.pets = new Map(); // dueño -> mascota
     this.mod = def.descent ? def.descent.mod : def.raid ? def.raid.mod : null; // desafío semanal del Descenso o del Asalto
+    // la mitad de las mazmorras normales traen un afijo al azar: más difíciles, pero con más botín y experiencia
+    this.modMf = 0;
+    if (!this.mod && def.theme && this.kind === 'dungeon' && rnd() < 0.5) {
+      const AFFIXES = ['frenesi', 'elites', 'explosivos', 'vampiros', 'gigantes'];
+      this.mod = AFFIXES[Math.floor(rnd() * AFFIXES.length)];
+      this.modMf = 40;
+    }
     this.duel = def.duel || null;                     // arena: { a, b, bet, startAt }
     this.herbs = new Map((def.herbs || []).map((h) => [h.id, { ...h, readyAt: 0 }]));
     this.worldBoss = null;
@@ -68,7 +81,8 @@ class Instance {
     for (const n of this.npcs) this.blocked.add(n.y * this.w + n.x);
     const now = Date.now();
     for (const p of def.props || []) if (PROPS[p.k] && PROPS[p.k].b) this.blocked.add(p.y * this.w + p.x);
-    for (const c of def.chests || []) { const id = 'c' + ++this.seq; this.chests.set(id, { id, x: c.x, y: c.y, open: false }); }
+    // en las mazmorras generadas, alguno de los cofres normales es un mímico
+    for (const c of def.chests || []) { const id = 'c' + ++this.seq; this.chests.set(id, { id, x: c.x, y: c.y, open: false, secret: c.secret || undefined, mimic: !c.secret && def.theme && this.kind === 'dungeon' && rnd() < 0.12 || undefined }); }
     for (const p of def.potions || []) this.dropAt(p.x, p.y, { cons: 'pocion-vida-p' });
     if (def.spawns) {
       const packs = new Map();
@@ -203,7 +217,7 @@ class Instance {
     const def = this.def;
     this.hooks.send(user, {
       t: 'dstart',
-      dungeon: { id: this.id, name: def.name, tiles: def.tiles, w: this.w, h: this.h, kind: this.kind, theme: def.theme || null, level: this.level, labels: def.labels || [], props: def.props || [], zones: def.zones || null, waystones: this.waystones, npcs: this.npcs.map(({ id, name, x, y, look, shop }) => ({ id, name, x, y, look, shop })), descent: def.descent || null, doors: [...this.openDoors], duel: this.duel ? { startAt: this.duel.startAt, bet: this.duel.bet } : null },
+      dungeon: { id: this.id, name: def.name, tiles: def.tiles, w: this.w, h: this.h, kind: this.kind, theme: def.theme || null, level: this.level, labels: def.labels || [], props: def.props || [], zones: def.zones || null, waystones: this.waystones, npcs: this.npcs.map(({ id, name, x, y, look, shop }) => ({ id, name, x, y, look, shop })), descent: def.descent || null, mod: this.mod || null, modBonus: !!this.modMf, doors: [...this.openDoors], duel: this.duel ? { startAt: this.duel.startAt, bet: this.duel.bet } : null },
       ...this.snapshot(p), you: this.privateState(p),
     });
     this.event({ e: 'join', id: user.id });
@@ -330,7 +344,7 @@ class Instance {
 
   // ---------- Mundo: montura, charlas y viajes ----------
   toggleMount(userId) {
-    const p = this.players.get(userId);
+    const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p) return;
     if (this.kind !== 'world') return this.whisper(p, 'Sólo puedes montar en el mundo abierto.');
     const m = this.hooks.mountFor ? this.hooks.mountFor(p.user) : null;
@@ -342,7 +356,7 @@ class Instance {
   }
 
   talk(userId, npcId) {
-    const p = this.players.get(userId);
+    const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     const n = this.npcs.find((x) => x.id === npcId);
     if (!p || !n) return;
     p.kdir = null; p.target = null; p.pending = null;
@@ -351,7 +365,7 @@ class Instance {
   }
 
   teleport(userId, x, y) {
-    const p = this.players.get(userId);
+    const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p) return;
     const pos = this.freeNear(x, y + 1, (a, b) => this.freeForPlayer(a, b));
     p.x = pos.x; p.y = pos.y; p.path = []; p.goal = null; p.target = null; p.sm = 80;
@@ -368,7 +382,7 @@ class Instance {
     return null;
   }
   fish(userId) {
-    const p = this.players.get(userId);
+    const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p) return;
     if (this.kind !== 'world') return this.whisper(p, 'Aquí no hay dónde pescar.');
     const w = this.waterNear(p);
@@ -382,7 +396,7 @@ class Instance {
     this.whisper(p, '🎣 Lanzas el sedal… cuando pique, ¡tira! (pulsa otra vez)');
   }
   hook(userId) {
-    const p = this.players.get(userId);
+    const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p || !p.fishing) return this.fish(userId);
     const f = p.fishing;
     p.fishing = null;
@@ -393,7 +407,7 @@ class Instance {
     this.event({ e: 'fx', kind: 'splash', x: f.at.x, y: f.at.y });
   }
   gather(userId, id) {
-    const p = this.players.get(userId);
+    const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     const h = this.herbs.get(id);
     if (!p || !h) return;
     if (h.readyAt > Date.now()) return this.whisper(p, 'Ya la han recogido. Volverá a crecer.');
@@ -410,7 +424,7 @@ class Instance {
 
   // ---------- Esquiva: una voltereta de dos casillas, invulnerable un instante ----------
   roll(userId, dx, dy) {
-    const p = this.players.get(userId);
+    const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p) return;
     const now = Date.now();
     if (now < p.rollAt || now < p.stunUntil || (this.duel && now < this.duel.startAt)) return;
@@ -512,7 +526,7 @@ class Instance {
   // ---------- Órdenes del jugador ----------
   // Teclas: dirección mantenida (0,0 = parar)
   dir(userId, dx, dy) {
-    const p = this.players.get(userId);
+    const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p) return;
     dx = Math.sign(Number(dx) || 0); dy = Math.sign(Number(dy) || 0);
     p.kdir = dx || dy ? [dx, dy] : null;
@@ -520,7 +534,7 @@ class Instance {
   }
 
   go(userId, x, y) {
-    const p = this.players.get(userId);
+    const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p || !Number.isInteger(x) || !Number.isInteger(y)) return;
     p.kdir = null; p.target = null; p.pending = null; p.talkTo = null; p.fishing = null; p.gatherTo = null;
     p.goal = { x, y };
@@ -528,7 +542,7 @@ class Instance {
   }
 
   attack(userId, id) {
-    const p = this.players.get(userId);
+    const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p || !this.enemies.has(id) || id === 'pv:' + userId) return;
     if (p.mounted) { p.mounted = false; this.dirty = true; }
     p.talkTo = null; p.fishing = null; p.gatherTo = null;
@@ -537,7 +551,7 @@ class Instance {
   }
 
   skill(userId, a) {
-    const p = this.players.get(userId);
+    const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p || !a) return;
     const ab = p.d.abilities.find((x) => x.id === a.id);
     if (!ab) return;
@@ -553,7 +567,7 @@ class Instance {
   }
 
   use(userId, cid, a = {}) {
-    const p = this.players.get(userId);
+    const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     const C = RULES.CONSUMABLES[cid];
     if (!p || !C) return;
     const now = Date.now();
@@ -570,7 +584,7 @@ class Instance {
     if (C.spell) {
       const s = C.spell;
       if (s.kind === 'return') { this.event({ e: 'fx', kind: 'portal', x: p.x, y: p.y }); return this.leaveTo(p, 'return'); }
-      if (s.kind === 'healAll') { for (const o of this.players.values()) if (cheb(o, p) <= s.radius) this.heal(o, Math.round(o.d.hp * s.pct), C.name); this.event({ e: 'fx', kind: 'nova', x: p.x, y: p.y, radius: s.radius, color: '#7dff8a' }); }
+      if (s.kind === 'healAll') { for (const o of this.players.values()) if (cheb(o, p) <= s.radius) this.heal(o, Math.round(o.d.hp * s.pct), C.name, p); this.event({ e: 'fx', kind: 'nova', x: p.x, y: p.y, radius: s.radius, color: '#7dff8a' }); }
       if (s.kind === 'blast') {
         const t = (a.target && this.enemies.get(a.target)) || this.nearestEnemy(p, s.range);
         this.event({ e: 'fx', kind: 'blast', x: t.x, y: t.y, radius: s.radius, from: { x: p.x, y: p.y }, color: '#ff7a2a' });
@@ -598,6 +612,11 @@ class Instance {
     const dt = 0.05;
     // se acabó el minuto tras el jefe: todos salen con su recompensa
     if (this.portalEnd && now >= this.portalEnd) { this.portalEnd = 0; for (const p of [...this.players.values()]) this.winExit(p); return; }
+    // recogida automática: el oro, los materiales y las pociones a 2 casillas o menos van solos a la bolsa
+    if (now - (this.lastMagnet || 0) > 200 && this.loot.size) {
+      this.lastMagnet = now;
+      for (const p of this.players.values()) for (const l of [...this.loot.values()]) if (!l.item && cheb(p, l) <= 2 && (!l.owner || l.owner === p.user.id)) this.pickUp(p, l);
+    }
     for (const g of this.groups) {
       if (!g.alive.size && g.respawnAt && now >= g.respawnAt) {
         const near = [...this.players.values()].some((p) => g.spawn.some((s) => cheb(p, s) < 14));
@@ -622,7 +641,32 @@ class Instance {
     if (this.dirty && now - this.lastFlush >= FLUSH_MS) this.flush();
   }
 
+  // Tumbado: un compañero a su lado lo reanima en unos segundos; si nadie llega a tiempo, vuelve a la taberna
+  tickDowned(p, now, dt) {
+    const D = p.downed;
+    const helper = [...this.players.values()].find((o) => o !== p && !o.downed && cheb(o, p) <= 1);
+    const was = Math.floor(D.rev * 4);
+    D.rev = helper ? D.rev + dt : Math.max(0, D.rev - dt * 0.5);
+    if (Math.floor(D.rev * 4) !== was) this.dirty = true;
+    if (D.rev >= REVIVE_S) {
+      const c = p.user.combat;
+      p.downed = null;
+      c.hp = Math.round(p.d.hp * 0.5); c.en = Math.max(c.en, Math.round(p.d.en * 0.3));
+      p.iframeUntil = now + 2000;
+      this.event({ e: 'revive', id: p.user.id, by: helper.user.id });
+      this.stat(helper, 'revives', 1);
+      this.privDirty(p);
+      return;
+    }
+    if (now >= D.until || ![...this.players.values()].some((o) => o !== p && !o.downed)) {
+      p.downed = null;
+      this.event({ e: 'down', id: p.user.id });
+      this.leaveTo(p, 'down');
+    }
+  }
+
   tickPlayer(p, now, dt) {
+    if (p.downed) return this.tickDowned(p, now, dt);
     const c = p.user.combat;
     // regeneración (más rápida fuera de combate)
     const calm = now - p.lastHurt > 5000 ? 2.5 : 1;
@@ -756,7 +800,21 @@ class Instance {
       return this.hooks.nextFloor(p.user, this.def.descent, r);
     }
     if (this.hooks.track) this.hooks.track(p.user, 'dungeon', {});
+    // resumen de la partida: quién hizo más daño, quién curó más, quién cayó más…
+    this.hooks.send(p.user, { t: 'dsummary', name: this.def.name, level: this.level, ms: Date.now() - this.startedAt, stats: this.summaryStats(), you: p.user.id });
     this.leaveTo(p, 'win', r);
+  }
+
+  // Rompe un muro agrietado (sala secreta) si estás a su lado
+  breakWall(userId, x, y) {
+    const p = this.players.get(userId);
+    if (!p || p.downed || this.tile(x, y) !== 'S' || cheb(p, { x, y }) > 1) return;
+    const i = y * this.w + x;
+    this.def.tiles = this.def.tiles.slice(0, i) + '.' + this.def.tiles.slice(i + 1);
+    this.def.props = (this.def.props || []).filter((q) => !(q.k === 'secret' && q.x === x && q.y === y));
+    this.event({ e: 'wallbreak', x, y, by: userId });
+    this.whisper(p, '🧱 ¡Has encontrado una sala secreta!');
+    this.dirty = true;
   }
 
   // «Salir ya» después de derrotar al jefe
@@ -766,6 +824,7 @@ class Instance {
   }
 
   pickUp(p, l) {
+    if (l.owner && l.owner !== p.user.id) return; // botín de otro jugador: ni lo ve ni lo coge
     if (l.gold) { this.hooks.reward(p.user, 0, l.gold); this.event({ e: 'loot', id: p.user.id, gold: l.gold, x: l.x, y: l.y }); this.loot.delete(l.id); return; }
     if (l.mat) {
       if (this.hooks.giveMat) this.hooks.giveMat(p.user, l.mat, l.n || 1);
@@ -785,7 +844,8 @@ class Instance {
 
   dropAt(x, y, what) {
     // cada cosa en su casilla libre más cercana
-    const taken = (a, b) => [...this.loot.values()].some((l) => l.x === a && l.y === b);
+    // el botín de cada jugador puede compartir casilla con el de otro (cada uno sólo ve el suyo)
+    const taken = (a, b) => [...this.loot.values()].some((l) => l.x === a && l.y === b && (!l.owner || !what.owner || l.owner === what.owner));
     const pos = this.freeNear(x, y, (a, b) => this.walkTile(a, b) && !taken(a, b) && !this.chestAt(a, b) && this.tile(a, b) !== '^');
     const id = 'l' + ++this.seq;
     this.loot.set(id, { id, x: pos.x, y: pos.y, ...what });
@@ -794,10 +854,21 @@ class Instance {
 
   openChest(p, ch) {
     if (ch.open) return;
+    // ¡era un mímico! el cofre desaparece y salta a morder; al matarlo suelta el botín del cofre
+    if (ch.mimic) {
+      this.chests.delete(ch.id);
+      const id = this.addEnemy('mimico', ch.x, ch.y, this.level, Date.now(), { elite: this.level >= 8 });
+      const m = id && this.enemies.get(id);
+      if (m) { m.mimic = true; m.aggro = p.user.id; m.nextAttack = Date.now() + 600; }
+      this.event({ e: 'mimic', id, x: ch.x, y: ch.y, by: p.user.id });
+      this.dirty = true;
+      return;
+    }
     ch.open = true;
     const gold = Math.round(randInt(12, 25) * (1 + 0.4 * (this.level - 1)));
     this.dropAt(ch.x, ch.y, { gold });
-    for (const it of RULES.rollLoot(rnd, { ilvl: this.level, mf: p.d.mf, classes: this.partyClasses(), chest: true })) this.dropAt(ch.x, ch.y, { item: it });
+    // el cofre de la sala secreta trae mejor botín
+    for (const o of this.lootParty(p, ch)) for (const it of RULES.rollLoot(rnd, { ilvl: this.level + (ch.secret ? 2 : 0), mf: o.d.mf + (ch.secret ? 60 : 0), classes: [o.d.cls], chest: true, elite: !!ch.secret })) this.dropAt(ch.x, ch.y, { item: it, owner: o.user.id });
     if (rnd() < 0.5) this.dropAt(ch.x, ch.y, { cons: rnd() < 0.7 ? 'pocion-vida-p' : 'pocion-energia' });
     this.event({ e: 'chest', id: ch.id, by: p.user.id, x: ch.x, y: ch.y });
     if (this.hooks.track) this.hooks.track(p.user, 'chest', {});
@@ -810,12 +881,13 @@ class Instance {
     this.hooks.exit(p.user, reason, info);
   }
 
-  heal(p, amount, source) {
+  heal(p, amount, source, by) {
+    if (p.downed) return; // a los tumbados se les reanima, no se les cura
     const c = p.user.combat;
     const before = c.hp;
     c.hp = Math.min(p.d.hp, c.hp + amount);
     const got = Math.round(c.hp - before);
-    if (got > 0) this.event({ e: 'heal', id: p.user.id, amount: got, source });
+    if (got > 0) { this.event({ e: 'heal', id: p.user.id, amount: got, source }); if (by) this.stat(by, 'heal', got); }
     this.privDirty(p);
   }
 
@@ -873,11 +945,14 @@ class Instance {
     let crit = false;
     if (!o.noCrit && (p.critNext || rnd() * 100 < p.d.crit)) { crit = true; dmg *= p.d.critMult; p.critNext = false; }
     if (e.vulnUntil > Date.now()) dmg *= 1 + e.vuln / 100;
+    // combos entre compañeros: aprovechar lo que ha preparado otro
+    const combo = this.combo(p, e, o);
+    if (combo) { dmg *= combo.mult; if (combo.crit) crit = true; }
     if (o.undead && e.m.undead) dmg *= 1 + o.undead;
     dmg *= 1 - RULES.reduction(o.magic ? e.m.armor * 0.5 : e.m.armor, p.d.level);
     if (o.elem) {
       dmg += o.elem.dmg;
-      if (o.elem.slow && !e.pvp) e.slowUntil = Math.max(e.slowUntil, Date.now() + RULES.ELEMENTS.frio.slow);
+      if (o.elem.slow && !e.pvp) { e.slowUntil = Math.max(e.slowUntil, Date.now() + RULES.ELEMENTS.frio.slow); e.slowBy = p.user.id; }
       if (o.elem.poison > 0 && !e.pvp) e.dots.push({ by: p.user.id, per: o.elem.poison / 3, left: 3, next: Date.now() + 1000 });
     }
     if (e.pvp) {
@@ -894,6 +969,7 @@ class Instance {
     dmg = Math.max(1, Math.round(dmg));
     e.hp -= dmg;
     e.hitters.add(p.user.id);
+    this.stat(p, 'dmg', dmg + Math.min(0, e.hp)); // sin contar el daño de más al rematar
     e.aggro = e.aggro || p.user.id;
     this.wakePack(e, p.user.id);
     this.event({ e: 'hit', by: p.user.id, t: e.id, dmg, crit, kind: o.kind || 'ability', fx: o.fx || null, name: o.name || null });
@@ -952,7 +1028,7 @@ class Instance {
         if (ab.flank && [...this.players.values()].some((o) => o !== p && cheb(o, enemy) <= 1)) mult += ab.flank;
         const dealt = this.damageEnemy(p, enemy, dmgFor() * mult, { name: ab.name, leech: ab.leech, kind: 'ability' });
         if (ab.dot && this.enemies.has(enemy.id)) this.addDot(p, enemy, this.weaponRoll(p) * ab.dot, ab.dur);
-        if (ab.stun && this.enemies.has(enemy.id)) enemy.stunUntil = now + ab.stun;
+        if (ab.stun && this.enemies.has(enemy.id)) { enemy.stunUntil = now + ab.stun; enemy.stunBy = p.user.id; }
         void dealt;
         break;
       }
@@ -964,7 +1040,7 @@ class Instance {
         break;
       }
       case 'mark': {
-        enemy.vuln = ab.vuln; enemy.vulnUntil = now + ab.dur;
+        enemy.vuln = ab.vuln; enemy.vulnUntil = now + ab.dur; enemy.vulnBy = p.user.id;
         if (ab.dot) this.addDot(p, enemy, this.spellRoll(p) * ab.dot, ab.dur);
         this.event({ e: 'fx', kind: 'mark', x: enemy.x, y: enemy.y, id: enemy.id, color: ab.dot ? '#a05aff' : '#ff4a4a' });
         enemy.aggro = enemy.aggro || p.user.id;
@@ -976,8 +1052,8 @@ class Instance {
         for (const e of this.enemiesNear(c0, ab.radius, p)) {
           if (ab.mult) this.damageEnemy(p, e, dmgFor(), { magic, name: ab.name, fx: ab.fx });
           if (!this.enemies.has(e.id)) continue;
-          if (ab.stun) e.stunUntil = now + ab.stun;
-          if (ab.slow) e.slowUntil = now + ab.slow;
+          if (ab.stun) { e.stunUntil = now + ab.stun; e.stunBy = p.user.id; }
+          if (ab.slow) { e.slowUntil = now + ab.slow; e.slowBy = p.user.id; }
           if (ab.dot) this.addDot(p, e, this.spellRoll(p) * ab.dot, ab.dur);
         }
         break;
@@ -1010,12 +1086,12 @@ class Instance {
       }
       case 'heal': {
         const t = point && this.players.get(point.user ? point.user.id : '') || p;
-        this.heal(t, Math.round((t.d.hp * ab.pct + roll(p.d.spell) * 0.5) * p.d.healPow * boost), ab.name);
+        this.heal(t, Math.round((t.d.hp * ab.pct + roll(p.d.spell) * 0.5) * p.d.healPow * boost), ab.name, p);
         this.event({ e: 'fx', kind: 'heal', x: t.x, y: t.y });
         break;
       }
       case 'healAll': {
-        for (const o of this.players.values()) if (cheb(o, p) <= ab.radius) { this.heal(o, Math.round(o.d.hp * ab.pct * p.d.healPow * boost), ab.name); this.event({ e: 'fx', kind: 'heal', x: o.x, y: o.y }); }
+        for (const o of this.players.values()) if (cheb(o, p) <= ab.radius) { this.heal(o, Math.round(o.d.hp * ab.pct * p.d.healPow * boost), ab.name, p); this.event({ e: 'fx', kind: 'heal', x: o.x, y: o.y }); }
         this.event({ e: 'fx', kind: 'nova', x: p.x, y: p.y, radius: ab.radius, color: '#7dff8a' });
         break;
       }
@@ -1039,7 +1115,7 @@ class Instance {
         p.x = options[0].x; p.y = options[0].y; p.sm = 120; p.path = [];
         this.event({ e: 'fx', kind: ab.kind, from, to: { x: p.x, y: p.y }, id: p.user.id });
         if (ab.kind === 'blink') p.critNext = true;
-        else { this.damageEnemy(p, enemy, dmgFor(), { name: ab.name }); if (this.enemies.has(enemy.id)) enemy.stunUntil = now + ab.stun; }
+        else { this.damageEnemy(p, enemy, dmgFor(), { name: ab.name }); if (this.enemies.has(enemy.id)) { enemy.stunUntil = now + ab.stun; enemy.stunBy = p.user.id; } }
         p.target = enemy.id;
         this.onEnter(p);
         break;
@@ -1065,6 +1141,36 @@ class Instance {
   }
 
   // ---------- Muerte de un enemigo: experiencia, oro y botín ----------
+  // Combos entre clases: el congelado se rompe con un golpe físico de otro (crítico), el aturdido recibe más
+  // y el marcado por un compañero, todavía más. Sólo cuentan los preparativos de otro jugador.
+  combo(p, e, o) {
+    if (this.players.size < 2 || e.pvp || !p.user) return null;
+    const now = Date.now(), me = p.user.id;
+    let c = null;
+    if (e.slowUntil > now && e.slowBy && e.slowBy !== me && !o.magic) { c = { name: '❄️ ¡Hielo roto!', mult: 1.5, crit: true }; e.slowUntil = 0; }
+    else if (e.stunUntil > now && e.stunBy && e.stunBy !== me && e.stunCombo !== e.stunUntil) { c = { name: '💫 ¡Golpe al indefenso!', mult: 1.35, crit: true }; e.stunCombo = e.stunUntil; }
+    else if (e.vulnUntil > now && e.vulnBy && e.vulnBy !== me && now - (e.vulnCombo || 0) > 2500) { c = { name: '🎯 ¡Marca aprovechada!', mult: 1.25 }; e.vulnCombo = now; }
+    if (c) { this.event({ e: 'combo', id: e.id, by: me, name: c.name, x: e.x, y: e.y }); this.stat(p, 'combos', 1); }
+    return c;
+  }
+
+  // Cuenta para el resumen al acabar la mazmorra
+  stat(p, k, v) {
+    if (!p || !p.user) return;
+    let st = this.stats.get(p.user.id);
+    if (!st) this.stats.set(p.user.id, st = { name: p.user.name, dmg: 0, heal: 0, kills: 0, downs: 0, revives: 0, combos: 0 });
+    st[k] += v;
+  }
+  summaryStats() {
+    return [...this.stats.values()].map((x) => ({ ...x, dmg: Math.round(x.dmg), heal: Math.round(x.heal) }));
+  }
+
+  // Botín para cada uno: los del grupo que están cerca reciben su propia tirada (con su suerte y su clase)
+  lootParty(p, at) {
+    const list = [...this.players.values()].filter((o) => o === p || this.kind !== 'world' || cheb(o, at) <= 20);
+    return list.length ? list : [p];
+  }
+
   partyClasses() {
     const list = [...this.players.values()];
     if (!list.length) return [];
@@ -1074,10 +1180,11 @@ class Instance {
 
   killEnemy(p, e) {
     this.enemies.delete(e.id);
+    this.stat(p, 'kills', 1);
     if (e.group) { e.group.alive.delete(e.id); if (!e.group.alive.size) e.group.respawnAt = Date.now() + RESPAWN_MS; }
     const party = [...this.players.values()];
     const total = e.summoned ? e.m.xp / 3 : e.m.xp;
-    const share = total * (1 + 0.2 * (party.length - 1)) / Math.max(1, party.length);
+    const share = total * (1 + 0.2 * (party.length - 1)) / Math.max(1, party.length) * (this.modMf ? 1.2 : 1);
     let shown = 0;
     for (const o of party) {
       const xp = Math.max(1, Math.round(share * RULES.xpPenalty(o.d.level, e.m.level)));
@@ -1120,8 +1227,10 @@ class Instance {
     let gold = randInt(e.m.gold[0], e.m.gold[1]);
     if (this.mod === 'sobrios') gold = Math.round(gold * 1.5);
     if (gold > 0) this.dropAt(e.x, e.y, { gold });
-    const items = RULES.rollLoot(rnd, { ilvl: e.m.level, mf: p.d.mf, classes: this.partyClasses(), elite: e.m.elite, boss: e.m.boss, sets: e.m.sets });
-    for (const it of items) this.dropAt(e.x, e.y, { item: it });
+    for (const o of this.lootParty(p, e)) {
+      const items = RULES.rollLoot(rnd, { ilvl: e.m.level, mf: o.d.mf + this.modMf, classes: [o.d.cls], elite: e.m.elite || e.mimic, boss: e.m.boss, sets: e.m.sets, chest: !!e.mimic });
+      for (const it of items) this.dropAt(e.x, e.y, { item: it, owner: o.user.id });
+    }
     if (rnd() < (e.m.boss ? 1 : 0.08)) this.dropAt(e.x, e.y, { cons: e.m.boss ? 'pocion-vida-g' : 'pocion-vida-p', n: 1 });
     if (e.m.boss && this.kind === 'dungeon') {
       this.bossDead = true;
@@ -1140,6 +1249,7 @@ class Instance {
     const c = p.user.combat;
     const now = Date.now();
     p.lastHurt = now;
+    if (p.downed) return;
     if (p.iframeUntil > now && o.kind !== 'corrupt') { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true }); return; }
     if (o.canDodge && rnd() * 100 < p.d.dodge) { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true }); return; }
     if (o.raw) { /* ya viene reducido (duelos) */ } else if (o.magic) dmg *= 1 - p.d.magicRes / 100;
@@ -1163,7 +1273,17 @@ class Instance {
     this.privDirty(p);
     if (c.hp > 0) return;
     c.hp = 0;
+    // en grupo no se cae del todo: queda tumbado 30 s y un compañero a su lado puede reanimarlo
+    if (this.kind !== 'arena' && [...this.players.values()].some((o) => o !== p && !o.downed)) {
+      p.downed = { until: now + DOWN_MS, rev: 0 };
+      this.stat(p, 'downs', 1);
+      p.target = null; p.path = []; p.goal = null; p.pending = null; p.kdir = null; p.mounted = false;
+      for (const e of this.enemies.values()) if (e.aggro === p.user.id) e.aggro = null;
+      this.event({ e: 'downed', id: p.user.id, left: DOWN_MS });
+      return;
+    }
     this.event({ e: 'down', id: p.user.id });
+    this.stat(p, 'downs', 1);
     if (this.kind === 'arena') {
       // el duelo acaba: nadie muere de verdad en el sótano de Alfonso
       if (this.duelOver) return;
@@ -1204,12 +1324,12 @@ class Instance {
 
     // objetivo
     let target = e.aggro && this.players.get(e.aggro);
-    if (target && (cheb(e, target) > LEASH || this.inSafe(target))) { target = null; e.aggro = null; }
+    if (target && (cheb(e, target) > LEASH || this.inSafe(target) || target.downed)) { target = null; e.aggro = null; }
     if (!target) {
       let best = Infinity;
       for (const p of this.players.values()) {
         const d = cheb(e, p);
-        if (d < best && d <= AGGRO && this.los(e, p) && !this.inSafe(p)) { best = d; target = p; }
+        if (d < best && d <= AGGRO && !p.downed && this.los(e, p) && !this.inSafe(p)) { best = d; target = p; }
       }
       if (target) { e.aggro = target.user.id; this.wakePack(e, target.user.id); }
     }
@@ -1356,7 +1476,7 @@ class Instance {
       this.tele(e, s, cells, 1100, roll(m.dmg) * 2.5, true, now);
     } else if (s === 'volley') {
       for (const p of this.players.values()) {
-        if (cheb(p, e) > 9 || !this.los(e, p)) continue;
+        if (p.downed || cheb(p, e) > 9 || !this.los(e, p)) continue;
         for (const [ox, oy] of [[0, 0], [1, 0], [-1, 0], [0, 1], [0, -1]].slice(0, 3)) this.enemyShoot(e, p, now, { to: { x: p.x + ox, y: p.y + oy } });
       }
       e.nextAttack = now + 900;
@@ -1420,12 +1540,12 @@ class Instance {
     // en el mundo cada jugador recibe sólo lo que tiene cerca
     const near = viewer && this.kind === 'world' ? (o) => cheb(o, viewer) <= 26 : () => true;
     return {
-      players: [...this.players.values()].map((p) => ({ id: p.user.id, name: p.user.name, title: p.user.profile && p.user.profile.title || undefined, look: p.user.look, x: p.x, y: p.y, sm: p.sm, hp: Math.round(p.user.combat.hp), maxHp: p.d.hp, dir: p.dir, lvl: p.d.level, buffs: Object.keys(p.tbuffs), mount: p.mounted && p.mount ? p.mount.type : undefined, fishing: p.fishing ? 1 : undefined, stun: p.stunUntil > now || undefined })),
+      players: [...this.players.values()].map((p) => ({ id: p.user.id, name: p.user.name, title: p.user.profile && p.user.profile.title || undefined, look: p.user.look, x: p.x, y: p.y, sm: p.sm, hp: Math.round(p.user.combat.hp), maxHp: p.d.hp, dir: p.dir, lvl: p.d.level, buffs: Object.keys(p.tbuffs), mount: p.mounted && p.mount ? p.mount.type : undefined, fishing: p.fishing ? 1 : undefined, stun: p.stunUntil > now || undefined, down: p.downed ? Math.min(99, Math.round(p.downed.rev / REVIVE_S * 100)) + 1 : undefined, downLeft: p.downed ? Math.max(0, p.downed.until - now) : undefined })),
       pets: [...this.pets.values()].filter((pt) => pt.downUntil <= now).map((pt) => ({ id: pt.id, owner: pt.owner, k: pt.type, name: pt.name, x: pt.x, y: pt.y, sm: pt.sm, hp: Math.round(pt.hp), maxHp: pt.maxHp, dir: pt.dir, evo: pt.evo || undefined, plvl: pt.plvl })),
       enemies: [...this.enemies.values()].filter((e) => !e.pvp && near(e)).map((e) => ({ id: e.id, k: e.k, x: e.x, y: e.y, sm: e.sm, hp: Math.max(0, Math.round(e.hp)), maxHp: e.maxHp, dir: e.dir, lvl: e.m.level, elite: e.m.elite || undefined, boss: e.m.boss || undefined, wb: e.wb || undefined, big: e.m.big || undefined, stun: e.stunUntil > now || undefined, mark: e.vulnUntil > now || undefined, summoned: e.summoned || undefined })),
       herbs: [...this.herbs.values()].filter((h) => h.readyAt <= now && near(h)).map((h) => ({ id: h.id, x: h.x, y: h.y, zone: h.zone })),
       chests: [...this.chests.values()],
-      loot: [...this.loot.values()].filter(near).map((l) => ({ id: l.id, x: l.x, y: l.y, gold: l.gold ? 1 : undefined, cons: l.cons, mat: l.mat, r: l.item ? l.item.rarity : undefined, slot: l.item ? l.item.slot : undefined, name: l.item ? l.item.name : undefined, it: l.item || undefined })),
+      loot: [...this.loot.values()].filter((l) => near(l) && (!l.owner || (viewer && l.owner === viewer.user.id))).map((l) => ({ id: l.id, x: l.x, y: l.y, gold: l.gold ? 1 : undefined, cons: l.cons, mat: l.mat, r: l.item ? l.item.rarity : undefined, slot: l.item ? l.item.slot : undefined, name: l.item ? l.item.name : undefined, it: l.item || undefined })),
       portal: this.portal,
       portalLeft: this.portalEnd ? Math.max(0, this.portalEnd - now) : undefined,
       start: this.start,
@@ -1438,7 +1558,9 @@ class Instance {
     this.dirty = false;
     this.lastFlush = Date.now();
     const data = JSON.stringify({ t: 'dsnap', ...this.snapshot(), events });
-    if (this.kind === 'world') for (const p of this.players.values()) this.hooks.send(p.user, JSON.stringify({ t: 'dsnap', ...this.snapshot(p), events }));
+    // en el mundo (cercanía) o con botín personal, cada uno recibe su propia instantánea
+    const own = this.kind === 'world' || [...this.loot.values()].some((l) => l.owner);
+    if (own) for (const p of this.players.values()) this.hooks.send(p.user, JSON.stringify({ t: 'dsnap', ...this.snapshot(p), events }));
     else for (const p of this.players.values()) this.hooks.send(p.user, data);
     for (const u of extraUsers) this.hooks.send(u, data);
     for (const p of this.players.values()) if (p.privDirty) this.sendPrivate(p);

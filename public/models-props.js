@@ -161,6 +161,15 @@
       case 'banner': wall = true; { const col = theme === 'cripta' ? '#2a2a4a' : theme === 'nido' ? '#2a4a2a' : '#6a1414'; mesh(box(0.4, 0.8, 0.02), mat(col), 0, 1.0, 0.06, g); mesh(box(0.44, 0.04, 0.04), mat('#c8a040', { metal: 0.6 }), 0, 1.4, 0.06, g); mesh(box(0.08, 0.08, 0.025), mat('#c8a040', { metal: 0.6 }), 0, 1.05, 0.075, g); } block = false; break;
       case 'chains': wall = true; for (const x of [-0.12, 0.12]) for (let i = 0; i < 5; i++) mesh(geo('link', () => new THREE.TorusGeometry(0.03, 0.008, 3, 6)), mat('#5a5a62', { metal: 0.7 }), x, 1.3 - i * 0.07, 0.05, g).rotation.y = i % 2 ? Math.PI / 2 : 0; block = false; break;
       case 'shield': wall = true; { const s = offhand('escudo', null, null, g); s.position.set(0, 1.0, 0.05); } block = false; break;
+      // muro agrietado de una sala secreta: grietas por las que se filtra una luz dorada
+      case 'secret': {
+        wall = true; block = false;
+        const glow = mat('#ffd27a', { emissive: '#ffb84a', ei: 2.2 });
+        const segs = [[0, 0.35, 0.3, 0.2], [0.06, 0.62, 0.26, -0.5], [-0.05, 0.86, 0.22, 0.6], [0.1, 1.05, 0.18, -0.3], [-0.14, 0.55, 0.16, 1.1], [0.16, 0.8, 0.14, -1.2]];
+        for (const [x, y, len, rz] of segs) { const c = mesh(box(0.025, len, 0.02), glow, x, y, 0.04, g); c.rotation.z = rz; c.castShadow = false; }
+        light = { color: '#ffcf6a', intensity: 0.9, dist: 2.6, y: 0.7, z: 0.4 };
+        break;
+      }
       default: return null;
     }
     return { obj: g, light, wall, block };

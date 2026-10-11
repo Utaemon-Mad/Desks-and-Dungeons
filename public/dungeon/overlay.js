@@ -12,7 +12,7 @@
     game.pings = game.pings.filter((p) => now - p.start < 4000);
     for (const p of game.pings) {
       const s = D.stage.project(p.x + 0.5, 0, p.y + 0.5), t = (now - p.start) / 1000;
-      const col = p.k === 'danger' ? '255,80,60' : '255,215,90';
+      const col = p.k === 'danger' ? '255,80,60' : p.k === 'help' ? '255,120,200' : p.k === 'omw' ? '120,220,255' : '255,215,90';
       for (let r = 0; r < 2; r++) {
         const ph = (t * 1.4 + r * 0.5) % 1;
         g.strokeStyle = `rgba(${col},${(1 - ph) * Math.min(1, (4 - t))})`; g.lineWidth = 3;
@@ -20,7 +20,7 @@
       }
       const bob = Math.sin(t * 6) * 4;
       g.font = '26px sans-serif'; g.textAlign = 'center';
-      g.fillText(p.k === 'danger' ? '⚠️' : '📍', s.x, s.y - 30 + bob);
+      g.fillText({ danger: '⚠️', help: '🆘', omw: '🏃' }[p.k] || '📍', s.x, s.y - 30 + bob);
       g.font = '600 12px "Pixelify Sans", sans-serif'; g.fillStyle = `rgb(${col})`;
       g.fillText(who(p.id), s.x, s.y - 54 + bob);
     }
@@ -89,6 +89,15 @@
         if (!isMe) { g.fillStyle = '#120a08'; g.fillRect(s.x - bw / 2 - 1, s.y - 1, bw + 2, 6); g.fillStyle = '#4cc85c'; g.fillRect(s.x - bw / 2, s.y, bw * Math.max(0, e.hp / e.maxHp), 4); }
         const b = game.bubbles.get(e.id);
         if (b && b.until > now) drawBubble(s.x, s.y - 22, b.text);
+        // tumbado: anillo que se llena mientras un compañero lo reanima
+        if (e.down) {
+          const f = P(e._top.x, 0.3, e._top.z), k = (e.down - 1) / 100;
+          g.lineWidth = 5; g.strokeStyle = 'rgba(0,0,0,.6)'; g.beginPath(); g.arc(f.x, f.y - 30, 16, 0, Math.PI * 2); g.stroke();
+          g.strokeStyle = '#7dff8a'; g.beginPath(); g.arc(f.x, f.y - 30, 16, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2); g.stroke();
+          g.font = '18px serif'; g.fillText('💀', f.x, f.y - 30);
+          const txt = isMe ? 'Esperando a un compañero…' : '¡Ponte a su lado para reanimarlo!';
+          g.font = '600 12px "Pixelify Sans", sans-serif'; g.lineWidth = 3; g.strokeStyle = '#000'; g.strokeText(txt, f.x, f.y - 56); g.fillStyle = '#b8ffb0'; g.fillText(txt, f.x, f.y - 56);
+        }
       }
     }
     // objeto del suelo bajo el ratón: sólo su nombre, con el color de su calidad (la ficha completa, en el inventario)
@@ -131,6 +140,17 @@
       g.globalAlpha = 1;
     }
     // cuenta atrás del duelo
+    // has caído: cuánto queda para que te reanimen antes de volver a la taberna
+    const meE = game.ents.get(DD.myId);
+    if (meE && meE.down) {
+      if (meE._dl !== meE.downLeft) { meE._dl = meE.downLeft; meE.downEnd = now + (meE.downLeft || 0); }
+      const left = Math.max(0, Math.ceil((meE.downEnd - now) / 1000));
+      g.fillStyle = 'rgba(40,0,0,.35)'; g.fillRect(0, 0, innerWidth, innerHeight);
+      g.font = '64px "Jacquard 12", serif'; g.lineWidth = 6; g.strokeStyle = '#000';
+      g.strokeText('Has caído', innerWidth / 2, innerHeight * 0.32); g.fillStyle = '#ff7a6a'; g.fillText('Has caído', innerWidth / 2, innerHeight * 0.32);
+      const sub = meE.down > 1 ? '¡Te están reanimando!' : `Un compañero puede reanimarte · ${left} s`;
+      g.font = '600 18px "Pixelify Sans", sans-serif'; g.lineWidth = 4; g.strokeText(sub, innerWidth / 2, innerHeight * 0.32 + 46); g.fillStyle = '#f4ead2'; g.fillText(sub, innerWidth / 2, innerHeight * 0.32 + 46);
+    }
     if (game.duelAt) {
       const left = game.duelAt - now;
       if (left > -900) {
@@ -148,7 +168,6 @@
     if (now - game.fps.t > 1000) { game.fps.v = game.fps.n; game.fps.n = 0; game.fps.t = now; }
     if (DD.gfx && DD.gfx.fps) { g.textAlign = 'left'; g.font = '600 12px monospace'; g.fillStyle = '#7dff8a'; g.fillText(`${game.fps.v} fps`, 10, innerHeight - 12); g.textAlign = 'center'; }
     // botón de pescar junto al agua
-    const meE = game.ents.get(DD.myId);
     const nearWater = map.kind === 'world' && meE && [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]].some(([dx, dy]) => WATER_T.has(map.tiles[(meE.y + dy) * map.w + meE.x + dx]));
     const fb = $('#dfish');
     if (fb.classList.contains('hidden') === !!nearWater) fb.classList.toggle('hidden', !nearWater);
@@ -197,7 +216,7 @@
   }
 
   // Minimapa (sólo lo explorado)
-  const MINI = { ',': '#2f4a2a', ';': '#3a5a32', T: '#1a3018', P: '#16281e', w: '#14284a', v: '#24426a', s: '#7a6a4a', h: '#4a6a3a', M: '#5a5a62', '=': '#8a6a3a', b: '#8a6a3a', g: '#3a3430', t: '#6a6a72', R: '#7a7a7e', F: '#ff7a2a', C: '#000000', H: '#ffcf6a', k: '#8a5a3a', D: '#b83a2a', '#': '#1a1618', '.': '#6a6058', '+': '#8a5a2a', '^': '#a04040', '~': '#24427a', '%': '#c8400a', f: '#7a6a2a', x: '#5a4a2a', u: '#6a6258', m: '#4a4a2e', q: '#24301e', y: '#2a2a1a', r: '#4e5a2e', d: '#a8643a', z: '#8a5a3a', o: '#6a4a3a', c: '#3a7a3a', n: '#d8e0e8', i: '#a8c8e0', p: '#8a9aa8', a: '#4a3e3c', e: '#2a2222', l: '#c8400a', W: '#7ad0ff' };
+  const MINI = { S: '#1a1618', ',': '#2f4a2a', ';': '#3a5a32', T: '#1a3018', P: '#16281e', w: '#14284a', v: '#24426a', s: '#7a6a4a', h: '#4a6a3a', M: '#5a5a62', '=': '#8a6a3a', b: '#8a6a3a', g: '#3a3430', t: '#6a6a72', R: '#7a7a7e', F: '#ff7a2a', C: '#000000', H: '#ffcf6a', k: '#8a5a3a', D: '#b83a2a', '#': '#1a1618', '.': '#6a6058', '+': '#8a5a2a', '^': '#a04040', '~': '#24427a', '%': '#c8400a', f: '#7a6a2a', x: '#5a4a2a', u: '#6a6258', m: '#4a4a2e', q: '#24301e', y: '#2a2a1a', r: '#4e5a2e', d: '#a8643a', z: '#8a5a3a', o: '#6a4a3a', c: '#3a7a3a', n: '#d8e0e8', i: '#a8c8e0', p: '#8a9aa8', a: '#4a3e3c', e: '#2a2222', l: '#c8400a', W: '#7ad0ff' };
   function drawMinimap() {
     const map = game.map;
     const big = map.kind === 'world' && game.bigMap;
