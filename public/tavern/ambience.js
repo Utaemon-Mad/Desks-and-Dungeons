@@ -44,9 +44,9 @@
       '  return mix(mix(mix(h(i), h(i + vec3(1,0,0)), f.x), mix(h(i + vec3(0,1,0)), h(i + vec3(1,1,0)), f.x), f.y),',
       '             mix(mix(h(i + vec3(0,0,1)), h(i + vec3(1,0,1)), f.x), mix(h(i + vec3(0,1,1)), h(i + vec3(1,1,1)), f.x), f.y), f.z); }',
       'void main(){',
-      '  float fade = smoothstep(0.0, 0.12, vT) * (1.0 - smoothstep(0.45, 1.0, vT)) * pow(sin(3.14159 * vX), 1.5);',
+      '  float fade = smoothstep(0.0, 0.12, vT) * (1.0 - smoothstep(0.45, 1.0, vT)) * pow(max(sin(3.14159 * vX), 0.0), 1.5);', // max: en el borde sin() da -0,0000001 y pow() de un negativo es NaN (pantalla negra en iPhone)
       '  float dust = 0.65 + 0.55 * n(vW * 2.2 + vec3(0.0, time * 0.12, time * 0.05));',
-      '  gl_FragColor = vec4(color * fade * dust * strength, 1.0);',
+      '  gl_FragColor = vec4(clamp(color * fade * dust * strength, 0.0, 4.0), 1.0);',
       '}'].join('\n'),
   };
 
