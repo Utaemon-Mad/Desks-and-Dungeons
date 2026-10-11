@@ -417,8 +417,8 @@ function detach(room, user) {
   }
 }
 
-function newDungeon(room, theme, level, idHint) {
-  const d = GEN.generate({ theme, level, seed: crypto.randomBytes(6).toString('hex') });
+function newDungeon(room, theme, level, idHint, seed) {
+  const d = GEN.generate({ theme, level, seed: seed || crypto.randomBytes(6).toString('hex') });
   d.id = idHint || 'd' + crypto.randomBytes(4).toString('hex');
   return getInstance(room, d);
 }
@@ -428,6 +428,7 @@ function joinInstance(room, user, inst, via = {}) {
   user.where = { id: inst.id, name: inst.def.name, from: via.from || null, back: via.back || null };
   inst.join(user, via.at);
   broadcast(room, { t: 'where', id: user.id, where: inst.def.name });
+  mesaRefresh(room);
 }
 
 function enterCave(room, user, cave, back) {
@@ -563,7 +564,7 @@ setInterval(() => {
 const EMOTES = new Set(['wave', 'dance', 'cheers', 'laugh', 'heart', 'fight', 'think', 'sleep']);
 // Módulos de la segunda división: progreso, modos de juego, tiendas y comercio, y los mensajes por temas
 const CTX2 = {};
-for (const [k, get] of Object.entries({ GEN: () => GEN, MAP: () => MAP, PROG: () => PROG, RULES: () => RULES, SHOP_REFRESH_MS: () => SHOP_REFRESH_MS, adminPage: () => adminPage, broadcast: () => broadcast, caughtFish: () => caughtFish, changeChar: () => changeChar, claimLogin: () => claimLogin, cleanText: () => cleanText, crypto: () => crypto, derive: () => derive, detach: () => detach, donate: () => donate, duelEnd: () => duelEnd, endTrade: () => endTrade, ensureBoard: () => ensureBoard, feat: () => feat, goalAdd: () => goalAdd, trophyAdd: () => trophyAdd, getInstance: () => getInstance, give: () => give, giveMats: () => giveMats, gotHerb: () => gotHerb, indexLogin: () => indexLogin, joinInstance: () => joinInstance, levelOf: () => levelOf, logClientError: () => logClientError, makeBackup: () => makeBackup, marketList: () => marketList, marketView: () => marketView, matsText: () => matsText, nextFloor: () => nextFloor, offerLogin: () => offerLogin, onKill: () => onKill, openToken: () => openToken, payOffline: () => payOffline, petXp: () => petXp, profileChanged: () => profileChanged, questState: () => questState, raidDone: () => raidDone, raidInfo: () => raidInfo, ranksView: () => ranksView, restoreBackup: () => restoreBackup, reward: () => reward, rnd: () => rnd, roomInfo: () => roomInfo, saveUser: () => saveUser, sealToken: () => sealToken, seasonAdd: () => seasonAdd, seasonPrize: () => seasonPrize, seasonView: () => seasonView, send: () => send, sendMe: () => sendMe, sendStatic: () => sendStatic, sendTrade: () => sendTrade, shopFor: () => shopFor, startDescent: () => startDescent, startDuel: () => startDuel, startRaid: () => startRaid, statsWithout: () => statsWithout, store: () => store, system: () => system, takeMats: () => takeMats, tavernView: () => tavernView, toTavern: () => toTavern, track: () => track, trades: () => trades, worldBossDown: () => worldBossDown })) Object.defineProperty(CTX2, k, { get, enumerable: true });
+for (const [k, get] of Object.entries({ GEN: () => GEN, MAP: () => MAP, PROG: () => PROG, RULES: () => RULES, SHOP_REFRESH_MS: () => SHOP_REFRESH_MS, adminPage: () => adminPage, broadcast: () => broadcast, caughtFish: () => caughtFish, changeChar: () => changeChar, claimLogin: () => claimLogin, cleanText: () => cleanText, crypto: () => crypto, derive: () => derive, detach: () => detach, donate: () => donate, duelEnd: () => duelEnd, endTrade: () => endTrade, ensureBoard: () => ensureBoard, feat: () => feat, goalAdd: () => goalAdd, trophyAdd: () => trophyAdd, getInstance: () => getInstance, give: () => give, giveMats: () => giveMats, gotHerb: () => gotHerb, indexLogin: () => indexLogin, joinInstance: () => joinInstance, newDungeon: () => newDungeon, levelOf: () => levelOf, logClientError: () => logClientError, makeBackup: () => makeBackup, marketList: () => marketList, marketView: () => marketView, matsText: () => matsText, nextFloor: () => nextFloor, offerLogin: () => offerLogin, onKill: () => onKill, openToken: () => openToken, payOffline: () => payOffline, petXp: () => petXp, profileChanged: () => profileChanged, questState: () => questState, raidDone: () => raidDone, raidInfo: () => raidInfo, ranksView: () => ranksView, restoreBackup: () => restoreBackup, reward: () => reward, rnd: () => rnd, roomInfo: () => roomInfo, saveUser: () => saveUser, sealToken: () => sealToken, seasonAdd: () => seasonAdd, seasonPrize: () => seasonPrize, seasonView: () => seasonView, send: () => send, sendMe: () => sendMe, sendStatic: () => sendStatic, sendTrade: () => sendTrade, shopFor: () => shopFor, startDescent: () => startDescent, startDuel: () => startDuel, startRaid: () => startRaid, statsWithout: () => statsWithout, store: () => store, system: () => system, takeMats: () => takeMats, tavernView: () => tavernView, toTavern: () => toTavern, track: () => track, trades: () => trades, worldBossDown: () => worldBossDown })) Object.defineProperty(CTX2, k, { get, enumerable: true });
 const { caughtFish, ensureBoard, giveMats, gotHerb, matsText, onKill, petXp, ranksView, takeMats, track, worldBossDown } = require('./server/progress.js')(CTX2);
 const { duelEnd, nextFloor, roomInfo, startDescent, startDuel } = require('./server/modes.js')(CTX2);
 const { endTrade, sendTrade, shopFor, trades } = require('./server/trade.js')(CTX2);
@@ -581,6 +582,9 @@ const {
 } = require('./server/social.js')(CTX);
 
 const HANDLERS = Object.assign({}, require('./server/handlers/char.js')(CTX2), require('./server/handlers/craft.js')(CTX2), require('./server/handlers/play.js')(CTX2));
+
+// la mesa de partida vuelve a mirar quién está sentado (server/handlers/play.js)
+const mesaRefresh = (room) => HANDLERS['mesa:refresh']({ room });
 
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 262144 }); // cabe la copia de seguridad de la cuenta
 
@@ -784,6 +788,7 @@ wss.on('connection', (ws) => {
         }
         user.x = x; user.y = y;
         broadcast(room, { t: 'move', id: user.id, x, y });
+        mesaRefresh(room);
         break;
       }
       case 'chat': {
@@ -1023,6 +1028,7 @@ wss.on('connection', (ws) => {
     }
     room.users.delete(user.id);
     broadcast(room, { t: 'leave', id: user.id });
+    mesaRefresh(room);
     system(room, `${user.name} sale de la taberna.`);
     if (room.users.size === 0) {
       // Conservamos el historial un rato por si alguien vuelve enseguida

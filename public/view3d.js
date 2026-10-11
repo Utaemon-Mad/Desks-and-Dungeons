@@ -173,6 +173,8 @@
       P.ao.scene = scene; P.ao.camera = P.aoCam;
       P.aoCam.position.copy(camera.position); P.aoCam.quaternion.copy(camera.quaternion);
       P.aoCam.fov = camera.fov; P.aoCam.aspect = camera.aspect; P.aoCam.near = camera.near; P.aoCam.far = camera.far;
+      // también el corrimiento de la imagen (vista de la mesa de partida), si no la sombra sale desplazada
+      if (camera.view && camera.view.enabled) { const v = camera.view; P.aoCam.setViewOffset(v.fullWidth, v.fullHeight, v.offsetX, v.offsetY, v.width, v.height); } else if (P.aoCam.view && P.aoCam.view.enabled) P.aoCam.clearViewOffset();
       P.aoCam.updateProjectionMatrix(); P.aoCam.updateMatrixWorld();
       P.ao.enabled = G.ao > 0; P.ao.blendIntensity = G.ao;
     }

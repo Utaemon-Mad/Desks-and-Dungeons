@@ -128,10 +128,63 @@
       MODELS.flame(t, 0, 1.76, 0.2, 1.5);
       if (L.y === 0) t.position.set(L.x, 0, 0.02); else { t.position.set(0.02, 0, L.y); t.rotation.y = Math.PI / 2; }
       g.add(t);
-      T3.torches.push({ x: L.y === 0 ? L.x : 0.35, z: L.y === 0 ? 0.35 : L.y, seed: L.x + L.y });
+      T3.torches.push({ x: L.y === 0 ? L.x : 0.35, z: L.y === 0 ? 0.35 : L.y, seed: L.x + L.y, fx: L.y === 0 ? L.x : 0.22, fy: 1.82, fz: L.y === 0 ? 0.22 : L.y });
     }
+    buildWallDecor(g);
     buildTrophies(g);
     return g;
+  }
+
+  // Decoración de las paredes: estandartes de la casa, el letrero tallado sobre las botellas y telarañas en las esquinas
+  function buildWallDecor(g) {
+    const H = MAP.H, WH = 2.7;
+    const banner = canvasTex(128, 256, (c, w, h) => {
+      c.fillStyle = '#6a1218'; c.beginPath(); c.moveTo(0, 0); c.lineTo(w, 0); c.lineTo(w, h - 40); c.lineTo(w / 2, h); c.lineTo(0, h - 40); c.closePath(); c.fill();
+      c.strokeStyle = '#d8a848'; c.lineWidth = 6; c.stroke();
+      const gr = c.createLinearGradient(0, 0, w, 0); gr.addColorStop(0, 'rgba(0,0,0,.35)'); gr.addColorStop(0.5, 'rgba(255,255,255,.06)'); gr.addColorStop(1, 'rgba(0,0,0,.35)');
+      c.fillStyle = gr; c.fill();
+      // emblema: jarra cruzada con una espada
+      c.fillStyle = '#e8c060'; c.strokeStyle = '#e8c060'; c.lineWidth = 5;
+      c.beginPath(); c.moveTo(30, 150); c.lineTo(98, 70); c.stroke(); c.fillRect(88, 62, 18, 6);
+      c.fillRect(44, 92, 40, 52); c.beginPath(); c.arc(88, 116, 14, -1.4, 1.4); c.stroke();
+      c.fillStyle = '#fff4d0'; c.fillRect(44, 86, 40, 10);
+      c.font = 'bold 26px Georgia'; c.textAlign = 'center'; c.fillStyle = '#e8c060'; c.fillText('D&D', w / 2, 192);
+    });
+    const cloth = new THREE.MeshStandardMaterial({ map: banner, roughness: 0.95, transparent: true, alphaTest: 0.5, side: THREE.DoubleSide });
+    const rod = MODELS.mat('#3a2414'), gold = MODELS.mat('#c8963a', { metal: 0.8, rough: 0.35 });
+    for (const z of [7.25, 9.5]) {
+      const b = new THREE.Group();
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 1.0, 1, 4), cloth); m.position.y = -0.52; m.receiveShadow = true; b.add(m);
+      MODELS.mesh(MODELS.cyl(0.02, 0.02, 0.62, 6), rod, 0, 0, 0, b).rotation.z = Math.PI / 2;
+      for (const sx of [-1, 1]) MODELS.mesh(MODELS.sph(0.035, 6, 5), gold, sx * 0.32, 0, 0, b);
+      b.position.set(0.06, 2.35, z); b.rotation.y = Math.PI / 2;
+      g.add(b);
+    }
+    // letrero tallado con el nombre de la taberna, colgado con cadenas sobre la estantería de botellas
+    const sign = canvasTex(512, 112, (c, w, h) => {
+      c.fillStyle = '#4a2a14'; c.fillRect(0, 0, w, h);
+      for (let y = 0; y < h; y += 4) { c.fillStyle = `rgba(0,0,0,${0.05 + rand(y) * 0.12})`; c.fillRect(0, y, w, 2); }
+      c.strokeStyle = '#2a160a'; c.lineWidth = 10; c.strokeRect(5, 5, w - 10, h - 10);
+      c.strokeStyle = '#c8963a'; c.lineWidth = 3; c.strokeRect(14, 14, w - 28, h - 28);
+      c.font = 'bold 52px Georgia'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillStyle = '#1a0c04'; c.fillText('Desks & Dungeons', w / 2 + 2, h / 2 + 3);
+      const gt = c.createLinearGradient(0, 25, 0, 85); gt.addColorStop(0, '#ffe8a0'); gt.addColorStop(1, '#c8902a');
+      c.fillStyle = gt; c.fillText('Desks & Dungeons', w / 2, h / 2);
+    });
+    const sg = new THREE.Group();
+    MODELS.mesh(MODELS.box(2.1, 0.46, 0.06), new THREE.MeshStandardMaterial({ map: sign, roughness: 0.6, metalness: 0.1 }), 0, 0, 0, sg);
+    for (const sx of [-0.85, 0.85]) MODELS.mesh(MODELS.cyl(0.008, 0.008, 0.3, 3), MODELS.mat('#2a2a2e', { metal: 0.7 }), sx, 0.38, 0, sg);
+    sg.position.set(12.4, 2.17, 0.13);
+    g.add(sg);
+    // telarañas en las esquinas altas
+    const web = canvasTex(128, 128, (c, w) => {
+      c.strokeStyle = 'rgba(230,230,240,.55)'; c.lineWidth = 1.2;
+      for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI / 2; c.beginPath(); c.moveTo(0, 0); c.lineTo(Math.cos(a) * w, Math.sin(a) * w); c.stroke(); }
+      for (let r = 14; r < w; r += 14 + r * 0.15) { c.beginPath(); for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI / 2, rr = r * (0.92 + rand(r + i) * 0.12); i ? c.lineTo(Math.cos(a) * rr, Math.sin(a) * rr) : c.moveTo(Math.cos(a) * rr, Math.sin(a) * rr); } c.stroke(); }
+    });
+    const webM = new THREE.MeshBasicMaterial({ map: web, transparent: true, depthWrite: false, side: THREE.DoubleSide, opacity: 0.8 });
+    const w1 = new THREE.Mesh(new THREE.PlaneGeometry(0.9, 0.9), webM); w1.position.set(0.45, WH - 0.45, 0.04); w1.rotation.z = Math.PI; w1.scale.x = -1; g.add(w1);
+    const w2 = new THREE.Mesh(new THREE.PlaneGeometry(0.7, 0.7), webM); w2.position.set(0.04, WH - 0.35, H - 0.35); w2.rotation.set(0, Math.PI / 2, Math.PI); g.add(w2);
   }
 
   // Muro de trofeos: una placa con una figurilla de cada jefe que cayó por primera vez en este servidor
@@ -166,17 +219,71 @@
 
   function buildFurniture() {
     const g = new THREE.Group();
-    const lights = [];
+    const lights = [], hang = [];
     const place = (type, x, y, dir) => {
       const f = MODELS.furniture(type, dir);
       if (!f) return;
       f.obj.position.set(x + 0.5, 0, y + 0.5);
       g.add(f.obj);
-      if (f.light) lights.push({ x: x + 0.5, y: f.light.y, z: y + 0.5 + (f.light.z || 0), color: f.light.color, intensity: f.light.intensity, dist: f.light.dist, seed: x * 3 + y });
+      if (type === 'chandelier') hang.push(f.obj);
+      if (f.light) lights.push({ x: x + 0.5, y: f.light.y, z: y + 0.5 + (f.light.z || 0), color: f.light.color, intensity: f.light.intensity, dist: f.light.dist, seed: x * 3 + y, kind: type, bx: x + 0.5, bz: y + 0.5, fire: type === 'fireplace' });
     };
-    for (const it of MAP.items) if (it.type !== 'staff') place(it.type, it.x, it.y, it.dir);
+    for (const it of MAP.items) if (it.type !== 'staff' && it.type !== 'maptable') place(it.type, it.x, it.y, it.dir);
+    // la mesa de partida: las casillas de «mesa con mapa» que se tocan forman una sola mesa grande con el plano encima
+    MAP.mapTables().forEach((t, i) => g.add(buildMapTable(t, i === 0, lights)));
+    // sobre la barra: alguna vela, jarras y botellas (siempre en el mismo sitio)
+    for (const it of MAP.items) if (it.type === 'bar') {
+      const r = rand(it.x * 13.1 + it.y * 7.7), dx = it.x + 0.5 + (r - 0.5) * 0.4, dz = it.y + 0.5 + (rand(it.y * 3.3 + it.x) - 0.5) * 0.4;
+      if (r < 0.34) { const c = new THREE.Group(); MODELS.candle(c, 0, 0, 0); c.position.set(dx, 0.9, dz); g.add(c); lights.push({ x: dx, y: 1.15, z: dz, color: '#ffc070', intensity: 0.7, dist: 2.6, seed: it.x * 3 + it.y, kind: 'barcandle' }); }
+      else if (r < 0.7) { const m = MODELS.mug(); m.position.set(dx, 0.96, dz); g.add(m); }
+      else { const b = MODELS.mesh(MODELS.cyl(0.04, 0.05, 0.24, 6), MODELS.mat(['#2e7d4f', '#7a2a2a', '#3a5a9a'][Math.floor(r * 30) % 3], { rough: 0.25, metal: 0.1, opacity: 0.85 }), dx, 1.02, dz, g); b.castShadow = false; }
+    }
     for (const m of Object.values(MAP.MERCHANTS)) for (const pr of [m.prop, m.prop2].filter(Boolean)) place(pr.type, pr.x, pr.y);
-    return { g, lights };
+    return { g, lights, hang };
+  }
+
+  // Mesa grande de madera con el plano de la próxima mazmorra en pergamino, velas en las esquinas y unas figuritas
+  const planTex = { canvas: null, tex: null, version: -1 };
+  function buildMapTable(t, main, lights) {
+    const g = new THREE.Group();
+    const w = t.x1 - t.x0 + 1, d = t.y1 - t.y0 + 1, cx = t.x0 + w / 2, cz = t.y0 + d / 2, H = 0.56;
+    const wood = MODELS.mat('#5a3418', { rough: 0.55 }), dark = MODELS.mat('#2e1a0c'), brass = MODELS.mat('#c8963a', { metal: 0.85, rough: 0.3 });
+    MODELS.mesh(MODELS.box(w - 0.06, 0.08, d - 0.06), wood, 0, H, 0, g);
+    MODELS.mesh(MODELS.box(w + 0.02, 0.05, d + 0.02), dark, 0, H - 0.06, 0, g);
+    MODELS.mesh(MODELS.box(w - 0.3, 0.12, d - 0.3), dark, 0, H - 0.14, 0, g); // faldón
+    for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+      MODELS.mesh(MODELS.cyl(0.07, 0.05, H - 0.08, 8), dark, sx * (w / 2 - 0.22), (H - 0.08) / 2, sz * (d / 2 - 0.22), g);
+      MODELS.mesh(MODELS.box(0.1, 0.02, 0.1), brass, sx * (w / 2 - 0.05), H + 0.045, sz * (d / 2 - 0.05), g); // cantoneras
+    }
+    // pergamino: en la mesa principal es el plano de verdad (se repinta cuando cambia)
+    if (!planTex.canvas) { planTex.canvas = document.createElement('canvas'); planTex.canvas.width = 768; planTex.canvas.height = 512; planTex.tex = new THREE.CanvasTexture(planTex.canvas); planTex.tex.colorSpace = THREE.SRGBColorSpace; planTex.tex.anisotropy = 8; planTex.tex.userData.keep = true; planTex.version = -1; }
+    const pw = w - 0.36, pd = d - 0.3;
+    const paper = new THREE.Mesh(new THREE.PlaneGeometry(pw, pd), new THREE.MeshStandardMaterial({ map: main ? planTex.tex : null, color: main ? '#ffffff' : '#e0cc98', roughness: 0.9 }));
+    paper.rotation.x = -Math.PI / 2; paper.position.set(0, H + 0.042, 0); paper.receiveShadow = true;
+    g.add(paper);
+    // velas en dos esquinas (con su luz) y unas figuritas de plomo
+    for (const [sx, sz] of [[-1, -1], [1, 1]]) {
+      const c = new THREE.Group(); MODELS.candle(c, 0, 0, 0); c.position.set(sx * (w / 2 - 0.1), H + 0.04, sz * (d / 2 - 0.1)); g.add(c);
+      lights.push({ x: cx + sx * (w / 2 - 0.1), y: H + 0.3, z: cz + sz * (d / 2 - 0.1), color: '#ffc070', intensity: 0.9, dist: 3, seed: t.x0 + sx * 3 + sz, kind: 'barcandle' });
+    }
+    ['#c8463a', '#3a7ac8', '#4aa84a'].forEach((col, i) => {
+      const f = new THREE.Group();
+      MODELS.mesh(MODELS.cyl(0.035, 0.04, 0.02, 8), MODELS.mat('#2a2a2e', { metal: 0.5 }), 0, 0.01, 0, f);
+      MODELS.mesh(MODELS.cone(0.03, 0.09, 6), MODELS.mat(col), 0, 0.065, 0, f);
+      MODELS.mesh(MODELS.sph(0.022, 6, 5), MODELS.mat('#e8c8a0'), 0, 0.12, 0, f);
+      f.position.set(w / 2 - 0.13, H + 0.04, -d / 2 + 0.35 + i * 0.12); g.add(f);
+    });
+    // un dado de veinte caras junto al plano
+    const d20 = MODELS.mesh(new THREE.IcosahedronGeometry(0.05), MODELS.mat('#b03030', { rough: 0.4 }), -w / 2 + 0.12, H + 0.09, d / 2 - 0.3, g); d20.rotation.set(0.4, 0.7, 0.2);
+    g.position.set(cx, 0, cz);
+    if (main) T3.mainTable = { cx, cz, w, d };
+    return g;
+  }
+  function refreshPlanTexture() {
+    if (!planTex.canvas || planTex.version === C.mesa.M.version) return;
+    planTex.version = C.mesa.M.version;
+    C.mesa.drawPlan(planTex.canvas.getContext('2d'), planTex.canvas.width, planTex.canvas.height, { title: true, pad: 26 });
+    planTex.tex.needsUpdate = true;
   }
 
   // Modelo de un personaje (se rehace si cambia su aspecto)
@@ -199,10 +306,10 @@
 
   function ensureTavern3D() {
     if (T3.stage) return;
-    T3.stage = VIEW3D.makeStage({ offset: [8.2, 10.5, 8.2], fov: 36, ambient: 0.55, sky: '#7a6a8a', ground: '#2a1a10', lights: 12 });
+    T3.stage = VIEW3D.makeStage({ offset: [8.2, 10.5, 8.2], fov: 36, ambient: 0.36, sky: '#6a5a8a', ground: '#2a1408', lights: 12 });
     // la taberna: cálida, con brillo en velas y antorchas y un ligero efecto de maqueta
-    T3.stage.grade = { gain: [1.07, 1.0, 0.9], lift: [0.012, 0.006, 0], saturation: 1.12, contrast: 1.08, vignette: 0.42, bloom: 0.7, bloomThreshold: 0.85, tilt: 0.8, focus: 0.5 };
-    T3.stage.scene.background = new THREE.Color('#0c0608');
+    T3.stage.grade = { gain: [1.08, 1.0, 0.88], lift: [0.008, 0.004, 0.012], saturation: 1.1, contrast: 1.14, vignette: 0.55, bloom: 0.85, bloomRadius: 0.55, bloomThreshold: 0.78, tilt: 0.8, focus: 0.5 };
+    T3.stage.scene.background = new THREE.Color('#070406');
     T3.room = buildRoom();
     T3.stage.scene.add(T3.room);
     const hl = new THREE.Mesh(new THREE.RingGeometry(0.34, 0.44, 24), new THREE.MeshBasicMaterial({ color: '#ffe9a8', transparent: true, opacity: 0.7, depthWrite: false }));
@@ -226,6 +333,12 @@
       T3.furn = buildFurniture();
       st.scene.add(T3.furn.g);
       T3.furnKey = fk;
+      T3.fxKey = '';
+    }
+    // ambiente (halos, haces de luna, polvo, ascuas): se rehace con la sala o los muebles
+    if (T3.fxKey !== fk + T3.roomV) {
+      C.tavernFx.build(st.scene, T3.torches.map((t) => ({ ...t, kind: 'torch' })).concat(T3.furn.lights), WINDOWS);
+      T3.fxKey = fk + T3.roomV;
     }
     // personas: héroes, el tabernero y los comerciantes
     const live = new Set();
@@ -235,7 +348,7 @@
       const m = charModel(u.id, u.look);
       const seat = !u.path.length && u.px === u.tx && u.py === u.ty ? MAP.seatAt(u.tx, u.ty) : null;
       m.obj.position.set(u.px + 0.5, seat ? (SEAT_Y[seat.type] || 0.4) - 0.2 : 0, u.py + 0.5);
-      m.obj.rotation.y = FACE[u.dir] || 0;
+      m.obj.rotation.y = FACE[seat && seat.dir ? seat.dir : u.dir] || 0; // sentado, mira hacia donde mira el asiento
       const emote = u.emote && u.emote.until > now ? u.emote.e : null;
       const mugOn = u.mugUntil > now;
       if (mugOn && !m.mug) {
@@ -274,24 +387,55 @@
     const fl = flashLevel(now);
     const flick = (s) => 0.85 + Math.sin(now / 130 + s * 3) * 0.08 + Math.sin(now / 47 + s) * 0.05;
     const L = [];
-    for (const t of T3.torches) L.push({ x: t.x, y: 1.85, z: t.z, color: '#ff9a40', intensity: 1.7 * flick(t.seed), dist: 6.5 });
+    for (const t of T3.torches) L.push({ x: t.x, y: 1.85, z: t.z, color: '#ff9a40', intensity: 1.7 * flick(t.seed), dist: 6.5, fire: true });
     for (const l of T3.furn.lights) L.push({ ...l, intensity: l.intensity * flick(l.seed) });
     for (const w of T3.windows) { w.mat.emissiveIntensity = 0.55 + fl * 2.5; if (fl) L.push({ x: w.w.wall === 'L' ? 1 : w.pos.x, y: 2, z: w.w.wall === 'L' ? w.pos.z : 1, color: '#a8c0ff', intensity: fl * 6, dist: 10 }); }
     if (me && !me.where) L.push({ x: me.px + 0.5, y: 2.6, z: me.py + 0.5, color: '#ffe0b8', intensity: 0.9, dist: 6, shadow: true });
     else L.push({ x: 5, y: 2.6, z: 6, color: '#ffe0b8', intensity: 0.6, dist: 8, shadow: true });
-    st.hemi.intensity = C.editing ? 0.95 : 0.55 + fl * 0.6;
+    st.hemi.intensity = C.editing ? 0.95 : 0.4 + fl * 0.6;
     st.setLights(L);
+    C.tavernFx.update(now, fl, T3.top || 0);
     // cámara: la sala entera a la vista (en móvil, más cerca y siguiendo al héroe)
     const mobile = innerWidth <= 820;
     const zoom = (mobile ? 1.15 : Math.max(1.05, Math.min(1.45, (1280 / innerWidth) * 1.3 * Math.max(1, 780 / innerHeight)))) * DD.camZoom;
     st.offset.set(8.2 * zoom, 10.5 * zoom, 8.2 * zoom);
     // con la cámara cerca (móvil o zoom), sigue al héroe; si no, se ve la sala entera
     const follow = (mobile || DD.camZoom < 0.9) && me && !me.where;
-    const fx = follow ? me.px + 0.5 : 7.4, fz = follow ? me.py + 0.5 : 6.4;
+    let fx = follow ? me.px + 0.5 : 7.4, fz = follow ? me.py + 0.5 : 6.4;
+    // sentado a la mesa de partida: la cámara sube y mira la mesa desde arriba (el panel del plano queda al lado)
+    const atMesa = C.mesa.tick() && T3.mainTable;
+    let off = [st.offset.x, st.offset.y, st.offset.z];
+    if (atMesa) {
+      // altura para que quepan la mesa y los sentados en la parte de la pantalla que deja libre el panel
+      const t = T3.mainTable, tan = Math.tan(st.camera.fov * Math.PI / 360);
+      const freeW = mobile ? innerWidth : innerWidth - 440, freeH = mobile ? innerHeight * 0.42 : innerHeight - 150;
+      const hw = (t.w + 2.6) / 2, hd = (t.d + 2.8) / 2;
+      const hgt = Math.max(hd / (tan * freeH / innerHeight), hw / (tan * freeW / innerHeight));
+      off = [0, hgt, hgt * 0.16];
+      fx = t.cx; fz = t.cz;
+    }
+    // la imagen se corre hacia el hueco libre (sin girar la cámara, así la mesa no se deforma)
+    const vo = atMesa ? (mobile ? [0, innerHeight * 0.5 - innerHeight * 0.42 * 0.55] : [220, 20]) : [0, 0];
+    T3.off = T3.off || off.slice();
+    const dtc = Math.min(0.1, (now - (T3.camT || now)) / 1000); T3.camT = now;
+    const k = atMesa || T3.leaving ? 1 - Math.exp(-dtc * 4.5) : 1;
+    for (let i = 0; i < 3; i++) T3.off[i] += (off[i] - T3.off[i]) * k;
+    T3.leaving = atMesa || (T3.leaving && Math.abs(T3.off[1] - off[1]) > 0.05);
+    // vista de arriba: se apagan los haces de luna y se quitan las lámparas del techo, que tapan la mesa
+    T3.top = (T3.top || 0) + ((atMesa ? 1 : 0) - (T3.top || 0)) * (atMesa || T3.leaving ? k : 1);
+    for (const o of T3.furn.hang) o.visible = T3.top < 0.5;
+    T3.vo = T3.vo || [0, 0];
+    for (let i = 0; i < 2; i++) T3.vo[i] += (vo[i] - T3.vo[i]) * (atMesa || T3.leaving ? k : 1);
+    if (Math.abs(T3.vo[0]) + Math.abs(T3.vo[1]) > 0.5) st.camera.setViewOffset(innerWidth, innerHeight, T3.vo[0], T3.vo[1], innerWidth, innerHeight);
+    else if (st.camera.view && st.camera.view.enabled) st.camera.clearViewOffset();
+    st.offset.set(T3.off[0], T3.off[1], T3.off[2]);
     T3.cam = T3.cam || { x: fx, z: fz };
-    T3.cam.x += (fx - T3.cam.x) * 0.08; T3.cam.z += (fz - T3.cam.z) * 0.08;
-    const panelShift = !mobile && !heroesEl.classList.contains('closed') ? 0.9 : 0;
+    { const kc = atMesa || T3.leaving ? k : 0.08; T3.cam.x += (fx - T3.cam.x) * kc; T3.cam.z += (fz - T3.cam.z) * kc; }
+    const panelShift = !atMesa && !mobile && !heroesEl.classList.contains('closed') ? 0.9 : 0;
     st.lookAt(T3.cam.x + panelShift, T3.cam.z - panelShift);
+    // con la vista de arriba no hace falta el efecto maqueta
+    st.grade.tilt = atMesa ? 0 : 0.8;
+    refreshPlanTexture();
     st.render();
   }
 

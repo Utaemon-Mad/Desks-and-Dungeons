@@ -45,6 +45,8 @@ public/game.js          núcleo de la taberna: estado, red, interfaz (crónica, 
 public/tavern/start.js  pantalla de inicio, casillas, servidores y editor de personaje
 public/tavern/editor.js editor de muebles de la taberna (dueño)
 public/tavern/screen.js zoom del juego y pantalla completa
+public/tavern/ambience.js ambiente de la taberna: haces de luna, halos y charcos de luz, polvo, ascuas (C.tavernFx)
+public/tavern/mesa.js    mesa de partida: panel con el plano de la próxima mazmorra, marcas, listo, dados y comercio (C.mesa)
 public/tavern/tavern3d.js taberna en 3D, bucle de dibujo y clics en la sala
 public/tavern/boot.js   arranque (se carga el último de la taberna)
 public/dungeon.js       mazmorra en el navegador: estado, red, eventos, controles y escena 3D; comparte en DD.dg
@@ -75,6 +77,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Juego en grupo (server/dungeon.js): botín personal `lootParty` (+ `owner` en el botín), recogida automática en `tick`, tumbado y reanimar `tickDowned` (`DOWN_MS`, `REVIVE_S`), combos `combo`, resumen `stat`/`summaryStats` (mensaje `dsummary`), salida tras el jefe `PORTAL_MS`/`finish`.
 - Sorpresas de mazmorra: afijo al azar (`this.mod`/`modMf` en el constructor de Instance), sala secreta (casilla `S` en server/gen.js, `breakWall`), mímico (`mimico` en monsters-data.js, `ch.mimic` en `openChest`, modelo `mimic` en models-creatures.js), mercader errante (`def.merchant`).
 - Objetivo semanal del grupo `GROUP_GOALS` (progress.js) y `goalAdd`/`goalBonus` (social.js); muro de trofeos `trophyAdd` (social.js) y `buildTrophies` (tavern3d.js); marcos por logros `FRAMES`; encargos de Alfonso `STORY` (progress.js, tarea semanal `h_<semana>`); ronda de dados `dice:*` (server/handlers/play.js, ventana en ui2.js).
+- Mesa de partida: casillas `maptable` unidas (`mapTables`, `atMapTable` en map.js) se dibujan como una mesa (`buildMapTable`, tavern3d.js); al sentarse, vista de arriba (`atMesa` en `renderTavern3D`, con `setViewOffset`) y panel `mesa.js`. Servidor: `mesa:*` en server/handlers/play.js; la semilla del plano es la de la mazmorra (`newDungeon(…, seed)`), y bajan todos cuando todos están listos (`mesaStart`).
 - Sonidos y música: `FX` y `TRACKS` (audio.js). Iconos: `P` (icons.js). Novedades: `NEWS` (admin.js).
 - Ventanas: ui.js (ficha, inventario, talentos, tiendas, guía) y ui2.js (pueblo, forja, fama, ajustes, asalto, taberna, mercado).
 
