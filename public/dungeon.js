@@ -35,6 +35,7 @@
     if (!e) { e = { id, kind, rx: data.x, ry: data.y, fx: data.x, fy: data.y, t0: 0, dur: 1, hitUntil: 0, lunge: 0, face: 1 }; game.ents.set(id, e); }
     if (e.x !== undefined && (e.x !== data.x || e.y !== data.y)) {
       e.fx = e.rx; e.fy = e.ry; e.t0 = now; e.dur = Math.max(80, Math.min(900, data.sm || 200));
+      e.stepLen = Math.min(1.5, Math.hypot(data.x - e.x, data.y - e.y)) || 1; // 1 recto, 1,41 en diagonal
       if (data.x !== e.x) e.face = data.x < e.x ? -1 : 1;
       if (Math.abs(data.x - e.rx) > 3 || Math.abs(data.y - e.ry) > 3) { e.fx = data.x; e.fy = data.y; } // teletransporte
     }
@@ -489,6 +490,25 @@
   const lootObjs = new Map(), chestObjs = new Map(), teleObjs = new Map(), projObjs = new Map();
   let portalObj = null, fogDirty = true, seenCount = -1, mist = null;
   const fx3d = [];
+  // Memoria de la tarjeta gráfica: lo que se quita de la escena se libera (si no, tras unas cuantas
+  // mazmorras el navegador se queda sin memoria gráfica, pierde el 3D y la pantalla se queda en blanco).
+  // all: todo lo del objeto (el mapa, las puertas); si no, sólo lo marcado como propio con own()
+  const own = (x) => { x.userData.own = true; return x; };
+  function release(obj, all) {
+    obj.traverse((c) => {
+      if (all && c.isInstancedMesh) c.dispose();
+      if (c.isSkinnedMesh && c.skeleton) c.skeleton.dispose(); // la textura de huesos de cada personaje animado
+      if (c.geometry && (all || c.geometry.userData.own)) c.geometry.dispose();
+      for (const m of [].concat(c.material || [])) {
+        if (!all && !m.userData.own) continue;
+        for (const k of ['map', 'alphaMap', 'emissiveMap']) { const t = m[k]; if (t && t.isCanvasTexture && !t.userData.keep) t.dispose(); }
+        m.dispose();
+      }
+    });
+  }
+  function drop(obj, all) { if (!obj || !stage) return; stage.scene.remove(obj); release(obj, all); }
+  // geometrías de los efectos, compartidas (antes se creaba una nueva en cada golpe)
+  const FXG = { blast: new THREE.SphereGeometry(1, 14, 10), bolt: new THREE.SphereGeometry(0.1, 8, 6), torus: new THREE.TorusGeometry(0.4, 0.04, 6, 20), proj: new THREE.SphereGeometry(0.11, 8, 6), mark: new THREE.RingGeometry(0.25, 0.32, 16), tele: new THREE.PlaneGeometry(0.92, 0.92).rotateX(-Math.PI / 2) };
   let fxp = null, dustp = null, wx = null, hoverRing = null;     // chispas (aditivas), polvo/humo y clima
   const herbObjs = new Map(), corpses = [];
 
@@ -507,23 +527,24 @@
   }
 
   function clearScene() {
-    if (built) { stage.scene.remove(built.group); built = null; }
-    for (const d of doorObjs) stage.scene.remove(d.obj);
+    if (built) { drop(built.group, true); built = null; }
+    for (const d of doorObjs) drop(d.obj, true);
     doorObjs.length = 0;
-    if (fog) { stage.scene.remove(fog.mesh); fog = null; }
-    if (mist) { stage.scene.remove(mist.mesh); mist = null; }
-    for (const m of [...models.values(), ...lootObjs.values(), ...chestObjs.values(), ...teleObjs.values(), ...projObjs.values()]) stage.scene.remove(m.obj || m);
+    if (fog) { drop(fog.mesh, true); fog = null; }
+    if (mist) { drop(mist.mesh, true); mist = null; }
+    for (const m of [...models.values(), ...lootObjs.values(), ...chestObjs.values(), ...teleObjs.values(), ...projObjs.values()]) drop(m.obj || m);
+    for (const o of projObjs.values()) drop(o.userData.mark);
     models.clear(); lootObjs.clear(); chestObjs.clear(); teleObjs.clear(); projObjs.clear();
-    for (const f of fx3d) stage.scene.remove(f.obj);
-    for (const d of decals) stage.scene.remove(d.m);
+    for (const f of fx3d) drop(f.obj);
+    for (const d of decals) drop(d.m);
     decals.length = 0;
     fx3d.length = 0;
     fxp.clear(); dustp.clear(); wx.set('none');
-    for (const o of herbObjs.values()) stage.scene.remove(o);
+    for (const o of herbObjs.values()) drop(o);
     herbObjs.clear();
-    for (const c of corpses) stage.scene.remove(c.obj);
+    for (const c of corpses) drop(c.obj);
     corpses.length = 0;
-    if (portalObj) { stage.scene.remove(portalObj); portalObj = null; }
+    if (portalObj) { drop(portalObj, true); portalObj = null; }
   }
 
   function buildScene() {
@@ -612,7 +633,7 @@
     key += MODELS.GL.version;
     let m = models.get(e.id);
     if (m && m.key === key) return m;
-    if (m) stage.scene.remove(m.obj);
+    if (m) drop(m.obj);
     let obj;
     if (e.kind === 'hero') {
       const hero = MODELS.buildHero(e.look);
@@ -630,7 +651,7 @@
     else obj = MODELS.buildEnemy(e.k);
     if (e.big) obj.scale.multiplyScalar(1.3);
     if (e.elite || e.boss) {
-      const ring = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 20), new THREE.MeshBasicMaterial({ color: e.wb ? '#a05aff' : e.boss ? '#ff3a2a' : '#ffc040', transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
+      const ring = new THREE.Mesh(own(new THREE.RingGeometry(0.42, 0.5, 20)), own(new THREE.MeshBasicMaterial({ color: e.wb ? '#a05aff' : e.boss ? '#ff3a2a' : '#ffc040', transparent: true, opacity: 0.7, side: THREE.DoubleSide })));
       ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03; ring.scale.setScalar(1 / obj.scale.x);
       obj.add(ring);
     }
@@ -662,13 +683,13 @@
       const plain = ['inferior', 'normal', 'superior'].includes(l.r);
       const great = it.leg || l.r === 'unico' || l.r === 'conjunto';
       const H = plain ? 0.6 : it.leg ? 6 : great ? 4 : l.r === 'raro' ? 2.8 : 1.8;
-      const beam = new THREE.Mesh(new THREE.CylinderGeometry(great ? 0.09 : 0.05, great ? 0.2 : 0.12, H, 8, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: plain ? 0.25 : great ? 0.6 : 0.45, depthWrite: false, side: THREE.DoubleSide, blending: great ? THREE.AdditiveBlending : THREE.NormalBlending }));
+      const beam = new THREE.Mesh(own(new THREE.CylinderGeometry(great ? 0.09 : 0.05, great ? 0.2 : 0.12, H, 8, 1, true)), own(new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: plain ? 0.25 : great ? 0.6 : 0.45, depthWrite: false, side: THREE.DoubleSide, blending: great ? THREE.AdditiveBlending : THREE.NormalBlending })));
       beam.position.y = H / 2;
       beam.layers.set(1);
       g.add(beam);
       if (great) {
         // anillo en el suelo que late
-        const ring = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.32, 24), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending }));
+        const ring = new THREE.Mesh(own(new THREE.RingGeometry(0.22, 0.32, 24)), own(new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.7, depthWrite: false, side: THREE.DoubleSide, blending: THREE.AdditiveBlending })));
         ring.rotation.x = -Math.PI / 2; ring.position.y = 0.03; ring.layers.set(1);
         g.add(ring); g.userData.ring = ring; g.userData.beam = beam;
       }
@@ -749,19 +770,19 @@
     const blob = (cx, cy, r) => { x.beginPath(); for (let a = 0; a <= 6.3; a += 0.35) { const rr = r * (0.75 + Math.random() * 0.4); x.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } x.fill(); };
     blob(64, 64, 30);
     for (let i = 0; i < 9; i++) { const a = Math.random() * 6.3, d = 30 + Math.random() * 26; blob(64 + Math.cos(a) * d, 64 + Math.sin(a) * d, 3 + Math.random() * 7); }
-    splatTex = new THREE.CanvasTexture(c);
+    splatTex = new THREE.CanvasTexture(c); splatTex.userData.keep = true;
     return splatTex;
   }
   function splat(x, z, color, size = 0.5) {
     if (!stage || (DD.gfx && DD.gfx.weather === false)) return;
-    const m = new THREE.Mesh(decalGeo, new THREE.MeshBasicMaterial({ color, map: splatTexture(), transparent: true, opacity: 0.75, depthWrite: false }));
+    const m = new THREE.Mesh(decalGeo, own(new THREE.MeshBasicMaterial({ color, map: splatTexture(), transparent: true, opacity: 0.75, depthWrite: false })));
     m.rotation.x = -Math.PI / 2; m.rotation.z = Math.random() * 6;
     m.scale.set(size * (0.8 + Math.random() * 0.5), size * (0.6 + Math.random() * 0.5), 1);
     m.position.set(x, built && built.gl ? 0.135 : 0.025, z);
     m.renderOrder = 3; m.layers.set(1);
     stage.scene.add(m);
     decals.push({ m, start: performance.now() });
-    if (decals.length > 40) stage.scene.remove(decals.shift().m);
+    if (decals.length > 40) drop(decals.shift().m);
   }
   // Estela del arma: un arco de luz que barre delante del que golpea
   const slashGeo = new THREE.RingGeometry(0.55, 0.8, 24, 1, -1.15, 2.3);
@@ -769,7 +790,7 @@
     if (!stage) return;
     const dx = t.x - by.x, dz = t.y - by.y, len = Math.hypot(dx, dz) || 1;
     const grp = new THREE.Group();
-    const m = new THREE.Mesh(slashGeo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending }));
+    const m = new THREE.Mesh(slashGeo, own(new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.9, side: THREE.DoubleSide, depthWrite: false, blending: THREE.AdditiveBlending })));
     m.rotation.x = -Math.PI / 2 + 0.35;
     grp.add(m);
     grp.position.set((by.rx ?? by.x) + 0.5, 0.62, (by.ry ?? by.y) + 0.5);
@@ -793,7 +814,7 @@
       o.traverse((c) => {
         if (!c.isMesh || !c.material) return;
         // clone() no copia los retoques del shader (teñido de pelo y ropa): se pasan a mano
-        const cl = (x) => { const y = x.clone(); y.onBeforeCompile = x.onBeforeCompile; if (x.customProgramCacheKey !== THREE.Material.prototype.customProgramCacheKey) y.customProgramCacheKey = x.customProgramCacheKey; return y; };
+        const cl = (x) => { const y = x.clone(); y.userData.own = true; y.onBeforeCompile = x.onBeforeCompile; if (x.customProgramCacheKey !== THREE.Material.prototype.customProgramCacheKey) y.customProgramCacheKey = x.customProgramCacheKey; return y; };
         c.material = Array.isArray(c.material) ? c.material.map(cl) : cl(c.material);
         for (const mm of [].concat(c.material)) if (mm.emissive) list.push({ m: mm, e0: mm.emissive.clone(), i0: mm.emissiveIntensity });
       });
@@ -860,10 +881,10 @@
   function addFx(f, now) {
     let obj;
     const col = fxColor(f);
-    const glow = (c, op = 0.6) => new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, depthWrite: false });
-    if (f.kind === 'blast' || f.kind === 'nova') obj = new THREE.Mesh(new THREE.SphereGeometry(1, 14, 10), glow(col, 0.45));
-    else if (f.kind === 'bolt' || f.kind === 'arrow') obj = new THREE.Mesh(f.kind === 'arrow' ? MODELS.box(0.04, 0.04, 0.35) : new THREE.SphereGeometry(0.1, 8, 6), glow(f.kind === 'arrow' ? '#e8dcc0' : col, 1));
-    else if (f.kind === 'heal' || f.kind === 'buff' || f.kind === 'portal' || f.kind === 'mark') { obj = new THREE.Mesh(new THREE.TorusGeometry(0.4, 0.04, 6, 20), glow(f.kind === 'heal' ? '#7dff8a' : col, 0.9)); obj.rotation.x = Math.PI / 2; }
+    const glow = (c, op = 0.6) => own(new THREE.MeshBasicMaterial({ color: c, transparent: true, opacity: op, depthWrite: false }));
+    if (f.kind === 'blast' || f.kind === 'nova') obj = new THREE.Mesh(FXG.blast, glow(col, 0.45));
+    else if (f.kind === 'bolt' || f.kind === 'arrow') obj = new THREE.Mesh(f.kind === 'arrow' ? MODELS.box(0.04, 0.04, 0.35) : FXG.bolt, glow(f.kind === 'arrow' ? '#e8dcc0' : col, 1));
+    else if (f.kind === 'heal' || f.kind === 'buff' || f.kind === 'portal' || f.kind === 'mark') { obj = new THREE.Mesh(FXG.torus, glow(f.kind === 'heal' ? '#7dff8a' : col, 0.9)); obj.rotation.x = Math.PI / 2; }
     else if (f.kind === 'dash' || f.kind === 'blink') obj = new THREE.Mesh(MODELS.box(0.08, 0.08, 1), glow(f.kind === 'blink' ? '#a05aff' : '#ffffff', 0.7));
     else return;
     obj.renderOrder = 6;
@@ -878,12 +899,21 @@
     // golpe crítico: el mundo se congela un instante (hit-stop)
     const frozen = now < game.hitstop;
     if (frozen) dt = 0;
-    // posiciones suaves (interpolación lineal a velocidad constante)
+    // posiciones suaves: cada uno avanza hacia su casilla a su velocidad (la del servidor), sin pararse entre
+    // casillas aunque la siguiente posición llegue un poco tarde; si se queda atrás, acelera un poco para alcanzarla
     if (!frozen) for (const e of game.ents.values()) {
-      const k = Math.min(1, (now - e.t0) / e.dur);
-      e.rx = e.fx + (e.x - e.fx) * k; e.ry = e.fy + (e.y - e.fy) * k;
+      const dx = e.x - e.rx, dy = e.y - e.ry, dist = Math.hypot(dx, dy);
       const was = e.moving;
-      e.moving = k < 1;
+      if (dist > 3) { e.rx = e.x; e.ry = e.y; } // teletransporte
+      else if (dist > 0.0005) {
+        const v = (e.stepLen || 1) / Math.max(60, e.dur || 200) * 1000; // casillas por segundo
+        const step = v * dt * (dist > 1.1 ? 1 + (dist - 1.1) * 1.6 : 1);
+        if (step >= dist) { e.rx = e.x; e.ry = e.y; } else { e.rx += dx / dist * step; e.ry += dy / dist * step; }
+        e.mvAt = now;
+        if (dist > 0.05) { e.vdx = dx; e.vdy = dy; }
+      }
+      // sigue «andando» un instante al llegar, para que la animación no se corte entre casilla y casilla
+      e.moving = now - (e.mvAt || -1e9) < 140;
       if (e.moving) {
         e.phase = (e.phase || 0) + dt * 11;
         // polvo al andar (más al correr montado)
@@ -935,7 +965,7 @@
       o.userData.k = e.k;
       // hacia dónde mira: hacia donde anda, o hacia su objetivo al atacar
       let ang = o.userData.face;
-      if (e.moving) ang = Math.atan2(e.x - e.fx, e.y - e.fy);
+      if (e.moving && (e.vdx || e.vdy)) ang = Math.atan2(e.vdx, e.vdy);
       else if (atk && (e.lungeDx || e.lungeDy)) ang = Math.atan2(e.lungeDx, e.lungeDy);
       else if (e.kind !== 'npc' && DIR_ANG[e.dir] !== undefined && !e.moving && now - (e.t0 || 0) > 600) ang = o.userData.face;
       if (!Number.isNaN(ang)) {
@@ -972,7 +1002,7 @@
       if (game.ents.has(id)) continue;
       // al morir no desaparece: cae al suelo y se desvanece
       if (game.dying.has(id) && m.obj.visible) corpses.push({ obj: m.obj, start: game.dying.get(id), y0: m.obj.rotation.y, side: Math.random() < 0.5 ? -1 : 1, G: gore({ k: m.obj.userData.k, kind: 'enemy' }) });
-      else stage.scene.remove(m.obj);
+      else drop(m.obj);
       game.dying.delete(id);
       models.delete(id);
     }
@@ -984,13 +1014,13 @@
       if (c.obj.userData.gl) {
         // modelo animado: su animación de muerte, y luego se hunde en el suelo
         const k = (now - c.start) / 2600;
-        if (k >= 1) { stage.scene.remove(c.obj); corpses.splice(i, 1); continue; }
+        if (k >= 1) { drop(c.obj); corpses.splice(i, 1); continue; }
         MODELS.animate(c.obj, { t: now, deadAt: c.start });
         c.obj.position.y = k > 0.7 ? -(k - 0.7) * 1.2 : 0;
         continue;
       }
       const k = (now - c.start) / 1100;
-      if (k >= 1) { stage.scene.remove(c.obj); corpses.splice(i, 1); continue; }
+      if (k >= 1) { drop(c.obj); corpses.splice(i, 1); continue; }
       const fall = Math.min(1, k * 2.6);
       c.obj.rotation.z = c.side * fall * Math.PI / 2 * (1 - 0.15 * Math.sin(fall * Math.PI));
       c.obj.position.y = k > 0.55 ? -(k - 0.55) * 0.6 : 0.08 * Math.sin(fall * Math.PI);
@@ -1030,7 +1060,7 @@
       if (o.userData.ring) { const k = 1 + 0.25 * Math.sin(now / 220); o.userData.ring.scale.set(k, k, k); o.userData.beam.material.opacity = 0.45 + 0.2 * Math.sin(now / 300); }
       if (o.children[0]) o.children[0].rotation.y = now / 900;
     }
-    for (const [id, o] of lootObjs) if (!lootIds.has(id)) { stage.scene.remove(o); lootObjs.delete(id); }
+    for (const [id, o] of lootObjs) if (!lootIds.has(id)) { drop(o); lootObjs.delete(id); }
     // plantas del herbolario
     const herbIds = new Set();
     for (const h of game.herbs) {
@@ -1041,7 +1071,7 @@
       o.children[o.children.length - 1].position.y = 0.3 + Math.sin(now / 400 + h.x) * 0.03;
       if (Math.random() < 0.03) fxp.emit({ x: h.x + 0.5, y: 0.35, z: h.y + 0.5, vy: 0.4, color: o.userData.glow, size: 0.07, life: 0.9 });
     }
-    for (const [id, o] of herbObjs) if (!herbIds.has(id)) { stage.scene.remove(o); herbObjs.delete(id); }
+    for (const [id, o] of herbObjs) if (!herbIds.has(id)) { drop(o); herbObjs.delete(id); }
     // puertas: se ven si la casilla se ha visto; al abrirse, la hoja gira
     for (const d of doorObjs) {
       d.obj.visible = !!game.seen[d.i];
@@ -1076,8 +1106,8 @@
       if (!o) {
         o = new THREE.Group();
         const col = t.kind === 'breath' ? '#ff6a10' : t.kind === 'nova' ? '#9a3aff' : '#e01e1e';
-        const matT = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.2, depthWrite: false });
-        const q = new THREE.PlaneGeometry(0.92, 0.92); q.rotateX(-Math.PI / 2);
+        const matT = own(new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.2, depthWrite: false }));
+        const q = FXG.tele;
         for (const [x, y] of t.cells) { const pl = new THREE.Mesh(q, matT); pl.position.set(x + 0.5, 0.05, y + 0.5); o.add(pl); }
         o.userData.mat = matT;
         VIEW3D.fxLayer(o);
@@ -1086,7 +1116,7 @@
       const k = Math.min(1, (now - t.start) / t.dur);
       o.userData.mat.opacity = 0.18 + k * 0.5 + Math.sin(now / 60) * 0.05;
     }
-    for (const [id, o] of teleObjs) if (!teleIds.has(id)) { stage.scene.remove(o); teleObjs.delete(id); }
+    for (const [id, o] of teleObjs) if (!teleIds.has(id)) { drop(o); teleObjs.delete(id); }
     // proyectiles enemigos
     const projIds = new Set();
     for (let i = game.projs.length - 1; i >= 0; i--) {
@@ -1099,8 +1129,8 @@
         const col = PROJ_COL[pr.kind] || '#fff';
         o = pr.kind === 'arrow' || pr.kind === 'javelin'
           ? new THREE.Mesh(MODELS.box(0.03, 0.03, pr.kind === 'javelin' ? 0.6 : 0.4), MODELS.mat(col))
-          : new THREE.Mesh(new THREE.SphereGeometry(0.11, 8, 6), new THREE.MeshBasicMaterial({ color: col }));
-        const mark = new THREE.Mesh(new THREE.RingGeometry(0.25, 0.32, 16), new THREE.MeshBasicMaterial({ color: '#ff3a3a', transparent: true, opacity: 0.6, depthWrite: false }));
+          : new THREE.Mesh(FXG.proj, own(new THREE.MeshBasicMaterial({ color: col })));
+        const mark = new THREE.Mesh(FXG.mark, own(new THREE.MeshBasicMaterial({ color: '#ff3a3a', transparent: true, opacity: 0.6, depthWrite: false })));
         mark.rotation.x = -Math.PI / 2;
         mark.layers.set(1);
         o.userData.mark = mark;
@@ -1112,7 +1142,7 @@
       o.userData.mark.position.set(pr.to.x + 0.5, 0.05, pr.to.y + 0.5);
       if (pr.kind !== 'arrow' && pr.kind !== 'javelin' && Math.random() < 0.4) spark(x, z, PROJ_COL[pr.kind] || '#fff', true);
     }
-    for (const [id, o] of projObjs) if (!projIds.has(id)) { stage.scene.remove(o); stage.scene.remove(o.userData.mark); projObjs.delete(id); }
+    for (const [id, o] of projObjs) if (!projIds.has(id)) { drop(o); drop(o.userData.mark); projObjs.delete(id); }
     // efectos
     for (const f of game.fx.splice(0)) addFx(f, now);
     for (let i = fx3d.length - 1; i >= 0; i--) {
@@ -1120,7 +1150,7 @@
       if (now < F.start) { F.obj.visible = false; continue; }
       F.obj.visible = true;
       const k = (now - F.start) / F.dur;
-      if (k >= 1) { stage.scene.remove(F.obj); fx3d.splice(i, 1); continue; }
+      if (k >= 1) { drop(F.obj); fx3d.splice(i, 1); continue; }
       if (F.upd) { F.upd(k); continue; }
       if (f.kind === 'blast' || f.kind === 'nova') { F.obj.position.set(f.x + 0.5, 0.3, f.y + 0.5); F.obj.scale.setScalar(((f.radius || 1) + 0.5) * (0.3 + k * 0.7)); F.obj.material.opacity = 0.5 * (1 - k); }
       else if (f.kind === 'bolt' || f.kind === 'arrow') { const q = Math.min(1, k * 1.5); F.obj.position.set(f.from.x + 0.5 + (f.to.x - f.from.x) * q, 0.7, f.from.y + 0.5 + (f.to.y - f.from.y) * q); F.obj.lookAt(f.to.x + 0.5, 0.7, f.to.y + 0.5); }
@@ -1129,7 +1159,7 @@
     }
     for (let i = decals.length - 1; i >= 0; i--) {
       const d = decals[i], k = (now - d.start) / 9000;
-      if (k >= 1) { stage.scene.remove(d.m); decals.splice(i, 1); continue; }
+      if (k >= 1) { drop(d.m); decals.splice(i, 1); continue; }
       d.m.material.opacity = 0.75 * Math.min(1, (1 - k) * 2.5);
     }
     // partículas y clima
@@ -1228,10 +1258,18 @@
   //  Bucle
   // ======================================================================
   let last = performance.now();
+  let lastFrameErr = '';
+  function reportFrameError(err) {
+    const msg = String(err && err.message || err);
+    if (msg !== lastFrameErr && window.__errs) window.__errs.push({ msg: 'Fotograma: ' + msg, src: 'dungeon.js', line: 0 });
+    lastFrameErr = msg;
+    console.error(err);
+  }
   function loop(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    if (DD.scene === 'dungeon' && game.active && game.map) renderGame(now, dt);
+    // un fallo al dibujar un fotograma no debe parar el juego (se apunta para el panel /admin)
+    try { if (DD.scene === 'dungeon' && game.active && game.map) renderGame(now, dt); } catch (err) { reportFrameError(err); }
     requestAnimationFrame(loop);
   }
   requestAnimationFrame(loop);

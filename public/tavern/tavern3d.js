@@ -180,11 +180,16 @@
   }
 
   // Modelo de un personaje (se rehace si cambia su aspecto)
+  // quita un personaje de la sala y libera su textura de huesos (si no, se acumulan en la tarjeta gráfica)
+  function dropModel(obj) {
+    T3.stage.scene.remove(obj);
+    obj.traverse((c) => { if (c.isSkinnedMesh && c.skeleton) c.skeleton.dispose(); });
+  }
   function charModel(id, look) {
     const key = JSON.stringify(look) + MODELS.GL.version;
     let m = T3.models.get(id);
     if (m && m.key === key) return m;
-    if (m) T3.stage.scene.remove(m.obj);
+    if (m) dropModel(m.obj);
     const obj = MODELS.buildHero(look);
     T3.stage.scene.add(obj);
     m = { obj, key, mug: null };
@@ -242,7 +247,7 @@
       const top = st.project(u.px + 0.5, seat ? 1.15 : 1.35, u.py + 0.5);
       u._screen = { x: top.x, y: top.y };
     }
-    for (const [id, m] of T3.models) if (!live.has(id) && !id.startsWith('npc:')) { st.scene.remove(m.obj); T3.models.delete(id); }
+    for (const [id, m] of T3.models) if (!live.has(id) && !id.startsWith('npc:')) { dropModel(m.obj); T3.models.delete(id); }
     const bk = charModel('npc:barkeep', bartenderLook);
     bk.obj.position.set(MAP.BARKEEP.x + 0.5, 0, MAP.BARKEEP.y + 0.5);
     bk.obj.rotation.y = -Math.PI / 2;
@@ -373,11 +378,11 @@
     }
   }
 
-  function frame(now) {
+  function frameBody(now) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     updateUsers(dt);
-    if (DD.scene !== 'tavern') { requestAnimationFrame(frame); return; }
+    if (DD.scene !== 'tavern') return;
     updateNight(now);
     updateBarkeep(now);
     VIEW3D.show(true);
@@ -389,8 +394,19 @@
     vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, 'rgba(0,0,0,.5)');
     C.ctx.fillStyle = vg; C.ctx.fillRect(0, 0, canvas.width, canvas.height);
     drawOverlays3D(now);
+  }
+
+  // un fallo al dibujar un fotograma no debe parar la taberna (se apunta para el panel /admin)
+  let lastFrameErr = '';
+  function frame(now) {
+    try { frameBody(now); } catch (err) {
+      const msg = String(err && err.message || err);
+      if (msg !== lastFrameErr && window.__errs) window.__errs.push({ msg: 'Fotograma: ' + msg, src: 'tavern3d.js', line: 0 });
+      lastFrameErr = msg; console.error(err);
+    }
     requestAnimationFrame(frame);
   }
+
 
   // Antorchas de pared (pequeñas: alumbran sólo su rincón)
   const TORCHES = [

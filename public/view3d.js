@@ -70,6 +70,20 @@
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.05;
     window.addEventListener('resize', () => { renderer.setSize(innerWidth, innerHeight, false); if (post) post.resize(); for (const s of stages) s.resize(); });
+    // si el navegador pierde los gráficos (memoria de la tarjeta, suspender el portátil, cambiar de pestaña en el móvil…),
+    // en vez de quedarse la pantalla en blanco se avisa y se recarga: la partida sigue en el servidor
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      if (document.getElementById('gl-lost')) return;
+      const d = document.createElement('div'); d.id = 'gl-lost';
+      d.textContent = '🔄 Recuperando los gráficos…';
+      d.style.cssText = 'position:fixed;inset:0;z-index:999;display:flex;align-items:center;justify-content:center;background:#140a06;color:#f3e6c8;font:600 20px system-ui,sans-serif';
+      document.body.appendChild(d);
+      if (root.__errs) root.__errs.push({ msg: 'Se perdieron los gráficos (WebGL)', src: 'view3d.js', line: 0 });
+      try { sessionStorage.setItem('dd-resume', '1'); } catch { /* sin almacenamiento */ }
+      setTimeout(() => location.reload(), 2500);
+    });
+    canvas.addEventListener('webglcontextrestored', () => { try { sessionStorage.setItem('dd-resume', '1'); } catch { /* nada */ } location.reload(); });
     return renderer;
   }
   const stages = [];
@@ -669,6 +683,8 @@
     const mm = M();
     const { group, lights, floor } = out;
     const T = THEME[theme] || THEME.cripta;
+    if (floor.material.map) floor.material.map.dispose(); // la textura pintada no hace falta: aquí hay losas
+    floor.material.dispose();
     floor.material = new THREE.MeshStandardMaterial({ color: '#050404', roughness: 1 }); // debajo de las losas, por si acaso
     floor.position.y = -0.03;
     const HS = 0.25, VS = GL_WALL_H / 4;
@@ -1151,5 +1167,5 @@
     return { stop() { alive = false; cancelAnimationFrame(raf); r.dispose(); } };
   }
 
-  root.VIEW3D = { snapshot, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
+  root.VIEW3D = { info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
 })(this);
