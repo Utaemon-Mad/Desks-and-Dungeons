@@ -221,6 +221,7 @@
         r.appendChild(el('span', 'buy-ic', T.icon));
         const tt = el('div', 'buy-t');
         tt.appendChild(el('b', '', PROG.taskText(id)));
+        if (T.lore) tt.appendChild(el('small', 'task-lore', T.lore));
         const bar = el('div', 'meter xp'); const fill = el('i'); fill.style.width = (100 * n / T.n) + '%'; bar.appendChild(fill); bar.appendChild(el('span', '', `${n}/${T.n}`));
         tt.appendChild(bar);
         const rw = PROG.taskReward(id, lvl());
@@ -475,6 +476,52 @@
       body.appendChild(grid);
     }
   }
+
+  // ======================================================================
+  //  Dados de la taberna: tirar un d20 o jugar una ronda de apuestas con los demás (2d6, el más alto gana)
+  // ======================================================================
+  const diceWin = el('div', 'overlay win hidden'); diceWin.id = 'dicewin';
+  diceWin.innerHTML = '<div class="panel card"><button class="mini close-x" type="button" title="Cerrar">✕</button><div class="panel-title">🎲 DADOS</div><div id="dice-body"></div></div>';
+  document.body.appendChild(diceWin);
+  diceWin.querySelector('.close-x').onclick = () => closeOverlay('dicewin');
+  let diceRound = null, diceRes = null, diceTick = null;
+  function renderDice() {
+    const body = $('#dice-body'); if (!body) return;
+    body.innerHTML = '';
+    const r1 = el('div', 'edit-row');
+    const d20 = el('button', 'btn alt', '🎲 Tirar un d20'); d20.onclick = () => DD.net.send({ t: 'roll', sides: 20 });
+    r1.appendChild(d20); body.appendChild(r1);
+    body.appendChild(el('div', 'field-title', '💰 Ronda de apuestas'));
+    body.appendChild(el('p', 'muted small', 'Todos apuestan lo mismo, cada uno tira dos dados y el más alto se lleva el bote. Si hay empate, se reparte.'));
+    if (diceRound) {
+      const s = Math.ceil(diceRound.left / 1000);
+      body.appendChild(el('p', 'tag', `Ronda de ${diceRound.by}: ${diceRound.bet} 🪙 por cabeza · bote ${diceRound.pot} 🪙 · ${s} s`));
+      body.appendChild(el('p', '', 'En la mesa: ' + diceRound.players.join(', ')));
+      const mine = DD.me && diceRound.players.includes(DD.me.name);
+      const j = el('button', 'btn big', mine ? '✔ Estás dentro' : `UNIRME (${diceRound.bet} 🪙)`); j.disabled = mine;
+      j.onclick = () => DD.net.send({ t: 'dice:join' });
+      body.appendChild(j);
+    } else {
+      const r2 = el('div', 'title-row');
+      for (const b of [10, 50, 100, 500]) { const x = el('button', 'btn', `Abrir ronda de ${b} 🪙`); x.onclick = () => DD.net.send({ t: 'dice:open', bet: b }); r2.appendChild(x); }
+      body.appendChild(r2);
+    }
+    if (diceRes) {
+      body.appendChild(el('div', 'field-title', 'Última ronda'));
+      const t = el('div', 'dice-res');
+      for (const r of diceRes.rolls) { const row = el('div', 'dice-row' + (diceRes.winners.includes(r.name) ? ' win' : '')); row.append(el('b', '', r.name), el('span', 'dice-faces', `${'⚀⚁⚂⚃⚄⚅'[r.a - 1]} ${'⚀⚁⚂⚃⚄⚅'[r.b - 1]}`), el('span', '', String(r.sum))); t.appendChild(row); }
+      body.appendChild(t);
+      body.appendChild(el('p', 'good', diceRes.winners.length > 1 ? `Empate: ${diceRes.winners.join(' y ')} se reparten ${diceRes.pot} 🪙` : `${diceRes.winners[0]} se lleva ${diceRes.pot} 🪙`));
+    }
+  }
+  DD.on('open-dice', () => { if (DD.scene === 'dungeon') return DD.net.send({ t: 'roll', sides: 20 }); DD.net.send({ t: 'dice:get' }); renderDice(); openOverlay('dicewin'); });
+  DD.on('dice:state', (m) => {
+    diceRound = m.round ? { ...m.round, at: Date.now() } : null;
+    clearInterval(diceTick);
+    if (diceRound) { const end = Date.now() + diceRound.left; diceTick = setInterval(() => { if (!diceRound) return clearInterval(diceTick); diceRound.left = Math.max(0, end - Date.now()); if (!diceWin.classList.contains('hidden')) renderDice(); }, 1000); }
+    if (!diceWin.classList.contains('hidden')) renderDice();
+  });
+  DD.on('dice:result', (m) => { diceRes = m; DD.sfx('dice'); if (!diceWin.classList.contains('hidden')) renderDice(); });
 
   // ======================================================================
   //  Resumen al acabar una mazmorra: daño, curas, bajas, caídas y reanimaciones de cada uno

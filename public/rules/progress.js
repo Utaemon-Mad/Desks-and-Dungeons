@@ -194,12 +194,30 @@
     s_mundo:     { text: 'Ayuda a derrotar a un jefe de mundo', ev: 'worldboss', n: 1, icon: '🌋' },
     s_forja:     { text: 'Usa la forja {n} veces', ev: 'forge', n: 10, icon: '⚒️' },
   };
+  // Encargos de Alfonso: cada semana un capítulo de la historia con un jefe concreto que derrotar
+  const STORY = [
+    { title: 'Ratas con corona', boss: 'rey-goblin', lore: 'Alfonso se rasca la barba: «Los goblins de las cuevas tienen nuevo rey y me están vaciando la bodega. Grubnak, se llama. Traedme su corona… o al menos su cabeza».' },
+    { title: 'El que no duerme', boss: 'lich', lore: '«Desde que abrieron la cripta, los parroquianos sueñan con huesos. Hay un liche, Malakar, que no deja descansar ni a los muertos. Que descanse él».' },
+    { title: 'Tambores de guerra', boss: 'gorthak', lore: '«¿Oís eso? No es la orquesta. Gorthak ha reunido a los orcos en la vieja fortaleza. Si baja al pueblo, se acabó la cerveza para todos».' },
+    { title: 'Telarañas en la despensa', boss: 'reina-arana', lore: '«Han salido arañas del pozo. Del tamaño de un barril. La reina, Arakhna, anida bajo el bosque: quemad el nido antes de que ponga más huevos».' },
+    { title: 'Fuego en el horizonte', boss: 'young-red-dragon', lore: '«Ese resplandor no es el amanecer. Ignaroth, un dragón rojo, se ha despertado en el volcán. Dicen que duerme sobre una montaña de oro… ¿os interesa?»' },
+    { title: 'Lo que hay debajo', boss: 'azaroth', lore: 'Alfonso baja la voz: «Hay grietas en el sótano que huelen a azufre. Algo llama desde el abismo. Se llama Azaroth. No le contestéis… id a callarlo».' },
+  ];
+  const storyId = (week) => 'h_' + week;
+  function storyTask(id) {
+    const week = Number(String(id).slice(2));
+    if (!Number.isFinite(week)) return null;
+    const S = STORY[((week % STORY.length) + STORY.length) % STORY.length];
+    const M = (RULES.MONSTERS || {})[S.boss] || {};
+    return { text: `📖 «${S.title}»: derrota a ${M.name || S.boss}`, ev: 'kill', f: 'mob:' + S.boss, n: 1, icon: '📖', lore: S.lore, story: true };
+  }
+
   function boardFor(day, week) {
     const rd = RULES.seeded('daily:' + day), rw = RULES.seeded('weekly:' + week);
     const pickN = (rng, keys, n) => { const k = keys.slice(), out = []; while (out.length < n && k.length) out.push(k.splice(Math.floor(rng() * k.length), 1)[0]); return out; };
-    return { day, week, daily: pickN(rd, Object.keys(DAILY), 3), weekly: pickN(rw, Object.keys(WEEKLY), 2) };
+    return { day, week, daily: pickN(rd, Object.keys(DAILY), 3), weekly: [storyId(week), ...pickN(rw, Object.keys(WEEKLY), 2)] };
   }
-  const taskDef = (id) => DAILY[id] || WEEKLY[id];
+  const taskDef = (id) => DAILY[id] || WEEKLY[id] || (String(id).startsWith('h_') ? storyTask(id) : null);
   const taskText = (id) => { const T = taskDef(id); return T ? T.text.replace('{n}', T.n) : id; };
   // ¿Cuenta este suceso para la tarea?
   function taskMatch(T, ev, d = {}) {
@@ -208,10 +226,12 @@
     if (T.f === 'elite') return !!d.elite;
     if (T.f === 'boss') return !!d.boss;
     if (T.f.startsWith('fam:')) return d.fam === T.f.slice(4);
+    if (T.f.startsWith('mob:')) return d.k === T.f.slice(4);
     return true;
   }
   function taskReward(id, level) {
-    const weekly = !!WEEKLY[id];
+    const weekly = !!WEEKLY[id] || String(id).startsWith('h_');
+    if (String(id).startsWith('h_')) return { xp: Math.round(900 * level * (1 + level * 0.05)), gold: Math.round(220 * level), mats: { esencia: 4, polvo: 2 }, item: 'raro' };
     return { xp: Math.round((weekly ? 600 : 80) * level * (1 + level * 0.05)), gold: Math.round((weekly ? 140 : 20) * level), mats: weekly ? { esencia: 3, polvo: 1 } : { hierro: 3, esencia: 1 }, item: weekly ? 'raro' : null };
   }
 

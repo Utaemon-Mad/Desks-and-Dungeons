@@ -157,7 +157,10 @@ function progressTests() {
   assert.ok(PROG.salvage(RULES.makeItem(rng, { ilvl: 4, rarity: 'raro' })).esencia >= 2, 'desguazar da materiales');
   const b1 = PROG.boardFor(100, 14), b2 = PROG.boardFor(100, 14);
   assert.deepStrictEqual(b1, b2, 'el tablón es igual para todos el mismo día');
-  assert.ok(b1.daily.length === 3 && b1.weekly.length === 2);
+  assert.ok(b1.daily.length === 3 && b1.weekly.length === 3);
+  // el encargo de Alfonso de la semana: un jefe concreto
+  const st = PROG.taskDef(b1.weekly[0]);
+  assert.ok(st && st.story && st.lore && PROG.taskMatch(st, 'kill', { k: st.f.slice(4), boss: true }) && !PROG.taskMatch(st, 'kill', { k: 'goblin-minion' }), 'capítulo de la historia con su jefe');
   assert.ok(RULES.petStats('lobo', 10, 10).fue > RULES.petStats('lobo', 10, 9).fue * 1.15, 'la mascota evoluciona en el nivel 10');
   assert.strictEqual(RULES.petLevelFromXp(0), 1);
   assert.ok(RULES.petLevelFromXp(RULES.petXpFor(10)) === 10);
@@ -560,7 +563,7 @@ async function instanceTests() {
   c.send({ t: 'join', room: SRV, name: 'Cris', look: { cls: 'guerrero' }, token: tokC });
   const wc = await c.next((m) => m.t === 'welcome');
   let meC = await c.next((m) => m.t === 'me');
-  assert.ok(meC.mats.hierro === 30 && meC.board.daily.length === 3 && meC.board.weekly.length === 2, 'materiales y tablón');
+  assert.ok(meC.mats.hierro === 30 && meC.board.daily.length === 3 && meC.board.weekly.length === 3, 'materiales y tablón');
   const sw = meC.equip.arma;
   c.send({ t: 'forge:up', id: sw.id });
   const fr = await c.next((m) => m.t === 'forge:result');

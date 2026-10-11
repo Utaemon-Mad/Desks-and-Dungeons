@@ -118,7 +118,7 @@ module.exports = function (ctx) {
   const matsText = (need) => Object.entries(need).filter(([k, n]) => n && PROG.MATS[k]).map(([k, n]) => `${n} ${PROG.MATS[k].icon} ${PROG.MATS[k].name}`).join(', ');
 
   function onKill(room, user, k, info) {
-    track(room, user, 'kill', info);
+    track(room, user, 'kill', { ...info, k });
     if (info.boss) trophyAdd(room, user, k);
     if (info.boss && !user.profile.trophies.includes(k)) {
       user.profile.trophies.push(k);

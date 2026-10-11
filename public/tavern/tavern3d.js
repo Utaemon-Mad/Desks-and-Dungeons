@@ -142,22 +142,22 @@
     const g = new THREE.Group(); g.name = 'trophies';
     const wood = MODELS.mat('#4a2a14'), gold = MODELS.mat('#c8a040', { metal: 0.6 });
     trophyList.slice(-6).forEach((t, i) => {
-      const x = 5.1 + i * 1.0;
+      const x = 5.0 + i * 1.05;
       const plaque = new THREE.Group();
-      MODELS.mesh(MODELS.box(0.5, 0.55, 0.05), wood, 0, 0, 0.03, plaque);
-      MODELS.mesh(MODELS.box(0.54, 0.04, 0.06), gold, 0, -0.27, 0.04, plaque);
-      MODELS.mesh(MODELS.box(0.36, 0.04, 0.16), wood, 0, -0.18, 0.1, plaque); // repisa
+      MODELS.mesh(MODELS.box(0.72, 0.8, 0.06), wood, 0, 0, 0.03, plaque);
+      MODELS.mesh(MODELS.box(0.76, 0.05, 0.07), gold, 0, -0.4, 0.04, plaque); MODELS.mesh(MODELS.box(0.76, 0.05, 0.07), gold, 0, 0.4, 0.04, plaque);
+      MODELS.mesh(MODELS.box(0.56, 0.05, 0.24), wood, 0, -0.3, 0.12, plaque); // repisa
       try {
         const fig = MODELS.buildEnemy(t.k);
         if (fig) {
           const box = new THREE.Box3().setFromObject(fig), h = Math.max(0.01, box.max.y - box.min.y);
-          fig.scale.multiplyScalar(0.42 / h); fig.position.set(0, -0.16, 0.1);
+          fig.scale.multiplyScalar(0.62 / h); fig.position.set(0, -0.27, 0.13);
           fig.traverse((c) => { if (c.isMesh) c.castShadow = false; });
           if (fig.userData.gl && MODELS.posePeek) MODELS.posePeek(fig, 'Idle', 0.3);
           plaque.add(fig);
         }
       } catch { /* sin figurilla */ }
-      plaque.position.set(x, 2.05, 0.02);
+      plaque.position.set(x, 1.85, 0.02);
       g.add(plaque);
     });
     room.add(g);

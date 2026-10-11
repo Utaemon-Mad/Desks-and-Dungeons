@@ -868,7 +868,7 @@
     const act = b.dataset.act;
     if (act === 'emotes') { menuPop.classList.add('hidden'); emotePop.classList.toggle('hidden'); }
     else if (act === 'menu') { emotePop.classList.add('hidden'); menuPop.classList.toggle('hidden'); }
-    else if (act === 'dice') { closePops(); net.send({ t: 'roll', sides: 20 }); }
+    else if (act === 'dice') { closePops(); DD.emit('open-dice'); }
     else if (act === 'drink') { closePops(); net.send({ t: 'drink' }); }
     else if (act === 'edit') { closePops(); C.setEditing(!editing); }
     else if (act === 'dungeons') { closePops(); DD.emit('open-dungeons'); }

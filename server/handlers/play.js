@@ -1,6 +1,9 @@
 'use strict';
 // Mensajes de misiones, tablón, fama, taberna, mercado, Descenso, Asalto, duelos y recompensas.
 // Cada mensaje recibe cx = { ws, user, room, err, allow, allowGame, isOwner, inst, nearShopNpc, roll, command } (la conexión) y el mensaje.
+const DICE_BETS = [10, 50, 100, 500];
+const DICE_MS = 20000; // tiempo para unirse a la ronda
+
 module.exports = function (ctx) {
   const { PROG, RULES, broadcast, crypto, levelOf, profileChanged, questState, reward, rnd, saveUser, send, sendMe, store, system } = ctx;
   const claimLogin = (...a) => ctx.claimLogin(...a); // de server/social.js
@@ -219,5 +222,65 @@ module.exports = function (ctx) {
     if (other) send(other.ws, { t: 'system', text: `${user.name} rechaza el duelo.`, ts: Date.now() });
     return;
     },
+
+    // ---------- Ronda de dados en la taberna: todos apuestan lo mismo, cada uno tira 2d6 y el más alto se lo lleva ----------
+    'dice:open'(cx, msg) {
+      const { user, room, err } = cx;
+      if (user.where) return err('Las apuestas, en la taberna.');
+      if (room.dice) return err('Ya hay una ronda abierta: únete a ella.');
+      const bet = DICE_BETS.includes(Number(msg.bet)) ? Number(msg.bet) : 0;
+      if (!bet) return;
+      if (user.profile.gold < bet) return err('No tienes oro para esa apuesta.');
+      payGold(room, user, -bet);
+      room.dice = { bet, by: user.name, players: [{ id: user.id, name: user.name }], endAt: Date.now() + DICE_MS };
+      room.diceTimer = setTimeout(() => diceEnd(room), DICE_MS);
+      system(room, `🎲 ${user.name} abre una ronda de dados: ${bet} 🪙 por cabeza. ¡Tenéis ${DICE_MS / 1000} s para uniros (botón 🎲)!`);
+      broadcast(room, { t: 'dice:state', round: diceView(room) });
+    },
+    'dice:join'(cx) {
+      const { user, room, err } = cx;
+      const d = room.dice;
+      if (!d || user.where) return;
+      if (d.players.some((p) => p.id === user.id)) return;
+      if (d.players.length >= 8) return err('La mesa está llena.');
+      if (user.profile.gold < d.bet) return err('No tienes oro para esa apuesta.');
+      payGold(room, user, -d.bet);
+      d.players.push({ id: user.id, name: user.name });
+      broadcast(room, { t: 'dice:state', round: diceView(room) });
+    },
+    'dice:get'(cx) { send(cx.ws, { t: 'dice:state', round: diceView(cx.room) }); },
   };
+
+  // oro directo (sin bonificaciones de la taberna, que sólo cuentan para lo que se gana jugando)
+  function payGold(room, user, delta) {
+    user.profile.gold = Math.max(0, user.profile.gold + delta);
+    saveUser(user); sendMe(user);
+    broadcast(room, { t: 'profile', id: user.id, xp: user.profile.xp, gold: user.profile.gold, level: levelOf(user) });
+  }
+  function diceView(room) {
+    const d = room.dice;
+    return d ? { bet: d.bet, by: d.by, players: d.players.map((p) => p.name), left: Math.max(0, d.endAt - Date.now()), pot: d.bet * d.players.length } : null;
+  }
+  function diceEnd(room) {
+    const d = room.dice;
+    room.dice = null; room.diceTimer = null;
+    if (!d) return;
+    const here = d.players.map((p) => ({ ...p, user: room.users.get(p.id) })).filter((p) => p.user);
+    if (here.length < 2) {
+      for (const p of here) payGold(room, p.user, d.bet);
+      system(room, '🎲 Nadie se ha sumado a la ronda de dados: se devuelve la apuesta.');
+      broadcast(room, { t: 'dice:state', round: null });
+      return;
+    }
+    for (const p of here) { p.a = 1 + Math.floor(rnd() * 6); p.b = 1 + Math.floor(rnd() * 6); p.sum = p.a + p.b; }
+    const top = Math.max(...here.map((p) => p.sum));
+    const winners = here.filter((p) => p.sum === top);
+    const pot = d.bet * d.players.length;
+    const share = Math.floor(pot / winners.length);
+    for (const w of winners) payGold(room, w.user, share);
+    const line = here.map((p) => `${p.name} ${p.a}+${p.b}=${p.sum}`).join(' · ');
+    system(room, `🎲 ${line}. ${winners.length > 1 ? `¡Empate! ${winners.map((w) => w.name).join(' y ')} se reparten ${pot} 🪙.` : `¡${winners[0].name} se lleva ${pot} 🪙!`}`);
+    broadcast(room, { t: 'dice:result', rolls: here.map((p) => ({ name: p.name, a: p.a, b: p.b, sum: p.sum })), winners: winners.map((w) => w.name), pot });
+    broadcast(room, { t: 'dice:state', round: null });
+  }
 };
