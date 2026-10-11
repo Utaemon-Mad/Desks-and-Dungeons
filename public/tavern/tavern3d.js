@@ -348,7 +348,7 @@
       const m = charModel(u.id, u.look);
       const seat = !u.path.length && u.px === u.tx && u.py === u.ty ? MAP.seatAt(u.tx, u.ty) : null;
       m.obj.position.set(u.px + 0.5, seat ? (SEAT_Y[seat.type] || 0.4) - 0.2 : 0, u.py + 0.5);
-      m.obj.rotation.y = FACE[u.dir] || 0;
+      m.obj.rotation.y = FACE[seat && seat.dir ? seat.dir : u.dir] || 0; // sentado, mira hacia donde mira el asiento
       const emote = u.emote && u.emote.until > now ? u.emote.e : null;
       const mugOn = u.mugUntil > now;
       if (mugOn && !m.mug) {

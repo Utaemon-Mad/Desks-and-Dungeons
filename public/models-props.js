@@ -270,7 +270,7 @@
       case 'table': if (!put('table_medium_decorated_A', 0.42)) return null; light = { color: '#ffb060', intensity: 0.5, dist: 2.5, y: 0.8 }; break;
       case 'maptable': if (!put('table_medium', 0.42)) return null; { const m = put('plate_food_A', 0.2, 0.1, 0.42, 0.05); void m; } break;
       case 'roundtable': if (!put('table_small_decorated_A', 0.6)) return null; light = { color: '#ffb060', intensity: 0.8, dist: 3, y: 0.85 }; break;
-      case 'chair': if (!put('chair', 0.52, 0, 0, 0, rotY + Math.PI)) return null; break;
+      case 'chair': if (!put('chair', 0.52, 0, 0, 0, rotY)) return null; break; // el modelo KayKit ya mira hacia +z (S)
       case 'stool': if (!put('stool', 0.62)) return null; break;
       case 'chest': if (!put('chest', 0.34, 0, 0, 0, rotY)) return null; break;
       default: return null;
