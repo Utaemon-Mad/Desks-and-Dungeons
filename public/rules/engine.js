@@ -1044,6 +1044,9 @@
     for (const s of SLOT_IDS) if (e[s] && e[s].set) sets[e[s].set] = (sets[e[s].set] || 0) + 1;
     const best = Object.entries(sets).sort((a, b) => b[1] - a[1])[0];
     if (best && best[1] >= 2) g.set = best[0];
+    // legendarios: el arma destella en naranja y el héroe lleva aura
+    if (e.arma && e.arma.leg) g.wleg = 1;
+    if (SLOT_IDS.some((s) => e[s] && e[s].leg)) g.leg = 1;
     return g;
   }
 

@@ -109,13 +109,15 @@
       const f = game.floaters[i];
       const life = (now - f.start) / (f.crit ? 1300 : 1100);
       if (life >= 1 || !f.text) { game.floaters.splice(i, 1); continue; }
-      const s = P(f.x + 0.5, 1.3 + life * (f.crit ? 1.1 : 0.8), f.y + 0.5);
+      // suben en arco hacia un lado y caen un poco al final
+      if (f.dx === undefined) f.dx = (Math.random() - 0.5) * (f.crit ? 1.4 : 1);
+      const s = P(f.x + 0.5 + f.dx * life, 1.3 + life * (f.crit ? 1.8 : 1.4) - life * life * (f.crit ? 0.9 : 0.8), f.y + 0.5);
       // aparecen con un pequeño "golpe" de tamaño; los críticos, enormes
       const pop = life < 0.12 ? 1 + (1 - life / 0.12) * (f.crit ? 0.9 : 0.4) : 1;
       const size = (f.crit ? 28 : f.big ? 19 : 15) * pop;
       g.font = `700 ${Math.round(size)}px "Pixelify Sans", sans-serif`;
       g.globalAlpha = 1 - Math.max(0, life - 0.6) / 0.4;
-      const x = s.x + (f.text.length % 3 - 1) * 6;
+      const x = s.x;
       g.lineWidth = f.crit ? 6 : 4; g.strokeStyle = f.crit ? '#3a1200' : '#120604'; g.strokeText(f.text, x, s.y);
       if (f.crit) { const gr = g.createLinearGradient(0, s.y - size / 2, 0, s.y + size / 2); gr.addColorStop(0, '#fff6a0'); gr.addColorStop(0.5, '#ffc030'); gr.addColorStop(1, '#ff6a10'); g.fillStyle = gr; }
       else g.fillStyle = f.color;

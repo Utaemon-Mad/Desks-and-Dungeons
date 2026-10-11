@@ -22,6 +22,12 @@
     if (b) dim();
   }, true);
 
+  // ---------- Sonido suave al pulsar botones ----------
+  document.addEventListener('pointerdown', (e) => {
+    const b = e.target.closest && e.target.closest('.btn, .tool, .tab, button');
+    if (b && !b.disabled && DD.sfx) DD.sfx('click', { vol: 0.35 });
+  }, true);
+
   // ---------- Iconos propios en la barra inferior (en vez de emojis) ----------
   if (window.ICONS) {
     for (const b of document.querySelectorAll('#bar .tool[data-act]')) {

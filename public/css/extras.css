@@ -193,3 +193,17 @@ body.cb .dlog-line.loot-conjunto { color: #cc79a7; }
 .mk-info { flex: 1; display: flex; flex-direction: column; min-width: 0; }
 .mk-info small { color: #b99a72; font-size: 12px; }
 .mk-price { width: 90px; padding: 5px; border-radius: 5px; border: 2px solid #5a3418; background: #fbf4e2; color: #2b1d14; }
+
+/* ---------- Acabado de ventanas y botones ---------- */
+/* las ventanas se abren con un pequeño salto y el fondo se oscurece con un fundido */
+.overlay:not(.hidden):not(.title-screen) { animation: ovIn .16s ease-out; }
+.overlay:not(.hidden):not(.title-screen) > .panel { animation: winIn .22s cubic-bezier(.2, 1.35, .4, 1); }
+@keyframes ovIn { from { background-color: rgba(0, 0, 0, 0); } }
+@keyframes winIn { from { transform: translateY(12px) scale(.95); opacity: 0; } to { transform: none; opacity: 1; } }
+/* los botones responden al pasar el ratón */
+.btn, .tool { transition: filter .12s, transform .06s; }
+.btn:hover:not(:disabled), .tool:hover { filter: brightness(1.15); }
+.panel-title { background-image: linear-gradient(rgba(255, 220, 160, .08), transparent 60%), linear-gradient(#5c3b22, #3e2615); }
+@media (prefers-reduced-motion: reduce) {
+  .overlay:not(.hidden):not(.title-screen), .overlay:not(.hidden):not(.title-screen) > .panel { animation: none; }
+}
