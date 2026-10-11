@@ -419,6 +419,19 @@
   <div id="tip" class="hidden"></div>
 
   <script>
+    // llegada desde la web vieja (mudanza): guarda la llave y la copia de la cuenta y limpia la dirección
+    (function () {
+      var m = location.hash.match(/^#mudanza=(.+)$/);
+      if (!m) return;
+      try {
+        // si este navegador ya jugaba en la web nueva, no se pisa su cuenta
+        var data = JSON.parse(decodeURIComponent(m[1]));
+        if (!localStorage.getItem('dd-token')) for (var k in data) if (k.indexOf('dd-') === 0) localStorage.setItem(k, data[k]);
+      } catch (e) { /* sin almacenamiento */ }
+      history.replaceState(null, '', location.pathname + location.search);
+    })();
+  </script>
+  <script>
     // errores del navegador: se guardan y se mandan al servidor en cuanto hay conexión (Menú → panel /admin)
     window.__errs = [];
     window.addEventListener('error', (e) => { if (e.message) window.__errs.push({ msg: e.message, src: (e.filename || '').split('/').pop(), line: e.lineno }); });

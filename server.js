@@ -30,6 +30,24 @@ const store = createStore();
 const rnd = () => crypto.randomInt(0, 1e9) / 1e9;
 
 
+// Mudanza de servidor: la web vieja manda a la nueva la llave y la copia firmada de cada navegador.
+// Va en el #fragmento de la dirección, que no se envía a ningún servidor ni queda en los registros.
+const MOVED_TO = (process.env.MOVED_TO || '').replace(/\/+$/, '');
+function sendMoved(res) {
+  const html = `<!doctype html><html lang="es"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Desks &amp; Dungeons se ha mudado</title>
+<style>body{margin:0;background:#140a06;color:#f3e6c8;font:18px system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;text-align:center;padding:20px}a{color:#f0c04a}</style></head>
+<body><div><h1>🍺 La taberna se ha mudado</h1><p>Llevándote a la nueva dirección con tus personajes…</p><p><a id="go" href="${MOVED_TO}/">Si no pasa nada, pulsa aquí</a></p></div>
+<script>
+  var keep = {};
+  try { for (var i = 0; i < localStorage.length; i++) { var k = localStorage.key(i); if (k && k.indexOf('dd-') === 0) keep[k] = localStorage.getItem(k); } } catch (e) {}
+  var url = ${JSON.stringify(MOVED_TO)} + '/' + location.search + (Object.keys(keep).length ? '#mudanza=' + encodeURIComponent(JSON.stringify(keep)) : '');
+  document.getElementById('go').href = url;
+  setTimeout(function () { location.replace(url); }, 600);
+</script></body></html>`;
+  res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
+  res.end(html);
+}
+
 const server = http.createServer((req, res) => {
   let urlPath;
   try {
@@ -39,6 +57,8 @@ const server = http.createServer((req, res) => {
   }
   if (urlPath === '/healthz') { res.writeHead(200); return res.end('ok'); }
   if (urlPath === '/admin') return adminPage(req, res);
+  // mudanza (MOVED_TO=https://nueva-direccion): la página lleva a cada jugador a la web nueva con su partida
+  if (MOVED_TO && (urlPath === '/' || urlPath === '/index.html')) return sendMoved(res);
   if (urlPath === '/') urlPath = '/index.html';
   if (urlPath === '/portada') urlPath = '/portada.html';
   if (urlPath === '/guia') urlPath = '/guia.pdf';
