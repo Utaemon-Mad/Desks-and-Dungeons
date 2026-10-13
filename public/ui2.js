@@ -585,12 +585,12 @@
   //  Ajustes de gráficos y rendimiento
   // ======================================================================
   const GFX_KEY = 'dd-gfx';
-  const defaults = () => ({ quality: 'auto', weather: true, shake: true, fps: false, autoAttack: false });
+  const defaults = () => ({ quality: 'auto', weather: true, shake: true, fps: false, autoAttack: false, bright: VIEW3D.touch ? 1.25 : 1 });
   let gfx = defaults();
   try { gfx = { ...gfx, ...JSON.parse(localStorage.getItem(GFX_KEY) || '{}') }; } catch { /* sin almacenamiento */ }
   DD.gfx = gfx;
-  const applyGfx = () => { try { localStorage.setItem(GFX_KEY, JSON.stringify(gfx)); } catch { /* nada */ } VIEW3D.setQuality(gfx.quality); DD.emit('gfx', gfx); };
-  setTimeout(() => VIEW3D.setQuality(gfx.quality), 0);
+  const applyGfx = () => { try { localStorage.setItem(GFX_KEY, JSON.stringify(gfx)); } catch { /* nada */ } VIEW3D.setQuality(gfx.quality); VIEW3D.setBrightness(gfx.bright); DD.emit('gfx', gfx); };
+  setTimeout(() => { VIEW3D.setQuality(gfx.quality); VIEW3D.setBrightness(gfx.bright || (VIEW3D.touch ? 1.25 : 1)); }, 0);
   DD.on('open-options', () => { openOverlay('optwin'); renderOptions(); });
   // ---------- Interfaz: tamaño del texto y modo daltónico ----------
   const UI_KEY = 'dd-ui';
@@ -675,6 +675,17 @@
       r.append(c, el('span', '', label));
       body.appendChild(r);
     };
+    {
+      body.appendChild(el('p', 'muted small', 'Brillo (si las mazmorras se ven demasiado oscuras en tu pantalla, súbelo):'));
+      const br = el('div', 'title-row');
+      const curB = gfx.bright || (VIEW3D.touch ? 1.25 : 1);
+      for (const [v, name] of [[0.85, 'Oscuro'], [1, 'Normal'], [1.25, 'Claro'], [1.55, 'Muy claro']]) {
+        const b = el('button', 'btn' + (Math.abs(curB - v) < 0.01 ? '' : ' alt'), name);
+        b.onclick = () => { gfx.bright = v; applyGfx(); renderOptions(); };
+        br.appendChild(b);
+      }
+      body.appendChild(br);
+    }
     toggle('weather', 'Clima y partículas de ambiente (lluvia, nieve, ceniza…)');
     toggle('shake', 'Temblor de cámara en los golpes fuertes');
     toggle('fps', 'Mostrar imágenes por segundo');

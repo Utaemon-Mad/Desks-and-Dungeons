@@ -76,7 +76,7 @@
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 1.05;
+    renderer.toneMappingExposure = 1.05 * bright;
     // si la tarjeta no puede compilar un material (demasiadas luces o sombras para el móvil), en vez de dejar la pantalla
     // negra se baja un escalón de calidad y se avisa al panel de errores
     renderer.debug.onShaderError = (gl, program, vs, fs) => {
@@ -104,6 +104,9 @@
     return renderer;
   }
   const stages = [];
+  // Brillo general (Ajustes): exposición del mapeo de tonos; vale con y sin posprocesado
+  let bright = 1;
+  function setBrightness(b) { bright = Math.max(0.6, Math.min(2, Number(b) || 1)); if (renderer) renderer.toneMappingExposure = 1.05 * bright; }
 
   // ======================================================================
   //  Posprocesado: oclusión ambiental, resplandor, gradación de color, viñeta y miniatura (tilt-shift)
@@ -1188,5 +1191,5 @@
     return { stop() { alive = false; cancelAnimationFrame(raf); r.dispose(); } };
   }
 
-  root.VIEW3D = { info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
+  root.VIEW3D = { touch, setBrightness, info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
 })(this);

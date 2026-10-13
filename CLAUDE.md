@@ -33,12 +33,11 @@ public/rules/progress.js forja, misiones, logros, descenso semanal
 public/rules/items-data.js tabla de nombre y aspecto de las 192 armaduras y 156 armas/escudos (4 variantes por nivel)
 public/rules/monsters-data.js tablas de monstruos y temas de mazmorra
 public/rules/talents-data.js árbol de talentos de cada clase
-public/map.js           taberna, servidores, razas y aspecto, rasgos goblin (cleanLook)
+public/map.js           taberna, servidores, aspecto de los héroes y sus rasgos (cleanLook, FEATURES)
 public/dungeon-data.js  tipos de casilla de las mazmorras
 public/models.js        base de los modelos: materiales, héroes (bloques y KayKit), carga de modelos y animación; lo compartido en MODELS._
 public/models-creatures.js enemigos, mascotas y monturas (bloques y modelos de verdad), rasgos de monstruo
 public/models-props.js  muebles de la taberna, decorado de mazmorra, plantas, caña y jarra
-public/goblin.js        cabeza goblin hecha a mano con sus opciones
 public/armor3d.js       dibuja las armaduras en el personaje (piezas pegadas a los huesos)
 public/weapons3d.js     dibuja armas y escudos (un modelo por tipo y nivel, colores por variante)
 public/view3d.js        render, mapa 3D, partículas, clima, retratos y dibujos de objetos
@@ -68,7 +67,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Enemigo nuevo o cambiar sus números: fila en `MONSTERS` (rules/monsters-data.js); su modelo en `ENEMY_GL` + `monsterFeatures` (models-creatures.js).
 - Mazmorra/tema nuevo: `THEMES` (monsters-data.js) + colores en view3d.js (`volcan`/`abismo` como ejemplo) + decorado en server/gen.js.
 - Cuánto botín cae: `DROP` y `legChance` en `rollLoot` (engine.js). Poderes legendarios: `LEGENDARY` (engine.js) y su efecto en server/dungeon.js (`p.d.leg`).
-- Clases, razas, habilidades: `CLASSES`, `RACES`, `ABILITIES` (engine.js). Talentos: rules/talents-data.js.
+- Clases y habilidades: `CLASSES`, `ABILITIES` (engine.js); aspecto y rasgos del editor: `FEATURES`, `HAIR_LIST`, `HUMAN_SKINS` (map.js) y `faceFeatures` (models.js). Talentos: rules/talents-data.js.
 - Afijos, únicos, conjuntos, pociones: `AFFIXES`, `UNIQUE_NAMES`, `SETS`, `CONSUMABLES` (engine.js).
 - Dificultad de los monstruos por nivel: `monsterAt` (engine.js). Asalto: `RAID` (progress.js).
 - Recompensa diaria, logros, tareas, mejoras de la taberna, temporadas: `LOGIN_REWARDS`, `ACHIEVEMENTS`, `DAILY`, `TAVERN_LEVELS`, `SEASON_PTS` (progress.js).
@@ -106,7 +105,8 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Objetos estilo Diablo 2: niveles normal/excepcional/élite, calidades (inferior…único, conjunto), prefijos y sufijos.
 - Para añadir armaduras o armas basta una fila en `items-data.js` (nombre, género, aspecto); la variante se guarda en `it.sk` y no cambia las estadísticas.
 - Stats: Fuerza, Destreza, Vigor, Inteligencia, Carisma, Suerte; máximo natural 20; nivel máximo 50.
-- 5 razas y 7 clases. Los goblins llevan cabeza propia (`goblin.js`) con rasgos en `look.gob`.
+- Sólo humanos (las razas se quitaron: `raceId` siempre da 'human' y `migrateProfile` pasa a humanos a los de antes, con los puntos devueltos) y 7 clases. Aspecto: sexo, peinado (`HAIR_LIST`, cada uno es la cabeza de un modelo KayKit), piel (`HUMAN_SKINS`), pelo y rasgos en `look.feat` (`FEATURES` en map.js: complexión, altura, barba, cejas, marcas, pintura, pendientes); en 3D, `faceFeatures` (models.js) los pega al hueso de la cabeza.
+- Proporciones más humanas en los modelos KayKit: `humanize`/`applyHuman` (models.js) encogen la cabeza y alargan tronco, brazos y piernas separando las articulaciones después de cada fotograma de animación.
 - Todos los personajes KayKit comparten esqueleto: cabezas, armaduras y armas se pegan a los huesos.
 - Cuentas por token del navegador: 3 personajes y 3 servidores (Lejano, Humbrio, Sangriento).
 - `RULES_VERSION` + `migrateProfile` adaptan las partidas guardadas cuando cambian las reglas.

@@ -7,6 +7,13 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 10, date: 'Octubre', title: 'Héroes humanos', items: [
+      '🧑 Todos los héroes son humanos: se acabaron elfos, enanos, orcos y goblins. Si tenías uno, ahora es humano (conserva algo de su planta) y te devolvemos los puntos para repartirlos de nuevo.',
+      '🎨 Editor con muchas más opciones: 5 peinados para cualquiera, 12 tonos de piel, 16 colores de pelo, complexión, altura, barba (perilla, bigote, corta, poblada, larga), cejas, marcas (cicatriz, pecas, pintura de guerra, tatuaje, parche) con su color y pendientes. 🎲 Al azar te propone uno.',
+      '🧍 Proporciones más humanas: cabeza más pequeña, piernas y brazos más largos y cuerpo más esbelto.',
+      '💡 Mazmorras menos oscuras, sobre todo en el móvil, y nuevo ajuste de brillo en ⚙️ Menú → Ajustes → Gráficos (Oscuro, Normal, Claro, Muy claro).',
+      '🚪 Nadie te espera nada más entrar: los monstruos ya no aparecen junto a la casilla de salida.',
+    ] },
     { v: 9, date: 'Octubre', title: 'Combate por turnos', items: [
       '🎲 El combate ahora es por turnos, como en D&D: se explora en tiempo real, pero cuando un monstruo te ve se para el tiempo y cada uno juega su turno por orden de iniciativa (d20 + Destreza).',
       '👣 En tu turno: unas 6 casillas de movimiento (iluminadas en el suelo), ⚔️ una acción (atacar, habilidad, defenderse o reanimar), ✚ una acción adicional (pociones y bufos) y ↺ una reacción para el ataque de oportunidad.',

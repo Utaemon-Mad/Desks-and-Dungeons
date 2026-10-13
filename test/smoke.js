@@ -98,26 +98,26 @@ function rulesTests() {
   const u1 = RULES.makeItem(RULES.seeded('u'), { ilvl: 40, rarity: 'unico', slot: 'arma', base: 'espada' });
   const u2 = RULES.makeItem(RULES.seeded('u'), { ilvl: 40, rarity: 'unico', slot: 'arma', base: 'espada' });
   assert.deepStrictEqual(Object.keys(u1.stats).sort(), Object.keys(u2.stats).sort(), 'único: siempre las mismas propiedades');
-  // personaje: 6 características, raza + clase, tope natural de 20 y puntos hasta el nivel 50
+  // personaje: 6 características, humano + clase, tope natural de 20 y puntos hasta el nivel 50
   const ch = RULES.newChar('guerrero', { species: 'orc' });
   const d = RULES.derive({ xp: 0, char: ch, equip: {}, buffs: {} });
   assert.deepStrictEqual(Object.keys(d.stats), ['fue', 'des', 'vig', 'int', 'car', 'sue']);
-  assert.strictEqual(d.base.fue, 5 + 4 + 4, 'Fuerza = 5 + orco 4 + guerrero 4');
+  assert.strictEqual(d.base.fue, 5 + 1 + 4, 'Fuerza = 5 + humano 1 + guerrero 4 (ya no hay orcos)');
   assert.ok(d.abilities.length === 4 && d.abilities.some((a) => a.id === 'golpe' && a.ready));
   assert.strictEqual(d.points, RULES.POINTS_START);
   assert.strictEqual(RULES.pointsTotal(50), 5 + 49 + 10, 'puntos a nivel 50');
-  assert.strictEqual(RULES.statRoom(ch, 'fue'), 7, 'la Fuerza sólo puede subir 7 puntos más (hasta 20)');
-  assert.strictEqual(RULES.cleanChar({ cls: 'guerrero', look: { species: 'orc' }, alloc: { fue: 30 } }, 50).alloc.fue, 7, 'tope natural de 20');
-  const big = RULES.derive({ xp: 0, char: { ...ch, alloc: { ...ch.alloc, fue: 7 } }, equip: { anillo: { slot: 'anillo', stats: { fue: 6 } } }, buffs: {} });
+  assert.strictEqual(RULES.statRoom(ch, 'fue'), 10, 'la Fuerza sólo puede subir 10 puntos más (hasta 20)');
+  assert.strictEqual(RULES.cleanChar({ cls: 'guerrero', look: { species: 'orc' }, alloc: { fue: 30 } }, 50).alloc.fue, 10, 'tope natural de 20');
+  const big = RULES.derive({ xp: 0, char: { ...ch, alloc: { ...ch.alloc, fue: 10 } }, equip: { anillo: { slot: 'anillo', stats: { fue: 6 } } }, buffs: {} });
   assert.ok(big.natural.fue === 20 && big.stats.fue === 26, 'el equipo sí pasa de 20');
   assert.ok(RULES.MAX_LEVEL === 50 && RULES.levelFromXp(1e12) === 50, 'nivel máximo 50');
-  for (const r of RULES.RACE_IDS) assert.strictEqual(Object.values(RULES.RACES[r].mods).reduce((a, b) => a + b, 0), 6, 'todas las razas suman +6');
+  assert.deepStrictEqual(RULES.RACE_IDS, ['human'], 'sólo humanos');
   for (const c of RULES.CLASS_IDS) assert.strictEqual(Object.values(RULES.CLASSES[c].base).reduce((a, b) => a + b, 0), 8, 'todas las clases suman +8');
   assert.ok(RULES.ABILITIES.druida.length === 4 && RULES.ABILITIES.sacerdote.length === 4 && !RULES.ABILITIES.brujo && !RULES.ABILITIES.clerigo);
   // la Fuerza sube el daño un 5% por punto (como en Diablo 2)
   const sw = RULES.makeItem(rng, { ilvl: 1, rarity: 'normal', slot: 'arma', base: 'espada', tier: 0 });
-  const dA = RULES.derive({ xp: 0, char: RULES.newChar('guerrero', { species: 'goblin' }), equip: { arma: sw }, buffs: {} });
-  const dB = RULES.derive({ xp: 0, char: RULES.newChar('guerrero', { species: 'orc' }), equip: { arma: sw }, buffs: {} });
+  const dA = RULES.derive({ xp: 0, char: RULES.newChar('guerrero'), equip: { arma: sw }, buffs: {} });
+  const dB = RULES.derive({ xp: 0, char: { ...RULES.newChar('guerrero'), alloc: { fue: 3, des: 0, vig: 0, int: 0, car: 0, sue: 0 } }, equip: { arma: sw }, buffs: {} });
   assert.ok(dB.statPct - dA.statPct === (dB.stats.fue - dA.stats.fue) * 5, '+5% de daño por punto de Fuerza');
   // requisitos: un mago enclenque no puede con unas placas de élite
   const plate = RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'pecho', base: 'placas', tier: 2 });
@@ -129,6 +129,11 @@ function rulesTests() {
   assert.ok(old.char.cls === 'mago' && old.char.look.species === 'human' && old.char.alloc.fue === 0 && old.statsReset, 'perfil antiguo');
   assert.ok(old.equip.anillo.rarity === 'raro' && old.equip.anillo.stats.int === 3 && old.equip.anillo.stats.vig === 2 && old.equip.anillo.stats.hp === 30, 'objeto antiguo');
   assert.ok(old.bag[0].rarity === 'magico' && old.bag[0].tier === 0 && old.bag[0].reqStats.fue === 4);
+  // los de otra raza pasan a humanos con los puntos devueltos y algo de su planta (un enano: bajo, fornido y barbudo)
+  const dw = RULES.migrateProfile({ xp: 0, rv: RULES.RULES_VERSION, char: { cls: 'guerrero', alloc: { fue: 4 }, look: { species: 'dwarf', sex: 'm' } }, equip: {}, bag: [] });
+  assert.ok(dw.char.look.species === 'human' && dw.char.alloc.fue === 0 && dw.statsReset, 'raza antigua → humano');
+  const dwl = MAP.cleanLook(dw.char.look);
+  assert.ok(dwl.feat.build === 3 && dwl.feat.height === 0 && dwl.feat.beard === 5, 'conserva su planta');
   // la mazmorra escala con el nivel
   assert.ok(RULES.monsterAt('orc', 10).hp > RULES.monsterAt('orc', 1).hp * 4);
   // mazmorras aleatorias: siempre jugables
@@ -511,9 +516,9 @@ async function instanceTests() {
   assert.strictEqual(meB.char.alloc.fue, 3);
   b.send({ t: 'char:points', alloc: { fue: 1 } });
   assert.match((await b.next((m) => m.t === 'error')).text, /puntos/);
-  // tope natural de 20: un enano guerrero con 18 de Vigor no puede subirlo a 21 aunque tuviera puntos
-  const vigRoom = RULES.statRoom({ cls: 'guerrero', look: { species: 'dwarf' }, alloc: { vig: 2 } }, 'vig');
-  assert.strictEqual(vigRoom, 20 - (5 + 4 + 3) - 2, 'hueco hasta 20');
+  // tope natural de 20: lo que queda hasta 20 después de la base, la clase y los puntos ya puestos
+  const vigRoom = RULES.statRoom({ cls: 'guerrero', look: { species: 'human' }, alloc: { vig: 2 } }, 'vig');
+  assert.strictEqual(vigRoom, 20 - (5 + 1 + 3) - 2, 'hueco hasta 20');
 
   // Tiendas: la bruja vende pociones, Takeshi armas y armaduras, el de la túnica pergaminos y bufos
   b.send({ t: 'shop:open', npc: 'bruja' });
@@ -735,18 +740,19 @@ async function instanceTests() {
   assert.strictEqual(ac.slots.length, 3, 'tres casillas');
   assert.ok(ac.slots[0] && ac.slots[0].name === 'Dani' && !ac.slots[1] && !ac.slots[2], 'el perfil antiguo va a la casilla 1');
   assert.deepStrictEqual(ac.servers.map((x) => x.id), MAP.SERVERS.map((x) => x.id), 'tres servidores');
-  // el editor manda raza, sexo, peinado y el reparto de los 5 primeros puntos (el servidor recorta lo que pase de 20)
-  lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Eva', look: { cls: 'picaro', cls2: 'mago', species: 'goblin', sex: 'f', hs: 'capucha', skin: 12, gob: { ears: 2, hair: 4, marks: 3, nose: 99, rings: 'x' } }, alloc: { des: 9, sue: 3 } });
+  // el editor manda sexo, peinado, rasgos y el reparto de los 5 primeros puntos (el servidor recorta lo que pase de 20)
+  lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Eva', look: { cls: 'picaro', cls2: 'mago', species: 'goblin', sex: 'f', hs: 'capucha', skin: 12, feat: { build: 2, height: 3, marks: 3, paint: 99, rings: 'x' } }, alloc: { des: 9, sue: 3 } });
   ac = await lob.next((m) => m.t === 'account');
   assert.strictEqual(ac.created, 1);
   assert.ok(ac.slots[1].name === 'Eva' && ac.slots[1].cls === 'picaro' && ac.slots[1].level === 1, 'personaje nuevo en la casilla 2');
-  assert.ok(ac.slots[1].look.species === 'goblin' && ac.slots[1].look.sex === 'f' && ac.slots[1].look.hs === 'capucha', 'raza, sexo y peinado');
+  assert.ok(ac.slots[1].look.species === 'human' && ac.slots[1].look.sex === 'f' && ac.slots[1].look.hs === 'capucha', 'sólo humanos, sexo y peinado');
+  assert.ok(MAP.HUMAN_SKINS.includes(ac.slots[1].look.skin), 'piel verde de goblin → piel humana');
   const eva = store.player(store.hash(tokD)).slots[1];
-  // rasgos de goblin: se guardan los válidos y los raros vuelven a su valor de partida
-  const gl = ac.slots[1].look.gob;
-  assert.ok(gl && gl.ears === 2 && gl.hair === 4 && gl.marks === 3 && gl.nose === 0 && gl.rings === 0 && gl.build === 1, 'rasgos de goblin guardados y limpios');
-  assert.strictEqual(eva.char.look.gob.ears, 2);
-  assert.strictEqual(MAP.cleanLook({ species: 'human', gob: { ears: 1 } }).gob, undefined, 'solo los goblins llevan rasgos de goblin');
+  // rasgos: se guardan los válidos y los raros vuelven a su valor de partida
+  const fl = ac.slots[1].look.feat;
+  assert.ok(fl && fl.build === 2 && fl.height === 3 && fl.marks === 3 && fl.paint === 0 && fl.rings === 0 && fl.beard === 0, 'rasgos guardados y limpios');
+  assert.strictEqual(eva.char.look.feat.height, 3);
+  assert.strictEqual(MAP.cleanLook({ gob: { ears: 1 } }).gob, undefined, 'ya no hay rasgos de goblin');
   // copia de seguridad firmada: si el servidor pierde la cuenta, el navegador la devuelve y se restaura
   assert.ok(ac.backup && ac.backup.d && ac.backup.sig, 'la cuenta llega con su copia de seguridad');
   const bk = ac.backup, saved = store.player(store.hash(tokD));
@@ -757,7 +763,7 @@ async function instanceTests() {
   lob.send({ t: 'hello', token: tokD, backup: bk });
   ac2 = await lob.next((m) => m.t === 'account');
   assert.ok(ac2.slots[1] && ac2.slots[1].name === 'Eva', 'la copia buena restaura la cuenta');
-  assert.strictEqual(store.player(store.hash(tokD)).slots[1].char.look.gob.ears, saved.slots[1].char.look.gob.ears);
+  assert.strictEqual(store.player(store.hash(tokD)).slots[1].char.look.feat.height, saved.slots[1].char.look.feat.height);
   await sleep(2500); // el servidor limita los mensajes de la pantalla de inicio
   assert.deepStrictEqual([eva.char.alloc.des, eva.char.alloc.sue], [5, 0], 'puntos iniciales: como mucho 5 y nunca más de 20 natural');
   assert.ok(RULES.derive(eva).natural.des <= RULES.STAT_MAX);

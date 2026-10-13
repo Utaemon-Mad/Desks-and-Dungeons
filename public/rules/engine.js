@@ -1,4 +1,4 @@
-// Reglas propias de Desks & Dungeons: 6 características (máximo natural 20), 5 razas, 7 clases y objetos al estilo
+// Reglas propias de Desks & Dungeons: 6 características (máximo natural 20), sólo humanos, 7 clases y objetos al estilo
 // de Diablo 2 (tipos base en tres niveles, requisitos de Fuerza/Destreza/Inteligencia, calidades, prefijos y sufijos
 // según el nivel del objeto), conjuntos de clase, botín, monstruos escalados por nivel, habilidades, tiendas y bufos.
 // Lo usan el servidor (que manda) y el navegador (para mostrar fichas, objetos y precios).
@@ -13,8 +13,8 @@
   const MAX_LEVEL = 50;
   const BAG_SIZE = 36;
   const RULES_VERSION = 2;    // perfiles guardados con reglas anteriores se convierten al cargarlos
-  const STAT_BASE = 5;        // todas las características empiezan en 5 (más raza y clase)
-  const STAT_MAX = 20;        // máximo natural (raza + clase + puntos); el equipo puede pasar de ahí
+  const STAT_BASE = 5;        // todas las características empiezan en 5 (más el +1 humano y la clase)
+  const STAT_MAX = 20;        // máximo natural (base + clase + puntos); el equipo puede pasar de ahí
   const POINTS_START = 5;     // puntos libres al crear el personaje
   // 1 punto por nivel y otro más cada 5 niveles: no da para llegar a 20 en todo, hay que elegir
   const pointsTotal = (level) => POINTS_START + (level - 1) + Math.floor(level / 5);
@@ -71,19 +71,14 @@
   }
 
   // ======================================================================
-  //  Razas: modifican las características (todas suman +6) y dan un rasgo propio
+  //  Raza: sólo humanos (+1 a todo)
   // ======================================================================
+  // Sólo humanos: las demás razas se quitaron y los personajes de antes pasan a humanos (con los puntos devueltos)
   const RACES = {
-    human:  { name: 'Humano', mods: { fue: 1, des: 1, vig: 1, int: 1, car: 1, sue: 1 }, perk: {}, perkText: 'Versátil: +1 a todas las características.' },
-    elf:    { name: 'Elfo', mods: { des: 3, int: 2, sue: 2, vig: -1 }, perk: { dodge: 3, hit: 5 }, perkText: 'Gracia élfica: +3% de esquiva y +5% de puntería.' },
-    dwarf:  { name: 'Enano', mods: { fue: 2, vig: 4, sue: 1, car: -1 }, perk: { armorPct: 10, resAll: 5 }, perkText: 'Piel de piedra: +10% de armadura y +5% de resistencia mágica.' },
-    orc:    { name: 'Orco', mods: { fue: 4, vig: 3, des: 1, int: -1, car: -1 }, perk: { dmgPct: 5, hpRegen: 0.5 }, perkText: 'Furia orca: +5% de daño y +0,5 de vida por segundo.' },
-    goblin: { name: 'Goblin', mods: { des: 3, sue: 4, int: 1, fue: -2 }, perk: { mf: 15, move: 5 }, perkText: 'Codicia goblin: +15% de hallazgo mágico y +5% de velocidad al andar.' },
+    human: { name: 'Humano', mods: { fue: 1, des: 1, vig: 1, int: 1, car: 1, sue: 1 }, perk: {}, perkText: 'Versátil: +1 a todas las características.' },
   };
   const RACE_IDS = Object.keys(RACES);
-  // Especies de versiones anteriores → raza actual
-  const LEGACY_RACE = { dragonborn: 'human', tiefling: 'human', halfling: 'human', gnome: 'dwarf', goliath: 'orc' };
-  const raceId = (r) => (RACES[r] ? r : LEGACY_RACE[r] || 'human');
+  const raceId = () => 'human';
   const SEXES = { m: 'Hombre', f: 'Mujer' };
 
   // ======================================================================
@@ -211,7 +206,7 @@
   const pointsSpent = (char) => STAT_IDS.reduce((t, k) => t + (char.alloc[k] || 0), 0);
   const pointsFree = (char, level) => Math.max(0, pointsTotal(level) - pointsSpent(char));
 
-  // Características base: 5 en todo + raza + clase (sin pasar de 20)
+  // Características base: 5 en todo + humano + clase (sin pasar de 20)
   function baseStats(char) {
     const s = Object.fromEntries(STAT_IDS.map((k) => [k, STAT_BASE]));
     const R = RACES[raceId(char.look && char.look.species)];
@@ -780,8 +775,12 @@
     p.char.cls = classId(p.char.cls) || 'guerrero';
     delete p.char.cls2;
     p.char.look = p.char.look || {};
+    const oldRace = p.char.look.species && p.char.look.species !== 'human';
+    // quien era de otra raza conserva algo de su planta: enanos bajos y fornidos (y barbudos), orcos grandes, elfos esbeltos
+    const PLANT = { dwarf: { build: 3, height: 0, beard: p.char.look.sex === 'f' ? 0 : 5 }, orc: { build: 4, height: 2 }, elf: { build: 0, height: 2 }, goblin: { build: 0, height: 0 } };
+    if (oldRace && !p.char.look.feat && PLANT[p.char.look.species]) p.char.look.feat = { ...PLANT[p.char.look.species] };
     p.char.look.species = raceId(p.char.look.species);
-    if ((p.rv || 1) < RULES_VERSION) {
+    if ((p.rv || 1) < RULES_VERSION || oldRace) {
       p.char.alloc = Object.fromEntries(STAT_IDS.map((k) => [k, 0]));
       p.rv = RULES_VERSION;
       p.statsReset = true; // se avisa al jugador de que tiene que volver a repartir

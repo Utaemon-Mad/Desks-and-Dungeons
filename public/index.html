@@ -197,7 +197,7 @@
     </div>
   </div>
 
-  <!-- Editor de personaje: crear en una casilla o cambiar el aspecto, la raza y la clase -->
+  <!-- Editor de personaje: crear en una casilla o cambiar el aspecto y la clase -->
   <div id="login" class="overlay hidden">
     <form id="login-form" class="panel card editor" autocomplete="off">
       <div class="panel-title" id="ed-title">NUEVO HÉROE</div>
@@ -213,17 +213,16 @@
         </div>
         <div class="ed-right">
           <div class="ed-sec"><div class="field-title">Sexo</div><div id="sex-pick" class="class-pick two"></div></div>
-          <div class="ed-sec"><div class="field-title">Raza</div><div id="species-pick" class="class-pick species"></div><p id="ed-race-note" class="tag small"></p></div>
           <div class="ed-sec"><div class="field-title">Clase</div><div id="class-pick" class="class-pick"></div><p id="login-sheet-note" class="tag small"></p></div>
-          <div class="ed-sec hidden" id="gob-sec"><div class="field-title">Rasgos de goblin <button type="button" class="btn alt gob-rand" id="gob-rand" title="Un goblin al azar">🎲 Al azar</button></div><div id="gob-picks" class="gob-picks"></div></div>
-          <div class="ed-sec"><div class="field-title" id="hs-title">Peinado</div><div id="hs-pick" class="class-pick three"></div>
+          <div class="ed-sec"><div class="field-title">Peinado <button type="button" class="btn alt gob-rand" id="feat-rand" title="Un aspecto al azar">🎲 Al azar</button></div><div id="hs-pick" class="class-pick three"></div>
             <div class="looks">
               <div><div class="field-title">Piel</div><div id="skin-pick" class="swatches"></div></div>
               <div><div class="field-title">Pelo</div><div id="hair-pick" class="swatches"></div></div>
             </div>
           </div>
+          <div class="ed-sec" id="feat-sec"><div class="field-title">Rasgos</div><div id="feat-picks" class="gob-picks"></div></div>
           <div class="ed-sec" id="ed-stats-sec"><div class="field-title">Características <small>· puntos por repartir: <b id="ed-points">5</b> · máximo natural 20</small></div><div id="ed-stats" class="ed-stats"></div></div>
-          <p id="ed-edit-note" class="tag small hidden">Cambiar de raza o de clase devuelve tus puntos para que los repartas de nuevo. El sexo, el peinado y los colores se cambian sin más.</p>
+          <p id="ed-edit-note" class="tag small hidden">Cambiar de clase devuelve tus puntos para que los repartas de nuevo. El aspecto se cambia sin más.</p>
         </div>
       </div>
       <div class="edit-row">
@@ -448,7 +447,6 @@
   <script src="rules/progress.js"></script>
   <script src="vendor/three.bundle.min.js"></script>
   <script src="sprites.js"></script>
-  <script src="goblin.js"></script>
   <script src="armor3d.js"></script>
   <script src="weapons3d.js"></script>
   <script src="models.js"></script>

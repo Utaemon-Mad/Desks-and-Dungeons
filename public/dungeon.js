@@ -568,7 +568,8 @@
     stage.scene.background = new THREE.Color(bg);
     stage.scene.fog = new THREE.Fog(bg, world ? 16 : 13, world ? 34 : 26);
     // mazmorras oscuras: poca luz ambiente (con el color del tema) y que manden las antorchas y el farol
-    stage.hemi.intensity = world ? 0.62 : game.map.kind === 'arena' ? 0.3 : T.amb || 0.16;
+    // nunca del todo a oscuras: en el móvil (pantalla pequeña y con reflejos) algo más de luz ambiente
+    stage.hemi.intensity = world ? 0.62 : game.map.kind === 'arena' ? 0.4 : Math.max(T.amb || 0.16, VIEW3D.touch ? 0.38 : 0.26);
     stage.grade = world ? null : GRADES[game.map.kind === 'arena' ? 'arena' : game.map.theme] || null;
     stage.hemi.color.set(world ? '#7a8ac0' : T.sky);
     stage.hemi.groundColor.set(world ? '#2a2a1a' : T.ground || '#140c0a');

@@ -63,10 +63,7 @@ module.exports = function (ctx) {
     const changed = changeChar(user.profile, look);
     if (changed.cls) user.profile.char.talents = {}; // los talentos son de cada clase
     profileChanged(room, user, { look: true });
-    if (changed.cls || changed.race) {
-      const c = user.profile.char;
-      system(room, `📜 ${user.name} es ahora ${RULES.RACES[RULES.raceId(c.look.species)].name.toLowerCase()} ${RULES.CLASSES[c.cls].name.toLowerCase()}. Sus puntos vuelven para repartirlos de nuevo.`);
-    }
+    if (changed.cls) system(room, `📜 ${user.name} es ahora ${RULES.CLASSES[user.profile.char.cls].name.toLowerCase()}. Sus puntos vuelven para repartirlos de nuevo.`);
     return;
     },
     'inv:equip'(cx, msg) {

@@ -227,11 +227,14 @@ function generate(o) {
       const n = Math.min(6, ri(2, 3) + Math.floor(level / 8) + (r.w * r.h > 45 ? 1 : 0));
       const elite = rand() < 0.12 + Math.min(0.15, level * 0.01);
       const packId = 'p' + spawns.length;
-      for (let i = 0; i < n; i++) {
+      // nadie esperando nada más entrar: los monstruos, lejos de la casilla de salida
+      for (let i = 0, tries = 0; i < n && tries < n * 4; tries++) {
         const p = freeCell(r, taken);
         if (!p) break;
         taken.add(key(p.x, p.y));
+        if (Math.max(Math.abs(p.x - startPos.x), Math.abs(p.y - startPos.y)) < 9) continue;
         spawns.push({ k: pickR(mobs), x: p.x, y: p.y, elite: elite && i === 0, pack: packId });
+        i++;
       }
     }
     // algún enemigo suelto por los pasillos

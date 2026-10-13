@@ -330,16 +330,15 @@
     left.appendChild(pv);
     left.appendChild(el('div', 'ficha-name', u ? u.name : ''));
     const c1 = RULES.CLASSES[p.char.cls];
-    const race = RULES.RACES[d.race];
     const look = (u && u.look) || {};
-    left.appendChild(el('div', 'ficha-cls', `${c1.icon} ${c1.name} · ${race.name}${look.sex === 'f' ? ' (mujer)' : ''}`));
+    left.appendChild(el('div', 'ficha-cls', `${c1.icon} ${c1.name} · ${look.sex === 'f' ? 'humana' : 'humano'}`));
     left.appendChild(el('div', 'ficha-lvl', `Nivel ${d.level} · ${p.xp} PX`));
-    left.appendChild(el('div', 'muted small', race.perkText));
+    left.appendChild(el('div', 'muted small', RULES.RACES.human.perkText));
     if (d.points > 0) { const b = el('button', 'btn red', `⭐ Repartir ${d.points} puntos`); b.onclick = openLevelUp; left.appendChild(b); }
-    // aspecto, raza y clase: se cambian con el editor de personaje (sólo en la taberna)
-    const edit = el('button', 'btn alt', '✏️ Aspecto, raza y clase');
+    // aspecto y clase: se cambian con el editor de personaje (sólo en la taberna)
+    const edit = el('button', 'btn alt', '✏️ Aspecto y clase');
     edit.onclick = () => {
-      if (!inTavern()) { DD.toast('Vuelve a la taberna para cambiar tu aspecto, tu raza o tu clase.'); return; }
+      if (!inTavern()) { DD.toast('Vuelve a la taberna para cambiar tu aspecto o tu clase.'); return; }
       closeOverlay('charwin');
       DD.emit('open-editor', { look: { ...look, cls: p.char.cls, gear: undefined } });
     };
@@ -899,10 +898,10 @@
       p('🤺 Duelos: desde la lista de héroes, reta a un amigo en el sótano de Alfonso, con una apuesta de oro si queréis. El ganador se lo lleva todo.');
       p('Espacio (o 🤸): voltereta de dos casillas que te hace invulnerable un instante. ⚙️ Menú → Gráficos: calidad, clima y temblor de cámara.');
       h('Subir de nivel');
-      p(`Empiezas con ${RULES.POINTS_START} puntos para repartir en el editor. Cada nivel da 1 punto más, y cada 5 niveles uno extra (hasta el nivel ${RULES.MAX_LEVEL}). Aparecerá un icono rojo bajo tu retrato: púlsalo para repartirlos. Ninguna característica pasa de ${RULES.STAT_MAX} de forma natural (raza + clase + puntos); el equipo sí puede subirla más.`);
+      p(`Empiezas con ${RULES.POINTS_START} puntos para repartir en el editor. Cada nivel da 1 punto más, y cada 5 niveles uno extra (hasta el nivel ${RULES.MAX_LEVEL}). Aparecerá un icono rojo bajo tu retrato: púlsalo para repartirlos. Ninguna característica pasa de ${RULES.STAT_MAX} de forma natural (base + clase + puntos); el equipo sí puede subirla más.`);
     } else if (guideTab === 'clases') {
-      h('Razas');
-      for (const id of RULES.RACE_IDS) { const R = RULES.RACES[id]; p(`${R.name}: ${Object.entries(R.mods).map(([s, v]) => `${v > 0 ? '+' : ''}${v} ${RULES.statName(s)}`).join(', ')}. ${R.perkText}`); }
+      h('Humanos');
+      p(`Todos los héroes son humanos (${RULES.RACES.human.perkText.toLowerCase()}). Lo que os distingue es la clase y el aspecto: en el editor eliges sexo, peinado, piel, pelo, complexión, altura, barba, cejas, marcas, pintura y pendientes.`);
       for (const [id, k] of Object.entries(RULES.CLASSES)) {
         h(`${k.icon} ${k.name}`);
         p(`${k.desc} Característica principal: ${RULES.statName(k.main)} (${Object.entries(k.base).map(([s, v]) => `+${v} ${RULES.statName(s)}`).join(', ')}). Prefiere armaduras de ${k.armor.map((a) => RULES.ARMOR_TYPES[a].toLowerCase()).join(', ')} y ${k.weapons.map((w) => (RULES.WEAPONS[w] || RULES.OFFHANDS[w]).name.toLowerCase()).join(', ')}; puede llevar cualquier cosa si cumple los requisitos.`);
