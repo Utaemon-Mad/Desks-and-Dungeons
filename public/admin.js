@@ -7,6 +7,13 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 9, date: 'Octubre', title: 'Combate por turnos', items: [
+      '🎲 El combate ahora es por turnos, como en D&D: se explora en tiempo real, pero cuando un monstruo te ve se para el tiempo y cada uno juega su turno por orden de iniciativa (d20 + Destreza).',
+      '👣 En tu turno: unas 6 casillas de movimiento (iluminadas en el suelo), ⚔️ una acción (atacar, habilidad, defenderse o reanimar), ✚ una acción adicional (pociones y bufos) y ↺ una reacción para el ataque de oportunidad.',
+      '⏱️ 30 segundos para decidir; F o «Terminar turno» para pasar. Arriba ves el orden de la ronda y el aro dorado marca quién juega.',
+      '👑 Los jefes avisan en el suelo y el golpe cae en su siguiente turno: usa el tuyo para apartarte. Aturdido = pierdes el turno; ralentizado = la mitad de movimiento.',
+      '🤺 Los duelos de la arena también son por turnos.',
+    ] },
     { v: 8, date: 'Octubre', title: 'Una taberna con alma', items: [
       '🗺️ MESA DE PARTIDA: la mesa grande es una sola. Siéntate y la cámara la mira desde arriba con todos los jugadores; se abre el plano de la próxima mazmorra (¡la de verdad!). Marcad el plano, elegid tema y nivel, jugad a los dados o comerciad, y cuando todos digáis «listo» bajáis juntos.',
       '🌙 La luz de la luna entra por las ventanas y dibuja la cruz del marco en el suelo.',

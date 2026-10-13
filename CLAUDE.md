@@ -19,6 +19,7 @@ server/web.js           archivos estáticos (gzip, ETag), panel /admin y errores
 server/accounts.js      copias de seguridad firmadas y usuario/contraseña
 server/social.js        hazañas, mejoras de la taberna, mercado, temporadas, recompensa diaria y Asalto semanal
 server/dungeon.js       instancia de mazmorra/mundo/arena: combate, IA, botín, mascotas, puertas
+server/turns.js         combate por turnos estilo D&D 5e (se instala en Instance): reloj de juego, iniciativa, turnos, reacciones
 server/gen.js           generador de mazmorras (salas, puertas, decorado, antorchas)
 server/world.js         mundo abierto y NPC
 server/store.js         guardado en data/*.json
@@ -53,6 +54,7 @@ public/dungeon.js       mazmorra en el navegador: estado, red, eventos, controle
 public/dungeon/menu.js  menú de mazmorras (tema, nivel, lista de partidas)
 public/dungeon/party.js vida del grupo, volver con el grupo, HUD y barra de habilidades
 public/dungeon/overlay.js marcas, nombres, bocadillos y minimapa dibujados encima; joystick táctil
+public/dungeon/turns.js barra de iniciativa, panel de tu turno, casillas alcanzables y avisos del combate por turnos
 public/polish.js        fundidos, celebración de nivel y cartel de objeto único
 public/tutorial.js      tutorial de Alfonso para personajes nuevos
 public/ui.js, ui2.js    ventanas: ficha, inventario, tiendas, forja, guía; ajustes (volumen, tamaño, daltónico, teclas en DD.keys)
@@ -71,6 +73,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Dificultad de los monstruos por nivel: `monsterAt` (engine.js). Asalto: `RAID` (progress.js).
 - Recompensa diaria, logros, tareas, mejoras de la taberna, temporadas: `LOGIN_REWARDS`, `ACHIEVEMENTS`, `DAILY`, `TAVERN_LEVELS`, `SEASON_PTS` (progress.js).
 - Combate (daño, habilidades, muerte, botín al morir): `damageEnemy`, `tryPending`, `killEnemy`, `hurtPlayer` (server/dungeon.js).
+- Combate por turnos (server/turns.js): empieza en `encStart` cuando un monstruo tiene `aggro` (o empieza el duelo); orden `encRound`/`encNext`, turno `encBegin`/`encEndTurn` (`TURN_MS` 30 s reales, `TURN_GAME_MS` de juego por turno), presupuesto `p.tb` = { move, action, bonus } y `react` por ronda, IA `encEnemy`, ataques de oportunidad `encLeaveReach…`, órdenes `endTurn`/`revive` (mensajes `dend`/`drevive`). Todo el tiempo de combate usa `this.clock()` (reloj de juego que sólo corre mientras pasa algo), nunca `Date.now()`. Las pruebas de tiempo real pasan `turns: false` en los hooks.
 - Mensajes del cliente al servidor: `server/handlers/*.js` (`'nombre:accion'(cx, msg)`); los que quedan, en el `switch (msg.t)` de server.js.
 - Luz y ambiente de cada tema (luz ambiente, rebote, neblina): `THEME` (view3d.js); neblina `mistLayer`, agua y lava `liquidMaterial`, suciedad del suelo `grime`; luces de la escena en `renderGame` (dungeon.js).
 - Efectos de golpe y muerte: `gore`, `hitBurst`, `splat`, `slash`, `setFlash` (dungeon.js). Calidad automática por fps: `trackFps` (view3d.js).

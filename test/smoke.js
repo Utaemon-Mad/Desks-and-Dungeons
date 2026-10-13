@@ -187,6 +187,7 @@ async function instanceTests() {
     give: (u, it) => { bag.push(it); return true; },
     giveCons: () => true,
     exit: () => {}, portal: () => {},
+    turns: false, // estas pruebas son del combate en tiempo real; el de turnos tiene las suyas
   };
   const def = { id: 'test', kind: 'dungeon', level: 1, name: 'Pasillo', w: W, h: H, tiles: rows.join(''), start: { x: 1, y: 2 }, props: [], chests: [{ x: 12, y: 1 }], spawns: [{ k: 'goblin-minion', x: 4, y: 2, pack: 'a' }] };
   const inst = new Instance(def, hooks);
@@ -347,6 +348,76 @@ async function instanceTests() {
   ai.damageEnemy(ai.players.get('x1'), ai.enemies.get('pv:x2'), 99999, { noCrit: true, kind: 'ability' });
   await sleep(1000);
   assert.strictEqual(ended, 'x2', 'termina el duelo');
+
+  // Combate por turnos (estilo D&D 5e): se para el tiempo, iniciativa, movimiento + acción + adicional + reacción
+  {
+    const tsent = [];
+    const ti = new Instance({ ...def, id: 'turnos', spawns: [{ k: 'goblin-minion', x: 6, y: 2, pack: 't' }], chests: [] }, { ...hooks, turns: true, send: (u, m) => tsent.push(typeof m === 'string' ? JSON.parse(m) : m), kill: () => {} });
+    const tu = mk('turnero');
+    ti.join(tu, { x: 2, y: 2 });
+    const trun = async (ms, until) => { const end = Date.now() + ms; while (Date.now() < end) { ti.tick(Date.now()); if (until && until()) return true; await sleep(20); } return false; };
+    assert.ok(await trun(1500, () => ti.enc), 'al ver al héroe empieza el combate por turnos');
+    assert.strictEqual(ti.enc.order.length, 2, 'iniciativa: héroe y goblin');
+    const tp = ti.players.get('turnero');
+    const gob = [...ti.enemies.values()][0];
+    const mine = () => ti.enc && ti.enc.active && ti.enc.active.id === 'turnero';
+    assert.ok(await trun(12000, mine), 'llega el turno del héroe');
+    assert.deepStrictEqual({ action: tp.tb.action, bonus: tp.tb.bonus }, { action: 1, bonus: 1 }, 'una acción y una acción adicional');
+    assert.ok(tp.tb.move >= 4 && tp.tb.move <= 9, 'unas 6 casillas de movimiento');
+    // en mi turno el goblin no se mueve, y el reloj de juego no corre mientras pienso
+    const gpos = gob.x + ',' + gob.y, clk = ti.clock();
+    await trun(300);
+    assert.strictEqual(gob.x + ',' + gob.y, gpos, 'el goblin espera su turno');
+    assert.strictEqual(ti.clock(), clk, 'pensar no gasta tiempo de juego');
+    // andar más lejos de lo que permite el movimiento: se queda donde llega
+    tp.tb.move = 2;
+    ti.go('turnero', 12, 3);
+    assert.strictEqual(tp.path.length, 2, 'el camino se corta en el movimiento que queda');
+    await trun(2000, () => !tp.path.length);
+    assert.strictEqual(tp.tb.move, 0, 'ha gastado su movimiento');
+    // acción: un ataque a un enemigo a su lado
+    gob.x = tp.x + 1; gob.y = tp.y; gob.hp = gob.maxHp = 9999;
+    ti.attack('turnero', gob.id);
+    await trun(300, () => tp.tb.action === 0);
+    assert.strictEqual(tp.tb.action, 0, 'atacar gasta la acción');
+    ti.attack('turnero', gob.id);
+    assert.ok(!tp.target, 'sin acción no se puede volver a atacar');
+    // la poción va con la acción adicional
+    ti.use('turnero', 'pocion-vida-p');
+    assert.strictEqual(tp.tb.bonus, 0, 'la poción gasta la acción adicional');
+    ti.endTurn('turnero');
+    assert.ok(!mine(), 'terminar el turno pasa al siguiente');
+    // turno del goblin: está al lado y pega; luego vuelve a ser mi turno
+    const hp0 = tu.combat.hp;
+    assert.ok(await trun(12000, mine), 'el goblin juega y vuelve mi turno');
+    const ev = tsent.filter((m) => m.t === 'dsnap').flatMap((m) => m.events);
+    assert.ok(ev.some((e) => e.e === 'turn' && e.k === 'e') && (tu.combat.hp < hp0 || ev.some((e) => e.e === 'hit' && e.t === 'turnero')), 'el goblin ataca en su turno');
+    // reacción: al apartarme del goblin, me da un ataque de oportunidad
+    tsent.length = 0;
+    gob.x = tp.x + 1; gob.y = tp.y; gob.react = 1; gob.stunUntil = 0;
+    ti.go('turnero', tp.x - 1, tp.y);
+    await trun(1500, () => !tp.path.length);
+    assert.ok(tsent.filter((m) => m.t === 'dsnap').flatMap((m) => m.events).some((e) => e.e === 'oa' && e.by === gob.id), 'ataque de oportunidad al salir de su alcance');
+    // al morir el último enemigo vuelve el tiempo real
+    ti.damageEnemy(tp, gob, 999999, { noCrit: true });
+    await trun(300, () => !ti.enc);
+    assert.ok(!ti.enc && !tp.tb, 'fin del combate al no quedar enemigos');
+    assert.ok(ti.snapshot().enc === undefined, 'la instantánea ya no lleva combate');
+  }
+
+  // Duelo por turnos: sólo ataca quien tiene el turno
+  {
+    const di = new Instance({ ...adef, id: 'arena-t', duel: { a: 'y1', b: 'y2', bet: 0, startAt: 0 } }, { ...ahooks, turns: true });
+    const y1 = mk('y1'), y2 = mk('y2');
+    di.join(y1, { x: 4, y: 5 }); di.join(y2, { x: 5, y: 5 });
+    for (let i = 0; i < 20 && !(di.enc && di.enc.active); i++) { di.tick(Date.now()); await sleep(20); }
+    assert.ok(di.enc && di.enc.order.length === 2, 'el duelo empieza por turnos');
+    const who = di.enc.active.id, other = who === 'y1' ? 'y2' : 'y1';
+    di.attack(other, 'pv:' + who);
+    assert.ok(!di.players.get(other).target, 'fuera de su turno no puede atacar');
+    di.attack(who, 'pv:' + other);
+    assert.strictEqual(di.players.get(who).target, 'pv:' + other, 'en su turno sí');
+  }
 
   // Jefe de mundo: aparece cerca de los héroes y reparte botín a quien le hizo daño
   const WW = 30;

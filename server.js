@@ -946,6 +946,9 @@ wss.on('connection', (ws) => {
       case 'dfish': { const i = inst(); if (i && allowGame()) i.hook(user.id); break; }
       case 'dgather': { const i = inst(); if (i && allowGame()) i.gather(user.id, String(msg.id)); break; }
       case 'droll': { const i = inst(); if (i && allowGame()) i.roll(user.id, msg.dx, msg.dy); break; }
+      // combate por turnos: terminar el turno y reanimar a un compañero caído (server/turns.js)
+      case 'dend': { const i = inst(); if (i) i.endTurn(user.id); break; }
+      case 'drevive': { const i = inst(); if (i && allowGame()) i.revive(user.id, msg.id ? String(msg.id) : null); break; }
 
       // ----- Forja de Brunilda (en la taberna) -----
 
