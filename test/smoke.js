@@ -75,8 +75,13 @@ function rulesTests() {
   assert.ok(v3.sk === 3 && v3.name === 'Hoja del vacío' && v3.reqStats.fue === t[2].reqStats.fue, 'variante de arma');
   assert.strictEqual(RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'pecho', base: 'placas', tier: 2, sk: 2 }).name, 'Placa del dragón dorado', 'variante de armadura');
   assert.strictEqual(RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'casco', base: 'malla', tier: 0, sk: 9 }).sk, 3, 'variante fuera de rango: la última');
-  for (const s of ['pecho', 'casco', 'guantes', 'botas']) for (const ty of Object.keys(RULES.ARMOR_SKINS[s])) for (const tier of RULES.ARMOR_SKINS[s][ty]) assert.strictEqual(tier.length, 4, 'cuatro variantes de armadura');
+  for (const s of ['pecho', 'casco', 'guantes', 'botas']) for (const ty of Object.keys(RULES.ARMOR_SKINS[s])) for (const tier of RULES.ARMOR_SKINS[s][ty]) assert.strictEqual(tier.length, ty === 'cuero' || ty === 'placas' ? 5 : 4, 'cuatro variantes de armadura (y la samurái en cuero y placas)');
   for (const b of Object.keys(RULES.WEAPON_SKINS)) for (const tier of RULES.WEAPON_SKINS[b]) assert.strictEqual(tier.length, 4, 'cuatro variantes de arma');
+  // katanas y armaduras samurái
+  const kat = RULES.makeItem(RULES.seeded('kat'), { ilvl: 30, rarity: 'normal', slot: 'arma', base: 'katana', tier: 1, sk: 3 });
+  assert.ok(kat.name === 'Katana del samurái' && RULES.WEAPONS.katana.hands === 2 && RULES.CLASSES.guerrero.weapons.includes('katana'), 'katana');
+  const kab = RULES.makeItem(RULES.seeded('kab'), { ilvl: 45, rarity: 'normal', slot: 'casco', base: 'placas', tier: 2, sk: 4 });
+  assert.strictEqual(kab.name, 'Kabuto del shōgun', 'kabuto');
   // objetos guardados sin variante (o con la 0/1 de antes) siguen teniendo nombre
   // mágico: prefijo y/o sufijo; raro: de 3 a 6 propiedades; el daño mejorado sube el daño del arma
   for (let i = 0; i < 50; i++) {

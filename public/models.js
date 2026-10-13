@@ -74,6 +74,7 @@
       case 'daga': mesh(box(0.03, 0.2, 0.01), steel, 0, 0.16, 0, g); mesh(box(0.09, 0.02, 0.03), accent, 0, 0.05, 0, g); mesh(cyl(0.015, 0.015, 0.07, 5), mat(LEATHER_D), 0, 0, 0, g); break;
       case 'hacha': mesh(cyl(0.018, 0.018, 0.5, 5), wood, 0, 0.18, 0, g); { const h = mesh(box(0.16, 0.13, 0.025), steel, 0.07, 0.38, 0, g); h.rotation.z = 0.15; } mesh(box(0.03, 0.03, 0.03), accent, 0, 0.42, 0, g); break;
       case 'maza': mesh(cyl(0.02, 0.02, 0.42, 5), wood, 0, 0.16, 0, g); mesh(geo('dodec', () => new THREE.DodecahedronGeometry(0.075)), steel, 0, 0.4, 0, g); mesh(sph(0.025, 5, 4), accent, 0, 0.48, 0, g); break;
+      case 'katana': mesh(box(0.034, 0.6, 0.01), steel, 0.01, 0.38, 0, g).rotation.z = -0.05; mesh(cyl(0.04, 0.04, 0.012, 10), accent, 0, 0.07, 0, g); mesh(cyl(0.018, 0.018, 0.2, 5), mat('#1a1a22'), 0, -0.04, 0, g); break;
       case 'espadon': mesh(box(0.05, 0.72, 0.014), steel, 0, 0.45, 0, g); mesh(box(0.24, 0.03, 0.05), accent, 0, 0.08, 0, g); mesh(cyl(0.02, 0.02, 0.18, 5), mat(LEATHER_D), 0, -0.02, 0, g); break;
       case 'martillo': mesh(cyl(0.02, 0.02, 0.62, 5), wood, 0, 0.22, 0, g); mesh(box(0.22, 0.12, 0.12), steel, 0, 0.52, 0, g); mesh(box(0.05, 0.13, 0.13), accent, 0, 0.52, 0, g); break;
       case 'lanza': mesh(cyl(0.018, 0.018, 1.0, 5), wood, 0, 0.35, 0, g); mesh(cone(0.04, 0.16, 5), steel, 0, 0.92, 0, g); mesh(cyl(0.03, 0.03, 0.03, 6), accent, 0, 0.84, 0, g); break;
@@ -350,7 +351,7 @@
   const CLASS_CHAR = { guerrero: 'Barbarian', paladin: 'Knight', sacerdote: 'Mage', mago: 'Mage', druida: 'Mage', explorador: 'Rogue', picaro: 'Rogue_Hooded' };
   const NPC_CHAR = { bruja: ['Mage', '#2a1a34'], mercader: ['Rogue', '#28305a'], encapuchado: ['Rogue_Hooded', '#2a2226'], tabernero: ['Barbarian', '#6a4a2a'] };
   // Arma de la mochila → pieza del pack (las que no están se hacen con el modelo low poly propio)
-  const WEAPON_PROP = { espada: 'sword_1handed', espadon: 'sword_2handed', hacha: 'axe_1handed', daga: 'dagger', baston: 'staff', varita: 'wand', ballesta: 'crossbow_2handed' };
+  const WEAPON_PROP = { espada: 'sword_1handed', espadon: 'sword_2handed', katana: 'sword_2handed', hacha: 'axe_1handed', daga: 'dagger', baston: 'staff', varita: 'wand', ballesta: 'crossbow_2handed' };
 
   function loadAssets(base = 'assets/kaykit/') {
     if (GL.loading) return GL.loading;

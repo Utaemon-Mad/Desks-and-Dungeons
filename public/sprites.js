@@ -311,7 +311,7 @@
       // a la espalda: en diagonal por detrás
       if (w === 'arco') { p.col(5, 14, 27, '#6b4228'); p.px(6, 13, '#6b4228'); p.px(6, 28, '#6b4228'); p.col(7, 14, 27, '#d8d0c0'); }
       else if (w === 'baston' || w === 'lanza') { p.col(17, 10, 29, '#6b4228'); p.px(17, 9, glow || (w === 'lanza' ? STEEL_L : '#7ad0ff')); }
-      else if (w === 'espadon' || w === 'martillo') { p.col(17, 8, 26, w === 'espadon' ? steel : '#6b4228'); if (w === 'martillo') p.rect(15, 8, 5, 3, STEEL_D); }
+      else if (w === 'espadon' || w === 'katana' || w === 'martillo') { p.col(17, 8, 26, w === 'espadon' ? steel : '#6b4228'); if (w === 'martillo') p.rect(15, 8, 5, 3, STEEL_D); }
       return;
     }
     const x = hx + 1, y = hy;
@@ -320,6 +320,7 @@
       case 'daga': p.col(x, y - 5, y - 1, steel); p.row(y, x - 1, x + 1, '#8a6a3a'); if (glow) p.px(x, y - 6, glow); break;
       case 'hacha': p.col(x, y - 10, y + 2, '#6b4228'); p.rect(x + 1, y - 10, 3, 4, STEEL); p.col(x + 4, y - 10, y - 7, steel); if (glow) p.px(x + 2, y - 9, glow); break;
       case 'maza': p.col(x, y - 8, y + 2, '#6b4228'); p.rect(x - 1, y - 11, 3, 3, STEEL); p.px(x, y - 12, STEEL_D); p.px(x - 2, y - 10, STEEL_D); p.px(x + 2, y - 10, STEEL_D); if (glow) p.px(x, y - 10, glow); break;
+      case 'katana':
       case 'espadon': p.col(x, y - 16, y - 1, steel); p.col(x + 1, y - 15, y - 2, STEEL_D); p.row(y, x - 2, x + 2, '#c8a040'); p.col(x, y + 1, y + 3, '#4a2e1a'); if (glow) { p.px(x, y - 17, glow); p.px(x, y - 8, glow); } break;
       case 'martillo': p.col(x, y - 13, y + 3, '#6b4228'); p.rect(x - 2, y - 16, 6, 4, STEEL); p.row(y - 16, x - 2, x + 3, steel); if (glow) p.px(x, y - 14, glow); break;
       case 'lanza': p.col(x, y - 17, y + 5, '#6b4228'); p.col(x, y - 20, y - 18, steel); p.px(x - 1, y - 18, STEEL); p.px(x + 1, y - 18, STEEL); if (glow) p.px(x, y - 16, glow); break;

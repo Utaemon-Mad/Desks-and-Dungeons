@@ -103,7 +103,8 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 
 ## Decisiones
 - Objetos estilo Diablo 2: niveles normal/excepcional/élite, calidades (inferior…único, conjunto), prefijos y sufijos.
-- Para añadir armaduras o armas basta una fila en `items-data.js` (nombre, género, aspecto); la variante se guarda en `it.sk` y no cambia las estadísticas.
+- Para añadir armaduras o armas basta una fila en `items-data.js` (nombre, género, aspecto); la variante se guarda en `it.sk` y no cambia las estadísticas. Cuero y placas tienen una quinta variante samurái (piezas `doBands`, `sode`, `kusazuri`, `kabuto`, `kuwagata`, `menpo`, `kote`, `suneate`, `haidate`, `tabi`, `waraji`, `hachimaki`, `jingasa` en armor3d.js). La katana es un arma más en `WEAPONS` (engine.js) con su modelo en weapons3d.js.
+- armor3d.js mide cuerpo y cabeza con la malla ya deformada (`setFromObject(…, true)`), así las piezas se ajustan a las proporciones de `humanize`; `tube` pone mangas, brazales y quijotes de un hueso al siguiente.
 - Stats: Fuerza, Destreza, Vigor, Inteligencia, Carisma, Suerte; máximo natural 20; nivel máximo 50.
 - Sólo humanos (las razas se quitaron: `raceId` siempre da 'human' y `migrateProfile` pasa a humanos a los de antes, con los puntos devueltos) y 7 clases. Aspecto: sexo, peinado (`HAIR_LIST`, cada uno es la cabeza de un modelo KayKit), piel (`HUMAN_SKINS`), pelo y rasgos en `look.feat` (`FEATURES` en map.js: complexión, altura, barba, cejas, marcas, pintura, pendientes); en 3D, `faceFeatures` (models.js) los pega al hueso de la cabeza.
 - Proporciones más humanas en los modelos KayKit: `humanize`/`applyHuman` (models.js) encogen la cabeza y alargan tronco, brazos y piernas separando las articulaciones después de cada fotograma de animación.

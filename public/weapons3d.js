@@ -1,4 +1,4 @@
-// Armas y escudos que se ven en la mano: cada tipo (espada, daga, hacha, maza, mandoble, martillo, lanza,
+// Armas y escudos que se ven en la mano: cada tipo (espada, daga, hacha, maza, mandoble, katana, martillo, lanza,
 // arco, ballesta, bastón, varita, escudo, orbe) tiene un modelo distinto para cada nivel (normal, excepcional,
 // élite) y 4 variantes por nivel (tabla ITEMDATA.WEAPONS). La rareza cambia los adornos: mágico azul, raro dorado, único todo dorado y brillante, conjunto en
 // los colores del conjunto. Convención: empuñadura en el origen y la hoja hacia +y (en unidades del personaje).
@@ -114,6 +114,28 @@
         if (t === 0) { add(g, blade('gs0', [[0.034, 0.08], [0.03, 0.64], [0, 0.76]], 0.01), steelL); add(g, box(0.24, 0.026, 0.045), trim, 0, 0.07); grip(g, 0.2, 0.017, leather, trim); }
         if (t === 1) { const half = []; for (let i = 0; i <= 10; i++) { const y = 0.08 + i * 0.07; half.push([0.032 + 0.008 * Math.sin(i * 1.6), y]); } half.push([0, 0.9]); add(g, blade('gs1', half, 0.01), steelL); add(g, box(0.28, 0.024, 0.04), trim, 0, 0.07); for (const sx of [-1, 1]) add(g, cone(0.012, 0.05, 6), trim, sx * 0.035, 0.15, 0, 0, 0, sx * 1.2); grip(g, 0.22, 0.017, mat('leather', COL.black), trim); }
         if (t === 2) { add(g, blade('gs2', [[0.05, 0.09], [0.055, 0.5], [0.04, 0.78], [0, 0.92]], 0.012), steelL); add(g, box(0.012, 0.6, 0.016), trim, 0, 0.42); add(g, extrude('gsg2', [[0, 0], [0.16, 0.06], [0.2, 0.13], [0.08, 0.08], [0, 0.1], [-0.08, 0.08], [-0.2, 0.13], [-0.16, 0.06]], 0.035), trim, 0, 0.02); add(g, oct(0.03), gem, 0, 0.08, 0.025); grip(g, 0.24, 0.018, mat('leather', COL.black), trim); }
+        break;
+      }
+      case 'katana': {
+        // hoja curva de un solo filo (con su línea de temple), tsuba redonda y empuñadura larga con el trenzado en rombos
+        const len = t === 2 ? 0.86 : t === 1 ? 0.74 : 0.66, sori = t === 2 ? 0.05 : 0.04, w = 0.026;
+        const pts = [], spine = [];
+        for (let i = 0; i <= 10; i++) { const y = 0.07 + (len - 0.07) * i / 10, c = sori * (i / 10) ** 2; pts.push([c + w / 2, y]); spine.push([c - w / 2, y]); }
+        const tip = pts[10];
+        pts[10] = [tip[0] - w * 0.15, tip[1] - 0.01];
+        const outline = [...pts, [sori - w * 0.4, len + 0.04], ...spine.reverse()];
+        add(g, extrude('kt' + t, outline, 0.006, 0.003), steelL);
+        // línea de temple (hamon): brilla en las buenas
+        const ham = []; for (let i = 0; i <= 9; i++) { const y = 0.08 + (len - 0.12) * i / 9, c = sori * (i / 10) ** 2; ham.push([c + w * 0.18 + 0.003 * Math.sin(i * 2.1), y]); }
+        add(g, extrude('kth' + t, [...ham, ...ham.slice().reverse().map(([x, y]) => [x + 0.004, y])], 0.0075, 0.001), glow || mat('metal', '#f4f6fa'));
+        add(g, cyl(0.016, 0.016, 0.03, 8), trim, 0, 0.055);
+        add(g, cyl(t === 2 ? 0.05 : 0.042, t === 2 ? 0.05 : 0.042, 0.012, t === 1 ? 6 : 16), t === 2 ? trim : mat('metal', COL.black), 0, 0.035);
+        const wrap = mat('leather', L.wrap || (t === 2 ? '#8a1a1a' : COL.black)), ray = mat('bone', '#efe8da');
+        const glen = t === 2 ? 0.26 : 0.22;
+        add(g, box(0.03, glen, 0.022), ray, 0, 0.02 - glen / 2);
+        for (let i = 0; i < 7; i++) { const y = 0.01 - (i + 0.5) * glen / 7; for (const s of [-1, 1]) add(g, box(0.034, 0.012, 0.025), wrap, 0, y, 0, 0, 0, s * 0.6); }
+        add(g, box(0.034, 0.02, 0.026), trim, 0, 0.01 - glen);
+        if (gem && t === 2) add(g, oct(0.012), gem, 0, 0.035, 0.05);
         break;
       }
       case 'martillo': {

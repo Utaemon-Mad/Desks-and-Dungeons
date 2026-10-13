@@ -7,6 +7,11 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 11, date: 'Octubre', title: 'El camino del samurái', items: [
+      '⚔️ Katanas: arma a dos manos, más rápida que el mandoble y que aprovecha la Destreza. Doce modelos, de la Uchigatana a la Muramasa y la Hoja del dragón dormido. Guerreros y pícaros la prefieren.',
+      '🏯 Armaduras samurái en cuero y placas: dō lacado con sus lamas atadas, sode (hombreras de placas), kusazuri (faldón), kabuto con cubrenuca y kuwagata, menpō, kote, suneate y haidate, tabi y sandalias waraji. Y para los ligeros, hachimaki y jingasa.',
+      '🛡️ Las armaduras se ajustan mejor: cascos y piezas se miden sobre el cuerpo ya proporcionado, guantes y botas ya no van agrandados, las corazas llevan brazales, las cotas mangas de malla y las grebas cubren también el muslo.',
+    ] },
     { v: 10, date: 'Octubre', title: 'Héroes humanos', items: [
       '🧑 Todos los héroes son humanos: se acabaron elfos, enanos, orcos y goblins. Si tenías uno, ahora es humano (conserva algo de su planta) y te devolvemos los puntos para repartirlos de nuevo.',
       '🎨 Editor con muchas más opciones: 5 peinados para cualquiera, 12 tonos de piel, 16 colores de pelo, complexión, altura, barba (perilla, bigote, corta, poblada, larga), cejas, marcas (cicatriz, pecas, pintura de guerra, tatuaje, parche) con su color y pendientes. 🎲 Al azar te propone uno.',

@@ -91,7 +91,7 @@
   const CLASSES = {
     guerrero: {
       name: 'Guerrero', icon: '⚔️', main: 'fue', hp: 1.15, base: { fue: 4, vig: 3, des: 1 }, favored: ['fue', 'vig', 'des'],
-      armor: ['cuero', 'malla', 'placas'], weapons: ['espada', 'hacha', 'maza', 'espadon', 'martillo', 'lanza', 'escudo'],
+      armor: ['cuero', 'malla', 'placas'], weapons: ['espada', 'hacha', 'maza', 'espadon', 'katana', 'martillo', 'lanza', 'escudo'],
       start: [['arma', 'espada'], ['mano', 'escudo'], ['pecho', 'malla']],
       desc: 'Lucha en primera línea con armas pesadas y armadura de placas.',
     },
@@ -109,7 +109,7 @@
     },
     picaro: {
       name: 'Pícaro', icon: '🗡️', main: 'des', hp: 0.95, base: { des: 4, sue: 3, car: 1 }, favored: ['des', 'sue', 'fue'],
-      armor: ['tela', 'cuero'], weapons: ['daga', 'espada', 'arco', 'ballesta'],
+      armor: ['tela', 'cuero'], weapons: ['daga', 'espada', 'katana', 'arco', 'ballesta'],
       start: [['arma', 'daga'], ['pecho', 'cuero']],
       desc: 'Rápido y letal: puñaladas, venenos y muchos críticos.',
     },
@@ -255,6 +255,9 @@
       tiers: [['Maza', 'f', { fue: 4 }], ['Maza con rebordes', 'f', { fue: 10 }], ['Maza reforzada', 'f', { fue: 15 }]] },
     espadon:  { name: 'Mandoble', kind: 'melee', hands: 2, range: 1, ms: 1350, dmg: [10, 17], stat: { fue: 1 }, weight: 7,
       tiers: [['Mandoble', 'm', { fue: 8, des: 4 }], ['Montante', 'm', { fue: 13, des: 7 }], ['Espada de campeón', 'f', { fue: 17, des: 10 }]] },
+    // katana: a dos manos, más rápida que el mandoble y con más Destreza
+    katana:   { name: 'Katana', kind: 'melee', hands: 2, range: 1, ms: 1050, dmg: [8, 14], stat: { fue: 0.6, des: 0.8 }, weight: 3,
+      tiers: [['Katana', 'f', { fue: 5, des: 7 }], ['Katana de guerra', 'f', { fue: 9, des: 12 }], ['Katana del shōgun', 'f', { fue: 13, des: 16 }]] },
     martillo: { name: 'Martillo de guerra', kind: 'melee', hands: 2, range: 1, ms: 1400, dmg: [11, 16], stat: { fue: 1 }, weight: 8, undead: 50,
       tiers: [['Martillo de guerra', 'm', { fue: 9 }], ['Martillo de batalla', 'm', { fue: 14 }], ['Martillo legendario', 'm', { fue: 18 }]] },
     lanza:    { name: 'Lanza', kind: 'melee', hands: 2, range: 2, ms: 1150, dmg: [7, 12], stat: { fue: 1 }, weight: 5,
