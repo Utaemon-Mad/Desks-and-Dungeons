@@ -226,7 +226,7 @@
     // el minimapa pequeño va girado 45°, como la cámara isométrica (arriba es el noroeste); el mapa grande, con el norte arriba
     if (!big) {
       const S = (mw + mh) / Math.SQRT2;
-      g.save(); g.translate(innerWidth - S / 2 - 14, y0 + S / 2); g.rotate(Math.PI / 4);
+      g.save(); g.translate(innerWidth - S / 2 - 14, y0 + S / 2); g.rotate(Math.PI / 4 + game.camYaw); // y con el giro de la cámara en combate
       x0 = -mw / 2; y0 = -mh / 2;
     }
     const seenC = D.seenCount;
@@ -285,7 +285,7 @@
     knob.style.transform = `translate(${dx}px, ${dy}px)`;
     if (d < 12) return sendDirJoy(0, 0);
     // 8 direcciones, giradas con la cámara isométrica (arriba en la pantalla es el noroeste del mapa)
-    const [sx, sy] = VIEW3D.screenToTile(dx, dy);
+    const [sx, sy] = VIEW3D.screenToTile(dx, dy, game.camQ);
     sendDirJoy(sx, sy);
   }
   function sendDirJoy(dx, dy) {

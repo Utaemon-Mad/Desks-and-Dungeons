@@ -11,6 +11,7 @@
       '📐 Todo el juego en vista isométrica: la taberna, las mazmorras y el mundo se ven desde una esquina, girados 45° y sin perspectiva, como en los clásicos.',
       '🎮 Las teclas y el joystick siguen la pantalla: arriba es arriba aunque en el mapa sea el noroeste. El minimapa también va girado.',
       '🧱 Los muros y árboles del lado de la cámara (al sur y al este de cada sala) son bajos, y las columnas, estatuas y casas que tapan a tu héroe se vuelven transparentes al pasar por detrás.',
+      '🎥 Cámara libre en combate: arrastra la vista (o con el botón derecho) para ver por dónde te atacan, gírala de 90 en 90 con ⟲ ⟳ o con «,» y «.», y 🎯 (H) la devuelve a tu héroe. Al acabar el combate vuelve sola.',
     ] },
     { v: 12, date: 'Octubre', title: 'El Bosque umbrío', items: [
       '🌲 Mazmorra nueva: el Bosque umbrío. Claros unidos por senderos entre árboles, pinos y robles otoñales, hierba que se mueve con la luz de la luna, luciérnagas, farolillos y hogueras. Lobos, arañas, bandidos, fuegos fatuos y retoños corruptos… y al fondo, Raízmadre, el Ent Corrupto.',
