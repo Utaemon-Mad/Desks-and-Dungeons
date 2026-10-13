@@ -1005,6 +1005,7 @@ class Instance {
     let dmg = base;
     let crit = false;
     if (!o.noCrit && (p.critNext || rnd() * 100 < p.d.crit)) { crit = true; dmg *= p.d.critMult; p.critNext = false; }
+    if (this.enc) dmg *= this.turnDmgMult(p, e, o); // por turnos, un golpe vale por unos segundos de pelea
     if (e.vulnUntil > this.clock()) dmg *= 1 + e.vuln / 100;
     // combos entre compañeros: aprovechar lo que ha preparado otro
     const combo = this.combo(p, e, o);
@@ -1315,6 +1316,7 @@ class Instance {
     if (p.downed) return;
     if (p.iframeUntil > now && o.kind !== 'corrupt') { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true }); return; }
     if (o.canDodge && rnd() * 100 < p.d.dodge + (p.dodging ? 40 : 0)) { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true }); return; }
+    if (this.enc && o.by) dmg *= this.turnHurtMult(this.enemies.get(o.by), o); // por turnos pega más cada vez
     if (o.raw) { /* ya viene reducido (duelos) */ } else if (o.magic) dmg *= 1 - p.d.magicRes / 100;
     else if (o.level) dmg *= 1 - RULES.reduction(p.d.armor, o.level);
     let blocked = false;

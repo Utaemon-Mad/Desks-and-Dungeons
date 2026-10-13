@@ -8,7 +8,7 @@
 const TURN_MS = Number(process.env.DD_TURN_MS) || 30000; // tiempo real para decidir el turno
 const ENEMY_TURN_MS = 9000;  // por si un monstruo se atasca
 const TURN_GAME_MS = 1500;   // tiempo de juego que pasa al acabar cada turno
-const ENEMY_STEP_MS = 230;   // paso de los monstruos en su turno
+const ENEMY_STEP_MS = 160;   // paso de los monstruos en su turno
 const JOIN_R = 20;           // casillas: quién entra en el combate
 const IDLE_END_MS = 1200;    // sin nada más que hacer, el turno acaba solo al rato
 const GAP_MS = 250;          // pausa entre turnos
@@ -28,6 +28,27 @@ module.exports = function installTurns(Instance, U) {
       this.lastReal = real;
       if (this.enc && this.encRunning()) this.enc.t += dt;
       return this.clock();
+    },
+
+    // ---------- Daño por turnos ----------
+    // Un turno son unos 6 s de pelea (como en D&D): un ataque hace lo que harían los golpes de 6 s en tiempo real,
+    // así las armas rápidas siguen valiendo lo mismo que las lentas. Las habilidades pesan algo menos (ya multiplican),
+    // los venenos y auras pican cada segundo de juego, y élites y jefes aguantan algo menos para que no sean eternos.
+    turnDmgMult(p, e, o = {}) {
+      const k = Math.min(9, Math.max(4, 6000 / ((p.d && p.d.atkMs) || 1000)));
+      let mult = o.kind === 'dot' ? 2 : o.kind === 'melee' || o.kind === 'ranged' || o.kind === 'magic' ? k : k * 0.55;
+      // en grupo, jefes y élites aguantan más (si no, caen en dos rondas)
+      const n = this.enc ? [...this.enc.who].filter((w) => w.startsWith('p:')).length : 1;
+      if (e && e.m && e.m.boss) mult *= 1.6 / (1 + 0.4 * (n - 1));
+      else if (e && e.m && e.m.elite) mult *= 1.4 / (1 + 0.2 * (n - 1));
+      return mult;
+    },
+    // lo que pega un monstruo en su turno (sus golpes de unos 4,5 s: por turnos no se puede huir ni esquivar andando)
+    turnHurtMult(e, o = {}) {
+      if (!e || !e.m || e.pvp) return 1;
+      if (o.name === 'Ataque de oportunidad') return Math.min(2.5, Math.max(1.2, 3000 / e.m.atk));
+      if (o.kind === 'melee' || o.kind === 'proj') return Math.min(4, Math.max(1.5, 4500 / e.m.atk));
+      return 1.5; // avisos en el suelo, embestidas y explosiones: ya son golpes grandes
     },
 
     // ---------- Quién y cuánto ----------
@@ -252,6 +273,13 @@ module.exports = function installTurns(Instance, U) {
       }
       if (T.acted) return done();
       // acercarse (los de cuerpo a cuerpo hasta tocarle; los de distancia hasta tenerle a tiro)
+      // lejos de todos los héroes no hace falta verle andar: avanza de golpe
+      if (T.move > 0 && ![...this.players.values()].some((q) => cheb(q, e) <= 9)) {
+        while (T.move > 0 && cheb(e, target) > Math.max(1, m.range > 1 ? m.range - 1 : 1) && this.enemyStep(e, target, now)) T.move--;
+        e.sm = 60; e.nextStep = now;
+        T.move = 0;
+        return;
+      }
       if (T.move > 0) {
         if (now < e.nextStep) return;
         const from = { x: e.x, y: e.y };

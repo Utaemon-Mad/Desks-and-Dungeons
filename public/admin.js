@@ -13,6 +13,7 @@
       '⏱️ 30 segundos para decidir; F o «Terminar turno» para pasar. Arriba ves el orden de la ronda y el aro dorado marca quién juega.',
       '👑 Los jefes avisan en el suelo y el golpe cae en su siguiente turno: usa el tuyo para apartarte. Aturdido = pierdes el turno; ralentizado = la mitad de movimiento.',
       '🤺 Los duelos de la arena también son por turnos.',
+      '⚖️ Daño ajustado a los turnos: cada turno son unos 6 segundos de pelea, así que un ataque pega como varios golpes del tiempo real (las armas rápidas, más). Los combates normales duran 2-5 rondas y los jefes algo más; en grupo, jefes y élites aguantan más.',
     ] },
     { v: 8, date: 'Octubre', title: 'Una taberna con alma', items: [
       '🗺️ MESA DE PARTIDA: la mesa grande es una sola. Siéntate y la cámara la mira desde arriba con todos los jugadores; se abre el plano de la próxima mazmorra (¡la de verdad!). Marcad el plano, elegid tema y nivel, jugad a los dados o comerciad, y cuando todos digáis «listo» bajáis juntos.',
