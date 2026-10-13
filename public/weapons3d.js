@@ -166,14 +166,33 @@
         break;
       }
       case 'ballesta': {
-        add(g, box(0.05, 0.05, 0.44), t === 2 ? mat('metal', COL.dark) : wood, 0, 0.1, 0.12);
-        add(g, box(0.04, 0.12, 0.05), wood, 0, 0.04, -0.06);
-        const prod = (z, w) => { add(g, torus(w, 0.014, Math.PI * 0.7, 16), t === 2 ? steel : steelL, 0, 0.1, z + w * 0.4, Math.PI / 2, 0, Math.PI * 0.15 + Math.PI); add(g, cyl(0.002, 0.002, w * 1.6, 3), mat('leather', '#e0d8c8'), 0, 0.1, z - 0.02, 0, 0, Math.PI / 2); };
-        prod(0.3, t ? 0.26 : 0.21);
-        if (t === 2) prod(0.22, 0.22);
-        if (t >= 1) { add(g, cyl(0.02, 0.02, 0.08), trim, 0.04, 0.1, -0.02, 0, 0, Math.PI / 2); add(g, torus(0.03, 0.006), trim, 0.08, 0.1, -0.02, 0, Math.PI / 2); }
-        add(g, cyl(0.005, 0.005, 0.3, 4), mat('wood', COL.woodD), 0, 0.13, 0.18, Math.PI / 2);
-        add(g, cone(0.012, 0.03, 4), glow || steelL, 0, 0.13, 0.34, Math.PI / 2);
+        // culata con empuñadura de pistola (perfil extruido), pala curva delante, cuerda tensa, virote en su canal,
+        // estribo y herrajes. Construida hacia +z (la boca) con la mano en el origen.
+        const stockM = t === 2 ? mat('wood', '#3a2418') : wood;
+        const stock = extrude('xb-stock', [[-0.2, 0.02], [-0.2, 0.092], [-0.06, 0.086], [0.06, 0.08], [0.4, 0.076], [0.4, 0.046], [0.06, 0.046], [0.035, 0.04], [0.022, -0.065], [-0.03, -0.065], [-0.022, 0.035], [-0.09, 0.036]], 0.032, 0.004);
+        add(g, stock, stockM, 0, 0, 0, 0, -Math.PI / 2, 0);
+        add(g, box(0.008, 0.006, 0.3), mat('wood', COL.woodD), 0, 0.079, 0.22);
+        // pala: arco de toro tumbado, con la panza hacia delante
+        const seg = (a, b, r, m) => { const d = new THREE.Vector3().subVectors(b, a), o = add(g, cyl(r, r, 1, 5), m, (a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2); o.scale.y = d.length(); o.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), d.normalize()); return o; };
+        const prodM = t === 0 ? mat('wood', '#6a4424') : steelL, strM = mat('leather', '#e8e0cc');
+        const prod = (z, r, arc, y) => {
+          add(g, torus(r, t === 0 ? 0.014 : 0.011, arc, 18), prodM, 0, y, z - r, Math.PI / 2, 0, Math.PI / 2 - arc / 2);
+          const tx = r * Math.sin(arc / 2), tz = z - r + r * Math.cos(arc / 2);
+          for (const sx of [-1, 1]) { add(g, sph(0.012, 8, 6), trim, sx * tx, y, tz); seg(new THREE.Vector3(sx * tx, y, tz), new THREE.Vector3(0, y + 0.004, 0.13), 0.0025, strM); }
+        };
+        prod(0.37, t === 2 ? 0.26 : 0.3, t === 2 ? 1.25 : 1.35, 0.062);
+        if (t === 2) prod(0.31, 0.24, 1.3, 0.062);
+        // herrajes y estribo
+        for (const z of [0.36, 0.25, -0.15]) add(g, box(0.04, 0.05, 0.016), t ? trim : mat('metal', COL.dark), 0, 0.062, z);
+        add(g, torus(0.045, 0.007, Math.PI, 12), mat('metal', COL.dark), 0, 0.06, 0.41, 0, Math.PI / 2, 0);
+        add(g, box(0.008, 0.03, 0.012), mat('metal', COL.dark), 0, 0.03, 0.045, 0.4, 0, 0);
+        // virote: asta, punta y plumas
+        add(g, cyl(0.004, 0.004, 0.27, 5), mat('wood', '#c8a878'), 0, 0.086, 0.27, Math.PI / 2);
+        add(g, cone(0.01, 0.035, 4), glow || steelL, 0, 0.086, 0.42, Math.PI / 2);
+        for (const sx of [-1, 1]) add(g, box(0.001, 0.014, 0.03), mat('leather', t === 2 ? '#c83a2a' : '#e8e4da'), sx * 0.006, 0.09, 0.15, 0, 0, sx * 0.5);
+        // excepcional: cranequín de manivela atrás; élite: gema en la culata
+        if (t >= 1) { add(g, cyl(0.016, 0.016, 0.06, 10), trim, 0.035, 0.07, -0.13, 0, 0, Math.PI / 2); add(g, box(0.008, 0.06, 0.008), mat('metal', COL.dark), 0.068, 0.045, -0.13); add(g, cyl(0.007, 0.007, 0.03, 6), leather, 0.08, 0.018, -0.13, 0, 0, Math.PI / 2); }
+        if (t === 2) add(g, oct(0.016), gem, 0.018, 0.06, -0.05);
         break;
       }
       case 'baston': {

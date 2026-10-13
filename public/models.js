@@ -500,7 +500,7 @@
       // armas hechas a mano por tipo y nivel (weapons3d.js); si no está, las de KayKit o las de siempre
       if (base && globalThis.WEAPON3D) {
         w = globalThis.WEAPON3D.build(base, tier || 0, rarity, { sk, set: o.set, setColor: o.capeColor });
-        if (w) { w.scale.setScalar(1 / s); w.rotation.set(0, 0, base === 'arco' ? Math.PI / 2 : 0); if (hand) hand.add(w); return w; }
+        if (w) { w.scale.setScalar(1 / s); w.rotation.set(0, base === 'ballesta' ? Math.PI / 2 : 0, base === 'arco' ? Math.PI / 2 : 0); if (hand) hand.add(w); return w; }
       }
       if (propName && GL.props[propName]) {
         w = GL.props[propName].clone(true);
@@ -698,6 +698,36 @@
     }
   }
 
+  // Con un casco que cubre la cabeza, el pelo se recoge: los vértices del pelo (zona del pelo y de la capucha en la
+  // textura) que salen de la forma del cráneo se meten dentro de ella, así el casco ya no lo atraviesa. Una geometría
+  // por modelo de cabeza, en caché.
+  const tucked = new Map();
+  function tuckHair(P, headModel) {
+    if (!P.headMesh) return;
+    let g = tucked.get(headModel);
+    if (!g) {
+      const src = P.headMesh.geometry, pos = src.attributes.position, uv = src.attributes.uv;
+      if (!uv) return;
+      const inR = (u, v, r) => u >= r[0] && u < r[2] && v >= r[1] && v < r[3];
+      const hair = (i) => inR(uv.getX(i), uv.getY(i), HAIR_RECT) || (headModel === 'Rogue_Hooded' && inR(uv.getX(i), uv.getY(i), HOOD_RECT));
+      const skull = new THREE.Box3(), v = new THREE.Vector3();
+      for (let i = 0; i < pos.count; i++) if (!hair(i)) skull.expandByPoint(v.fromBufferAttribute(pos, i));
+      if (skull.isEmpty()) return;
+      const c = skull.getCenter(new THREE.Vector3()), r = skull.getSize(new THREE.Vector3()).multiplyScalar(0.53);
+      g = src.clone();
+      const p2 = g.attributes.position;
+      for (let i = 0; i < p2.count; i++) {
+        if (!hair(i)) continue;
+        v.fromBufferAttribute(p2, i).sub(c);
+        const d = Math.hypot(v.x / r.x, v.y / r.y, v.z / r.z);
+        if (d > 1) { v.divideScalar(d).add(c); p2.setXYZ(i, v.x, v.y, v.z); }
+      }
+      g.computeBoundingBox(); g.computeBoundingSphere();
+      tucked.set(headModel, g);
+    }
+    P.headMesh.geometry = g;
+  }
+
   // Héroe con modelo de verdad: clase → modelo, colores de piel, pelo y ropa, casco, capa y armas
   function buildHeroGL(look) {
     const npc = look.npc || null;
@@ -725,6 +755,7 @@
     });
     const feat = !npc && MAP.cleanFeat ? MAP.cleanFeat(look.feat) : {};
     faceFeatures(root, { skin, hair, feat, beard: look.beard, head: (hs && hs.head) || name });
+    if (A3 && A3.coversHair(gear) && !(hs && hs.id === 'calvo')) tuckHair(root.userData.parts, (hs && hs.head) || name);
     humanize(root, look.sex === 'f');
     // complexión y altura del editor
     const body = root.userData.parts.model, bs = (MAP.BUILD_SCALE || [])[feat.build] || 1;
@@ -818,7 +849,16 @@
       const x = c.x + W * 0.17;
       const e = at(new THREE.CylinderGeometry(W * 0.09, W * 0.09, W * 0.03, 10), mat('#1a1614'), x, eyeY, W * 0.005);
       e.rotation.x = Math.PI / 2;
-      const s = mesh(box(W * 0.96, H * 0.025, size.z * 0.94), mat('#2a2018'), c.x, eyeY + H * 0.07, c.z, g); s.rotation.z = -0.3;
+      // correa: una cinta fina pegada a la cabeza (un rayo por punto contra la malla), de oreja a oreja pasando por el parche
+      const pts = [];
+      for (let i = 0; i <= 16; i++) {
+        const th = -1.75 + i * 3.5 / 16, y = eyeY + H * 0.02 + Math.sin(th) * H * 0.12;
+        const dir = new THREE.Vector3(Math.sin(th), 0, Math.cos(th));
+        FACE_RAY.set(new THREE.Vector3(c.x, y, c.z).addScaledVector(dir, W * 1.5), dir.clone().negate());
+        const hit = FACE_RAY.intersectObject(P.headMesh, false)[0];
+        pts.push(hit ? hit.point.addScaledVector(dir, W * 0.012) : new THREE.Vector3(c.x, y, c.z).addScaledVector(dir, W * 0.52));
+      }
+      mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), 24, W * 0.012, 5, false), mat('#2a2018'), 0, 0, 0, g);
     }
     // ---- pendientes ----
     if (f.rings && o.head !== 'Rogue_Hooded') {

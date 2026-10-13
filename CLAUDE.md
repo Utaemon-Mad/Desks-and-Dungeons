@@ -65,7 +65,8 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 
 ## Dónde tocar para… (busca el nombre con grep, no leas el archivo entero)
 - Enemigo nuevo o cambiar sus números: fila en `MONSTERS` (rules/monsters-data.js); su modelo en `ENEMY_GL` + `monsterFeatures` (models-creatures.js).
-- Mazmorra/tema nuevo: `THEMES` (monsters-data.js) + colores en view3d.js (`volcan`/`abismo` como ejemplo) + decorado en server/gen.js.
+- Mazmorra/tema nuevo: `THEMES` (monsters-data.js) + colores en view3d.js (`volcan`/`abismo` como ejemplo) + decorado en server/gen.js. El bosque (`bosque`) es especial: sin puertas ni antorchas (`forest` en gen.js), árboles en vez de muros (`buildForestGL`), suelo pintado (`forestTile`) y luciérnagas (`fireflies`).
+- Detalle de las mazmorras (`buildDungeonGL`): tono por losa y por piedra (`tone`), columnas de esquina y telarañas (`extras`, enseñadas al explorar), muros con estanterías y ventanales.
 - Cuánto botín cae: `DROP` y `legChance` en `rollLoot` (engine.js). Poderes legendarios: `LEGENDARY` (engine.js) y su efecto en server/dungeon.js (`p.d.leg`).
 - Clases y habilidades: `CLASSES`, `ABILITIES` (engine.js); aspecto y rasgos del editor: `FEATURES`, `HAIR_LIST`, `HUMAN_SKINS` (map.js) y `faceFeatures` (models.js). Talentos: rules/talents-data.js.
 - Afijos, únicos, conjuntos, pociones: `AFFIXES`, `UNIQUE_NAMES`, `SETS`, `CONSUMABLES` (engine.js).
@@ -104,6 +105,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 ## Decisiones
 - Objetos estilo Diablo 2: niveles normal/excepcional/élite, calidades (inferior…único, conjunto), prefijos y sufijos.
 - Para añadir armaduras o armas basta una fila en `items-data.js` (nombre, género, aspecto); la variante se guarda en `it.sk` y no cambia las estadísticas. Cuero y placas tienen una quinta variante samurái (piezas `doBands`, `sode`, `kusazuri`, `kabuto`, `kuwagata`, `menpo`, `kote`, `suneate`, `haidate`, `tabi`, `waraji`, `hachimaki`, `jingasa` en armor3d.js). La katana es un arma más en `WEAPONS` (engine.js) con su modelo en weapons3d.js.
+- Cascos: las piezas están medidas para una cabeza de referencia (`RREF`) y se escalan con `zoom` a la cabeza real; con casco que tapa, `tuckHair` (models.js) mete el pelo dentro de la forma del cráneo.
 - armor3d.js mide cuerpo y cabeza con la malla ya deformada (`setFromObject(…, true)`), así las piezas se ajustan a las proporciones de `humanize`; `tube` pone mangas, brazales y quijotes de un hueso al siguiente.
 - Stats: Fuerza, Destreza, Vigor, Inteligencia, Carisma, Suerte; máximo natural 20; nivel máximo 50.
 - Sólo humanos (las razas se quitaron: `raceId` siempre da 'human' y `migrateProfile` pasa a humanos a los de antes, con los puntos devueltos) y 7 clases. Aspecto: sexo, peinado (`HAIR_LIST`, cada uno es la cabeza de un modelo KayKit), piel (`HUMAN_SKINS`), pelo y rasgos en `look.feat` (`FEATURES` en map.js: complexión, altura, barba, cejas, marcas, pintura, pendientes); en 3D, `faceFeatures` (models.js) los pega al hueso de la cabeza.

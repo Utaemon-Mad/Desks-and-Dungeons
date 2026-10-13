@@ -185,6 +185,7 @@
       case 'orc': m = humanoid({ skin: tintHex('#5a7a4a', t), cloth: '#4a3020', tusks: true, weapon: M.weapon === 'spear' ? 'lanza' : 'hacha', scale: 1.05, width: 1.15, eyes: '#ff3a2a' }); break;
       case 'warchief': m = humanoid({ skin: tintHex('#4a6a3a', t), cloth: '#3a2a20', armor: '#4a4e58', tusks: true, horns: true, weapon: 'espadon', scale: 1.2, width: 1.25, eyes: '#ff3a2a', crown: M.boss }); break;
       case 'ogre': m = humanoid({ skin: tintHex('#b8a060', t), cloth: '#6b4a2a', club: true, scale: 1.55, width: 1.45, headSize: 0.15, bareArms: true }); break;
+      case 'ent': m = humanoid({ skin: tintHex('#4a3a24', t), cloth: '#3a4a22', armLen: 0.45, hunch: 0.2, scale: 1.4, horns: true, eyes: '#aaff5a', bareArms: true }); break;
       case 'troll': m = humanoid({ skin: tintHex('#4a7a4a', t), cloth: '#5a4a32', armLen: 0.45, hunch: 0.35, scale: 1.5, tusks: true, eyes: '#ff3a2a', bareArms: true }); break;
       case 'skeleton': m = humanoid({ skin: tintHex('#d8d0b8', t), bones: true, skull: true, weapon: M.weapon === 'bow' ? 'arco' : 'espada', headSize: 0.12 }); break;
       case 'zombie': m = humanoid({ skin: tintHex('#7a8a6a', t), cloth: '#4a4438', hunch: 0.3, eyes: '#ffef7a' }); m.userData.parts.armL.rotation.x = -1.3; m.userData.parts.armR.rotation.x = -1.3; m.userData.parts.zombie = true; break;
@@ -243,6 +244,7 @@
 
   // Rasgos de monstruo pegados a los huesos: cuernos, alas, cola, ojos que brillan, heridas…
   // f: { horns: 'small'|'big'|'curl', wings: color, tail: color, eyes: color, wounds: true, ears: true, skinHex }
+  const shadeHex = (hex, k) => { const c = new THREE.Color(hex); c.offsetHSL(0, 0, k * 0.3); return '#' + c.getHexString(); };
   function monsterFeatures(root, f) {
     const P = root.userData.parts;
     if (!P || !P.headMesh) return;
@@ -296,7 +298,22 @@
         w.lookAt(new THREE.Vector3(hc.x + x * hs.x * 3, hc.y + y * hs.y * 3, hc.z + hs.z * 2));
       }
     }
+    // matas de hojas en la coronilla (ents)
+    if (f.leaves) {
+      const lm = mat(linHex(f.leaves)), lm2 = mat(linHex(shadeHex(f.leaves, 0.25)));
+      for (let i = 0; i < 6; i++) { const a = i / 6 * Math.PI * 2; mesh(new THREE.IcosahedronGeometry(hs.x * (0.16 + (i % 2) * 0.05), 0), i % 2 ? lm : lm2, hc.x + Math.cos(a) * hs.x * 0.3, hb.max.y - hs.y * 0.02 + (i % 3) * hs.y * 0.05, hc.z + Math.sin(a) * hs.z * 0.3, H); }
+    }
     if (P.head) P.head.attach(H);
+    // hombros con hojas y musgo (ents)
+    if (f.leaves && (bones.upperarml || bones.chest)) {
+      const lm = mat(linHex(f.leaves));
+      for (const s of ['l', 'r']) {
+        const B = bones['upperarm' + s]; if (!B) continue;
+        const L = new THREE.Group(), p = B.getWorldPosition(new THREE.Vector3());
+        for (let i = 0; i < 3; i++) mesh(new THREE.IcosahedronGeometry(bw * (0.13 - i * 0.02), 0), lm, p.x + (s === 'l' ? 1 : -1) * bw * 0.05 * i, p.y + bh * 0.06 + i * bh * 0.03, p.z + (i - 1) * bw * 0.08, L);
+        B.attach(L);
+      }
+    }
     // alas de murciélago a la espalda
     const chest = bones.chest || bones.spine || P.head;
     if (f.wings && chest) {
@@ -350,6 +367,8 @@
     warchief: (M) => ['Knight', { tint: M.tint || '#7aa060', scale: 1.2, helmet: true, cape: true, w: 'espadon', weaponKind: 'melee2' }],
     ogre: (M) => ['Barbarian', { tint: M.tint || '#e0c890', scale: 1.55, w: 'hacha', wProp: 'axe_2handed', weaponKind: 'melee2' }],
     troll: (M) => ['Barbarian', { tint: M.tint || '#70a870', scale: 1.5, weaponKind: 'unarmed', walk: 'Walking_B' }],
+    // ent: un cuerpo de corteza con ramas por cuernos, matas de hojas y ojos verdes que brillan
+    ent: (M) => ['Barbarian', { tint: '#8a6a48', skin: M.tint || '#4a3a24', cloth: '#3a4a22', hair: '#2a3a18', weaponKind: 'unarmed', walk: 'Walking_B', wide: 1.15, feat: { skinHex: M.tint || '#4a3a24', eyes: '#aaff5a', horns: 'big', hornHex: '#3a2a18', leaves: '#3a6a26' } }],
     skeleton: (M) => (M.weapon === 'bow' ? ['Skeleton_Rogue', { tint: M.tint, helmet: true, w: 'ballesta', wProp: 'Skeleton_Crossbow', weaponKind: 'ranged2' }] : ['Skeleton_Warrior', { tint: M.tint, w: 'espada', wProp: 'Skeleton_Blade', o: 'escudo', oProp: 'Skeleton_Shield_Small_A', weaponKind: 'melee1' }]),
     wight: (M) => ['Skeleton_Warrior', { tint: M.tint || '#9ab0d8', helmet: true, cape: true, w: 'hacha', wProp: 'Skeleton_Axe', weaponKind: 'melee1' }],
     zombie: (M) => [M.bloated ? 'Barbarian' : 'Rogue', { tint: M.bloated ? '#b4c494' : '#a4c494', skin: M.tint || (M.bloated ? '#8aa070' : '#7a9a6a'), cloth: M.bloated ? '#5a4a30' : '#4a3a2e', hair: '#2a2a20', weaponKind: 'unarmed', walk: 'Walking_D_Skeletons', feat: { eyes: '#d8ff9a', wounds: true }, wide: M.bloated ? 1.35 : 1 }],

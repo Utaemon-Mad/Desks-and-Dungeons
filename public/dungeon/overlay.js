@@ -28,7 +28,7 @@
 
   // Clima según la zona (y la hora): el tiempo cambia cada pocos minutos, igual para todos
   function weatherFor(map, zone, now) {
-    if (map.kind !== 'world') return map.theme === 'volcan' || map.theme === 'abismo' ? 'embers' : 'motes';
+    if (map.kind !== 'world') return map.theme === 'volcan' || map.theme === 'abismo' ? 'embers' : map.theme === 'bosque' ? 'fireflies' : 'motes';
     const slot = Math.floor(now / 240000);
     const r = (Math.sin(slot * 91.7 + zone * 13.3) * 43758.5453) % 1;
     const roll = Math.abs(r);
