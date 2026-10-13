@@ -191,8 +191,18 @@
     P.renderPass.scene = scene; P.renderPass.camera = camera;
     if (P.ao) {
       P.ao.scene = scene; P.ao.camera = P.aoCam;
+      // la cámara de la sombra ambiental, del mismo tipo que la de la escena (isométrica u ortográfica)
+      if (!!camera.isOrthographicCamera !== !!P.aoCam.isOrthographicCamera) {
+        P.aoCam = camera.isOrthographicCamera ? new THREE.OrthographicCamera() : new THREE.PerspectiveCamera();
+        P.aoCam.layers.set(0);
+        const m = P.ao.gtaoMaterial;
+        m.defines.PERSPECTIVE_CAMERA = camera.isOrthographicCamera ? 0 : 1; m.needsUpdate = true;
+        m.uniforms.cameraNear.value = camera.near; m.uniforms.cameraFar.value = camera.far;
+      }
       P.aoCam.position.copy(camera.position); P.aoCam.quaternion.copy(camera.quaternion);
-      P.aoCam.fov = camera.fov; P.aoCam.aspect = camera.aspect; P.aoCam.near = camera.near; P.aoCam.far = camera.far;
+      if (camera.isOrthographicCamera) { P.aoCam.left = camera.left; P.aoCam.right = camera.right; P.aoCam.top = camera.top; P.aoCam.bottom = camera.bottom; P.aoCam.zoom = camera.zoom; }
+      else { P.aoCam.fov = camera.fov; P.aoCam.aspect = camera.aspect; }
+      P.aoCam.near = camera.near; P.aoCam.far = camera.far;
       // también el corrimiento de la imagen (vista de la mesa de partida), si no la sombra sale desplazada
       if (camera.view && camera.view.enabled) { const v = camera.view; P.aoCam.setViewOffset(v.fullWidth, v.fullHeight, v.offsetX, v.offsetY, v.width, v.height); } else if (P.aoCam.view && P.aoCam.view.enabled) P.aoCam.clearViewOffset();
       P.aoCam.updateProjectionMatrix(); P.aoCam.updateMatrixWorld();
@@ -212,8 +222,18 @@
   // Escenario: escena + cámara + reserva de luces (las fuentes más cercanas a la cámara se encienden)
   function makeStage(o = {}) {
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(o.fov || 38, innerWidth / innerHeight, 0.1, 200);
+    // vista isométrica: cámara ortográfica (sin perspectiva). Se ve lo mismo que vería la de perspectiva con ese
+    // fov a la distancia de offset, así el zoom (que alarga o acorta offset) funciona igual en las dos.
+    const iso = o.iso !== false;
+    const camera = iso ? new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 200) : new THREE.PerspectiveCamera(o.fov || 38, innerWidth / innerHeight, 0.1, 200);
+    if (iso) { camera.fov = o.fov || 38; camera.aspect = innerWidth / innerHeight; }
     camera.layers.enable(1);
+    const frame = () => {
+      if (!iso) return;
+      const h = stage.offset.length() * Math.tan(camera.fov * Math.PI / 360);
+      camera.top = h; camera.bottom = -h; camera.left = -h * camera.aspect; camera.right = h * camera.aspect;
+      camera.updateProjectionMatrix();
+    };
     const hemi = new THREE.HemisphereLight(o.sky || '#4a5a8a', o.ground || '#1a1010', o.ambient !== undefined ? o.ambient : 0.35);
     scene.add(hemi);
     const sun = new THREE.DirectionalLight(o.sunColor || '#8a9ad8', o.sun || 0);
@@ -245,10 +265,12 @@
     scene.add(torch);
     const stage = {
       scene, camera, hemi, sun, pool, spot, torch, target: new THREE.Vector3(), offset: new THREE.Vector3(...(o.offset || [0, 9.5, 7.2])),
-      resize() { camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix(); },
+      iso,
+      resize() { camera.aspect = innerWidth / innerHeight; if (iso) frame(); else camera.updateProjectionMatrix(); },
       lookAt(x, z, y = 0) {
         stage.target.set(x, y, z);
-        camera.position.copy(stage.target).add(stage.offset);
+        // en isométrica la cámara se aleja siempre lo mismo (no recorta los muros al acercar); el tamaño lo da offset
+        if (iso) { frame(); camera.position.copy(stage.offset).setLength(60).add(stage.target); } else camera.position.copy(stage.target).add(stage.offset);
         camera.lookAt(stage.target);
         if (o.sun) { sun.position.set(x - 6, 14, z + 4); sun.target.position.set(x, 0, z); }
       },
@@ -286,7 +308,14 @@
         }
       },
       grade: null,
-      render() { liquidTime.value = performance.now() / 1000; present(scene, camera, stage.grade); },
+      render() {
+        liquidTime.value = performance.now() / 1000;
+        // la niebla se mide desde la cámara: la isométrica está más lejos, así que se corre lo mismo que se alejó
+        const f = iso && scene.fog, ex = f ? camera.position.distanceTo(stage.target) - stage.offset.length() : 0;
+        if (f) { f.near += ex; f.far += ex; }
+        present(scene, camera, stage.grade);
+        if (f) { f.near -= ex; f.far -= ex; }
+      },
       project(x, y, z) {
         const v = new THREE.Vector3(x, y, z).project(camera);
         return { x: (v.x + 1) / 2 * innerWidth, y: (1 - v.y) / 2 * innerHeight, behind: v.z > 1 };
@@ -484,6 +513,9 @@
   }
 
   const LOW_WALL = 0.3; // altura de los muros bajos (los del lado de la cámara)
+  // ¿Hay hueco al norte, al oeste o al noroeste? Entonces este muro queda entre la sala y la cámara isométrica (que
+  // mira desde el sureste) y se hace bajo. n: cuántas casillas se miran (los árboles del bosque, más altos, miran más).
+  const camSide = (open, x, y, n = 1) => { for (let i = 1; i <= n; i++) if (open(x, y - i) || open(x - i, y) || open(x - i, y - i)) return true; return false; };
   // Construye todo lo fijo del mapa. Devuelve { group, lights, walls (actualizable con lo explorado) }
   function buildMap(map) {
     const mm = M();
@@ -524,7 +556,7 @@
         if (map.tiles[y * map.w + x] !== '#') continue;
         let near = false;
         for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) if (walk(x + dx, y + dy)) { near = true; break; }
-        if (near) walls.push({ x: x + 0.5, z: y + 0.5, y: WALL_H / 2, sy: WALL_H, tile: y * map.w + x, r: 0, low: walk(x, y - 1) });
+        if (near) walls.push({ x: x + 0.5, z: y + 0.5, y: WALL_H / 2, sy: WALL_H, tile: y * map.w + x, r: 0, low: camSide(walk, x, y) });
       }
       const wallGeo = new THREE.BoxGeometry(1, 1, 1);
       const wallMat = new THREE.MeshStandardMaterial({ color: T.wall, roughness: 0.92, flatShading: true });
@@ -758,8 +790,8 @@
     const { group } = out;
     const isWall = (x, y) => x < 0 || y < 0 || x >= map.w || y >= map.h || map.tiles[y * map.w + x] === '#';
     const floorNear = (x, y, r) => { for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (!isWall(x + dx, y + dy)) return true; return false; };
-    // ¿hay claro justo al norte? (entonces este árbol taparía la sala vista desde la cámara)
-    const roomNorth = (x, y, n) => { for (let i = 1; i <= n; i++) if (!isWall(x, y - i)) return true; return false; };
+    // ¿hay claro al norte o al oeste? (entonces este árbol taparía la sala vista desde la cámara)
+    const roomNorth = (x, y, n) => camSide((a, b) => !isWall(a, b), x, y, n);
     const lists = {};
     const add = (name, it, tint = '') => (lists[name + '|' + tint] = lists[name + '|' + tint] || []).push(it);
     const TREES = ['m:tree_single_A', 'm:tree_single_A', 'm:tree_single_B', 'm:tree_single_B', 'm:trees_A_small', 'm:trees_A_medium', 'm:trees_B_small', 'm:trees_B_medium'];
@@ -897,17 +929,18 @@
       const tile = y * map.w + x;
       if (ch === '#') {
         let near = false;
+        const low = camSide((a, b) => !isWall(a, b), x, y);
         for (const [dx, dy, r] of [[0, 1, 0], [0, -1, Math.PI], [1, 0, Math.PI / 2], [-1, 0, -Math.PI / 2]]) {
           if (isWall(x + dx, y + dy)) continue;
           near = true;
           const k = rand(x * 7.1 + y * 3.3 + dx * 5 + dy * 11);
           // muros con variedad: agrietados, rotos y, en criptas y fortalezas, estanterías y ventanales enrejados
-          const fancy = (theme === 'cripta' || theme === 'fortaleza') && isWall(x, y - 1) && dy === 1;
+          const fancy = (theme === 'cripta' || theme === 'fortaleza') && !low && dy === 1;
           const name = k < 0.1 ? 'wall_cracked' : k < 0.14 ? 'wall_broken' : fancy && k < 0.19 ? 'wall_shelves' : fancy && k < 0.23 ? 'wall_archedwindow_gated' : 'wall';
-          (segs[name] = segs[name] || []).push({ x: x + 0.5 + dx * 0.375, z: y + 0.5 + dy * 0.375, r, tile, low: !isWall(x, y - 1) });
+          (segs[name] = segs[name] || []).push({ x: x + 0.5 + dx * 0.375, z: y + 0.5 + dy * 0.375, r, tile, low });
         }
         if (!near) for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) if (!isWall(x + dx, y + dy)) { near = true; break; }
-        if (near) caps.push({ x: x + 0.5, z: y + 0.5, tile, low: !isWall(x, y - 1) });
+        if (near) caps.push({ x: x + 0.5, z: y + 0.5, tile, low });
         continue;
       }
       if (WATER.has(ch)) continue;
@@ -958,7 +991,7 @@
       const tile = y * map.w + x;
       for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
         if (!isWall(x + dx, y) || !isWall(x, y + dy)) continue;
-        const cx = x + (dx > 0 ? 1 : 0), cz = y + (dy > 0 ? 1 : 0), south = dy > 0;
+        const cx = x + (dx > 0 ? 1 : 0), cz = y + (dy > 0 ? 1 : 0), south = dy > 0 || dx > 0;
         corners.push({ x: cx, z: cz, q: new THREE.Quaternion(), sx: HS, sy: south ? VS * LOW_WALL : VS, sz: HS, tile });
         if (webby && !south && rand(x * 4.7 + y * 2.9 + dx) < 0.45) {
           const qq = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.35, dx > 0 ? -Math.PI / 4 : Math.PI / 4, 0, 'YXZ'));
@@ -1197,7 +1230,7 @@
     const mat = new THREE.ShaderMaterial({
       uniforms: { scale: { value: innerHeight * 0.5 } },
       vertexShader: 'attribute vec3 pcolor; attribute float psize; attribute float palpha; uniform float scale; varying vec3 vC; varying float vA;\n' +
-        'void main(){ vC = pcolor; vA = palpha; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = psize * scale / -mv.z; gl_Position = projectionMatrix * mv; }',
+        'void main(){ vC = pcolor; vA = palpha; vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_PointSize = psize * scale / (isOrthographic ? 1.0 / (projectionMatrix[1][1] * 0.344) : -mv.z); gl_Position = projectionMatrix * mv; }',
       fragmentShader: 'varying vec3 vC; varying float vA;\n' +
         'void main(){ vec2 d = gl_PointCoord - 0.5; float r = dot(d, d) * 4.0; if (r > 1.0) discard; gl_FragColor = vec4(vC, vA * (1.0 - r)); }',
       transparent: true, depthWrite: false, blending: additive ? THREE.AdditiveBlending : THREE.NormalBlending,
@@ -1409,5 +1442,16 @@
     return { stop() { alive = false; cancelAnimationFrame(raf); r.dispose(); } };
   }
 
-  root.VIEW3D = { touch, setBrightness, info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
+  // Dirección de la cámara isométrica (desde el sureste, 45° de giro y unos 35° de inclinación); los muros y árboles
+  // que quedan entre la sala y la cámara (al sur, al este y al sureste de un hueco) se hacen bajos
+  const ISO = new THREE.Vector3(1, 1, 1).normalize();
+  // Dirección de pantalla (dx a la derecha, dy hacia abajo) → paso en casillas, en 8 direcciones. Con la cámara
+  // girada 45°, «arriba» en la pantalla es el noroeste del mapa.
+  function screenToTile(dx, dy) {
+    if (!dx && !dy) return [0, 0];
+    const oct = Math.round(Math.atan2(dy - dx, dx + dy) / (Math.PI / 4));
+    const a = oct * Math.PI / 4;
+    return [Math.round(Math.cos(a)), Math.round(Math.sin(a))];
+  }
+  root.VIEW3D = { ISO, screenToTile, touch, setBrightness, info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
 })(this);

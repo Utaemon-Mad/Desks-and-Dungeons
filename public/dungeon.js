@@ -365,7 +365,7 @@
   function sendDir() {
     let dx = 0, dy = 0;
     for (const k of game.keys) { const d = KEYDIR[k]; if (d) { dx += d[0]; dy += d[1]; } }
-    dx = Math.sign(dx); dy = Math.sign(dy);
+    [dx, dy] = VIEW3D.screenToTile(Math.sign(dx), Math.sign(dy));
     const key = dx + ',' + dy;
     if (key === game.sentDir) return;
     game.sentDir = key;
@@ -518,9 +518,40 @@
   let fxp = null, dustp = null, wx = null, hoverRing = null;     // chispas (aditivas), polvo/humo y clima
   const herbObjs = new Map(), corpses = [];
 
+  // Lo alto que queda entre la cámara isométrica (al sureste) y el héroe se vuelve medio transparente
+  const occBox = new THREE.Box3();
+  function fadeOccluders(hx, hz, dt) {
+    for (const p of built.props || []) {
+      if (!p.o.visible && !p.fade) continue;
+      if (p.h === undefined) p.h = occBox.setFromObject(p.o).isEmpty() ? 0 : occBox.max.y;
+      if (p.h < 0.9) continue;
+      // d: cuánto más cerca de la cámara está que el héroe; s: separación a lo ancho de la pantalla
+      const ox = p.o.position.x - hx, oz = p.o.position.z - hz;
+      const d = (ox + oz) * Math.SQRT1_2, s = (ox - oz) * Math.SQRT1_2;
+      const want = d > 0.1 && d < p.h * 1.41 + 0.3 && Math.abs(s) < 1 ? 1 : 0;
+      const f = p.fade || 0;
+      if (f === want) continue;
+      p.fade = want > f ? Math.min(1, f + dt * 5) : Math.max(0, f - dt * 3);
+      if (!p.fadeMats) {
+        p.fadeMats = [];
+        p.o.traverse((c) => {
+          if (!c.isMesh) return;
+          c.material = Array.isArray(c.material) ? c.material.map((m) => m.clone()) : c.material.clone();
+          for (const m of [].concat(c.material)) { m.userData.own = true; p.fadeMats.push({ m, op: m.opacity, tr: m.transparent, dw: m.depthWrite }); }
+        });
+      }
+      for (const F of p.fadeMats) {
+        F.m.opacity = F.op * (1 - 0.72 * p.fade);
+        const t = p.fade > 0.01 || F.tr;
+        if (F.m.transparent !== t) { F.m.transparent = t; F.m.needsUpdate = true; }
+        F.m.depthWrite = p.fade > 0.01 ? false : F.dw;
+      }
+    }
+  }
+
   function ensureStage() {
     if (stage) return;
-    stage = VIEW3D.makeStage({ offset: [0, 9.5, 7.2], ambient: 0.3, sky: '#5a6aa0', ground: '#140c0a', lights: 10, sun: 0.0001 });
+    stage = VIEW3D.makeStage({ offset: VIEW3D.ISO.toArray().map((v) => v * 11.9), ambient: 0.3, sky: '#5a6aa0', ground: '#140c0a', lights: 10, sun: 0.0001 });
     stage.sun.castShadow = false;
     fxp = VIEW3D.particles(stage.scene, 1400, true);
     dustp = VIEW3D.particles(stage.scene, 800, false);
@@ -876,6 +907,7 @@
   function doRoll() {
     let dx = 0, dy = 0;
     for (const k of game.keys) { const d = KEYDIR[k]; if (d) { dx += d[0]; dy += d[1]; } }
+    [dx, dy] = VIEW3D.screenToTile(Math.sign(dx), Math.sign(dy));
     if (!dx && !dy && game.joyDir) [dx, dy] = game.joyDir;
     DD.net.send({ t: 'droll', dx: Math.sign(dx), dy: Math.sign(dy) });
   }
@@ -935,10 +967,11 @@
     if (!game.camInit) { game.cam = { x: tx, y: tz }; game.camInit = !!me; }
     game.cam.x += (tx - game.cam.x) * Math.min(1, dt * 6); game.cam.y += (tz - game.cam.y) * Math.min(1, dt * 6);
     const zoom = (innerWidth <= 820 ? 1.18 : 1) * (game.zoom || 1) * (DD.camZoom || 1);
-    stage.offset.set(0, 9.5 * zoom, 7.2 * zoom);
+    // vista isométrica: la cámara mira desde el sureste, girada 45° (VIEW3D.ISO)
+    stage.offset.copy(VIEW3D.ISO).multiplyScalar(11.9 * zoom);
     let shake = 0;
     if (game.shake && game.shake > now) shake = Math.min(1, (game.shake - now) / 260) * 0.16;
-    stage.lookAt(game.cam.x + (Math.random() - 0.5) * shake, game.cam.y + 0.6 + (Math.random() - 0.5) * shake);
+    stage.lookAt(game.cam.x + (Math.random() - 0.5) * shake, game.cam.y + (Math.random() - 0.5) * shake, 0.5);
 
     // lo explorado: muros, decorado y niebla
     const sc = game.seen.reduce((a, b) => a + b, 0);
@@ -950,6 +983,7 @@
       fogDirty = true;
     }
     if (fogDirty) { fog.update(game.seen, game.vis); fogDirty = false; }
+    if (me) fadeOccluders(me.rx + 0.5, me.ry + 0.5, dt);
 
     // personajes
     const live = new Set();
