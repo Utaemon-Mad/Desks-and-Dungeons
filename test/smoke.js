@@ -75,8 +75,13 @@ function rulesTests() {
   assert.ok(v3.sk === 3 && v3.name === 'Hoja del vacío' && v3.reqStats.fue === t[2].reqStats.fue, 'variante de arma');
   assert.strictEqual(RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'pecho', base: 'placas', tier: 2, sk: 2 }).name, 'Placa del dragón dorado', 'variante de armadura');
   assert.strictEqual(RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'casco', base: 'malla', tier: 0, sk: 9 }).sk, 3, 'variante fuera de rango: la última');
-  for (const s of ['pecho', 'casco', 'guantes', 'botas']) for (const ty of Object.keys(RULES.ARMOR_SKINS[s])) for (const tier of RULES.ARMOR_SKINS[s][ty]) assert.strictEqual(tier.length, 4, 'cuatro variantes de armadura');
+  for (const s of ['pecho', 'casco', 'guantes', 'botas']) for (const ty of Object.keys(RULES.ARMOR_SKINS[s])) for (const tier of RULES.ARMOR_SKINS[s][ty]) assert.strictEqual(tier.length, ty === 'cuero' || ty === 'placas' ? 5 : 4, 'cuatro variantes de armadura (y la samurái en cuero y placas)');
   for (const b of Object.keys(RULES.WEAPON_SKINS)) for (const tier of RULES.WEAPON_SKINS[b]) assert.strictEqual(tier.length, 4, 'cuatro variantes de arma');
+  // katanas y armaduras samurái
+  const kat = RULES.makeItem(RULES.seeded('kat'), { ilvl: 30, rarity: 'normal', slot: 'arma', base: 'katana', tier: 1, sk: 3 });
+  assert.ok(kat.name === 'Katana del samurái' && RULES.WEAPONS.katana.hands === 2 && RULES.CLASSES.guerrero.weapons.includes('katana'), 'katana');
+  const kab = RULES.makeItem(RULES.seeded('kab'), { ilvl: 45, rarity: 'normal', slot: 'casco', base: 'placas', tier: 2, sk: 4 });
+  assert.strictEqual(kab.name, 'Kabuto del shōgun', 'kabuto');
   // objetos guardados sin variante (o con la 0/1 de antes) siguen teniendo nombre
   // mágico: prefijo y/o sufijo; raro: de 3 a 6 propiedades; el daño mejorado sube el daño del arma
   for (let i = 0; i < 50; i++) {
@@ -98,26 +103,26 @@ function rulesTests() {
   const u1 = RULES.makeItem(RULES.seeded('u'), { ilvl: 40, rarity: 'unico', slot: 'arma', base: 'espada' });
   const u2 = RULES.makeItem(RULES.seeded('u'), { ilvl: 40, rarity: 'unico', slot: 'arma', base: 'espada' });
   assert.deepStrictEqual(Object.keys(u1.stats).sort(), Object.keys(u2.stats).sort(), 'único: siempre las mismas propiedades');
-  // personaje: 6 características, raza + clase, tope natural de 20 y puntos hasta el nivel 50
+  // personaje: 6 características, humano + clase, tope natural de 20 y puntos hasta el nivel 50
   const ch = RULES.newChar('guerrero', { species: 'orc' });
   const d = RULES.derive({ xp: 0, char: ch, equip: {}, buffs: {} });
   assert.deepStrictEqual(Object.keys(d.stats), ['fue', 'des', 'vig', 'int', 'car', 'sue']);
-  assert.strictEqual(d.base.fue, 5 + 4 + 4, 'Fuerza = 5 + orco 4 + guerrero 4');
+  assert.strictEqual(d.base.fue, 5 + 1 + 4, 'Fuerza = 5 + humano 1 + guerrero 4 (ya no hay orcos)');
   assert.ok(d.abilities.length === 4 && d.abilities.some((a) => a.id === 'golpe' && a.ready));
   assert.strictEqual(d.points, RULES.POINTS_START);
   assert.strictEqual(RULES.pointsTotal(50), 5 + 49 + 10, 'puntos a nivel 50');
-  assert.strictEqual(RULES.statRoom(ch, 'fue'), 7, 'la Fuerza sólo puede subir 7 puntos más (hasta 20)');
-  assert.strictEqual(RULES.cleanChar({ cls: 'guerrero', look: { species: 'orc' }, alloc: { fue: 30 } }, 50).alloc.fue, 7, 'tope natural de 20');
-  const big = RULES.derive({ xp: 0, char: { ...ch, alloc: { ...ch.alloc, fue: 7 } }, equip: { anillo: { slot: 'anillo', stats: { fue: 6 } } }, buffs: {} });
+  assert.strictEqual(RULES.statRoom(ch, 'fue'), 10, 'la Fuerza sólo puede subir 10 puntos más (hasta 20)');
+  assert.strictEqual(RULES.cleanChar({ cls: 'guerrero', look: { species: 'orc' }, alloc: { fue: 30 } }, 50).alloc.fue, 10, 'tope natural de 20');
+  const big = RULES.derive({ xp: 0, char: { ...ch, alloc: { ...ch.alloc, fue: 10 } }, equip: { anillo: { slot: 'anillo', stats: { fue: 6 } } }, buffs: {} });
   assert.ok(big.natural.fue === 20 && big.stats.fue === 26, 'el equipo sí pasa de 20');
   assert.ok(RULES.MAX_LEVEL === 50 && RULES.levelFromXp(1e12) === 50, 'nivel máximo 50');
-  for (const r of RULES.RACE_IDS) assert.strictEqual(Object.values(RULES.RACES[r].mods).reduce((a, b) => a + b, 0), 6, 'todas las razas suman +6');
+  assert.deepStrictEqual(RULES.RACE_IDS, ['human'], 'sólo humanos');
   for (const c of RULES.CLASS_IDS) assert.strictEqual(Object.values(RULES.CLASSES[c].base).reduce((a, b) => a + b, 0), 8, 'todas las clases suman +8');
   assert.ok(RULES.ABILITIES.druida.length === 4 && RULES.ABILITIES.sacerdote.length === 4 && !RULES.ABILITIES.brujo && !RULES.ABILITIES.clerigo);
   // la Fuerza sube el daño un 5% por punto (como en Diablo 2)
   const sw = RULES.makeItem(rng, { ilvl: 1, rarity: 'normal', slot: 'arma', base: 'espada', tier: 0 });
-  const dA = RULES.derive({ xp: 0, char: RULES.newChar('guerrero', { species: 'goblin' }), equip: { arma: sw }, buffs: {} });
-  const dB = RULES.derive({ xp: 0, char: RULES.newChar('guerrero', { species: 'orc' }), equip: { arma: sw }, buffs: {} });
+  const dA = RULES.derive({ xp: 0, char: RULES.newChar('guerrero'), equip: { arma: sw }, buffs: {} });
+  const dB = RULES.derive({ xp: 0, char: { ...RULES.newChar('guerrero'), alloc: { fue: 3, des: 0, vig: 0, int: 0, car: 0, sue: 0 } }, equip: { arma: sw }, buffs: {} });
   assert.ok(dB.statPct - dA.statPct === (dB.stats.fue - dA.stats.fue) * 5, '+5% de daño por punto de Fuerza');
   // requisitos: un mago enclenque no puede con unas placas de élite
   const plate = RULES.makeItem(rng, { ilvl: 40, rarity: 'normal', slot: 'pecho', base: 'placas', tier: 2 });
@@ -129,6 +134,11 @@ function rulesTests() {
   assert.ok(old.char.cls === 'mago' && old.char.look.species === 'human' && old.char.alloc.fue === 0 && old.statsReset, 'perfil antiguo');
   assert.ok(old.equip.anillo.rarity === 'raro' && old.equip.anillo.stats.int === 3 && old.equip.anillo.stats.vig === 2 && old.equip.anillo.stats.hp === 30, 'objeto antiguo');
   assert.ok(old.bag[0].rarity === 'magico' && old.bag[0].tier === 0 && old.bag[0].reqStats.fue === 4);
+  // los de otra raza pasan a humanos con los puntos devueltos y algo de su planta (un enano: bajo, fornido y barbudo)
+  const dw = RULES.migrateProfile({ xp: 0, rv: RULES.RULES_VERSION, char: { cls: 'guerrero', alloc: { fue: 4 }, look: { species: 'dwarf', sex: 'm' } }, equip: {}, bag: [] });
+  assert.ok(dw.char.look.species === 'human' && dw.char.alloc.fue === 0 && dw.statsReset, 'raza antigua → humano');
+  const dwl = MAP.cleanLook(dw.char.look);
+  assert.ok(dwl.feat.build === 3 && dwl.feat.height === 0 && dwl.feat.beard === 5, 'conserva su planta');
   // la mazmorra escala con el nivel
   assert.ok(RULES.monsterAt('orc', 10).hp > RULES.monsterAt('orc', 1).hp * 4);
   // mazmorras aleatorias: siempre jugables
@@ -187,6 +197,7 @@ async function instanceTests() {
     give: (u, it) => { bag.push(it); return true; },
     giveCons: () => true,
     exit: () => {}, portal: () => {},
+    turns: false, // estas pruebas son del combate en tiempo real; el de turnos tiene las suyas
   };
   const def = { id: 'test', kind: 'dungeon', level: 1, name: 'Pasillo', w: W, h: H, tiles: rows.join(''), start: { x: 1, y: 2 }, props: [], chests: [{ x: 12, y: 1 }], spawns: [{ k: 'goblin-minion', x: 4, y: 2, pack: 'a' }] };
   const inst = new Instance(def, hooks);
@@ -348,6 +359,76 @@ async function instanceTests() {
   await sleep(1000);
   assert.strictEqual(ended, 'x2', 'termina el duelo');
 
+  // Combate por turnos (estilo D&D 5e): se para el tiempo, iniciativa, movimiento + acción + adicional + reacción
+  {
+    const tsent = [];
+    const ti = new Instance({ ...def, id: 'turnos', spawns: [{ k: 'goblin-minion', x: 6, y: 2, pack: 't' }], chests: [] }, { ...hooks, turns: true, send: (u, m) => tsent.push(typeof m === 'string' ? JSON.parse(m) : m), kill: () => {} });
+    const tu = mk('turnero');
+    ti.join(tu, { x: 2, y: 2 });
+    const trun = async (ms, until) => { const end = Date.now() + ms; while (Date.now() < end) { ti.tick(Date.now()); if (until && until()) return true; await sleep(20); } return false; };
+    assert.ok(await trun(1500, () => ti.enc), 'al ver al héroe empieza el combate por turnos');
+    assert.strictEqual(ti.enc.order.length, 2, 'iniciativa: héroe y goblin');
+    const tp = ti.players.get('turnero');
+    const gob = [...ti.enemies.values()][0];
+    const mine = () => ti.enc && ti.enc.active && ti.enc.active.id === 'turnero';
+    assert.ok(await trun(12000, mine), 'llega el turno del héroe');
+    assert.deepStrictEqual({ action: tp.tb.action, bonus: tp.tb.bonus }, { action: 1, bonus: 1 }, 'una acción y una acción adicional');
+    assert.ok(tp.tb.move >= 4 && tp.tb.move <= 9, 'unas 6 casillas de movimiento');
+    // en mi turno el goblin no se mueve, y el reloj de juego no corre mientras pienso
+    const gpos = gob.x + ',' + gob.y, clk = ti.clock();
+    await trun(300);
+    assert.strictEqual(gob.x + ',' + gob.y, gpos, 'el goblin espera su turno');
+    assert.strictEqual(ti.clock(), clk, 'pensar no gasta tiempo de juego');
+    // andar más lejos de lo que permite el movimiento: se queda donde llega
+    tp.tb.move = 2;
+    ti.go('turnero', 12, 3);
+    assert.strictEqual(tp.path.length, 2, 'el camino se corta en el movimiento que queda');
+    await trun(2000, () => !tp.path.length);
+    assert.strictEqual(tp.tb.move, 0, 'ha gastado su movimiento');
+    // acción: un ataque a un enemigo a su lado
+    gob.x = tp.x + 1; gob.y = tp.y; gob.hp = gob.maxHp = 9999;
+    ti.attack('turnero', gob.id);
+    await trun(300, () => tp.tb.action === 0);
+    assert.strictEqual(tp.tb.action, 0, 'atacar gasta la acción');
+    ti.attack('turnero', gob.id);
+    assert.ok(!tp.target, 'sin acción no se puede volver a atacar');
+    // la poción va con la acción adicional
+    ti.use('turnero', 'pocion-vida-p');
+    assert.strictEqual(tp.tb.bonus, 0, 'la poción gasta la acción adicional');
+    ti.endTurn('turnero');
+    assert.ok(!mine(), 'terminar el turno pasa al siguiente');
+    // turno del goblin: está al lado y pega; luego vuelve a ser mi turno
+    const hp0 = tu.combat.hp;
+    assert.ok(await trun(12000, mine), 'el goblin juega y vuelve mi turno');
+    const ev = tsent.filter((m) => m.t === 'dsnap').flatMap((m) => m.events);
+    assert.ok(ev.some((e) => e.e === 'turn' && e.k === 'e') && (tu.combat.hp < hp0 || ev.some((e) => e.e === 'hit' && e.t === 'turnero')), 'el goblin ataca en su turno');
+    // reacción: al apartarme del goblin, me da un ataque de oportunidad
+    tsent.length = 0;
+    gob.x = tp.x + 1; gob.y = tp.y; gob.react = 1; gob.stunUntil = 0;
+    ti.go('turnero', tp.x - 1, tp.y);
+    await trun(1500, () => !tp.path.length);
+    assert.ok(tsent.filter((m) => m.t === 'dsnap').flatMap((m) => m.events).some((e) => e.e === 'oa' && e.by === gob.id), 'ataque de oportunidad al salir de su alcance');
+    // al morir el último enemigo vuelve el tiempo real
+    ti.damageEnemy(tp, gob, 999999, { noCrit: true });
+    await trun(300, () => !ti.enc);
+    assert.ok(!ti.enc && !tp.tb, 'fin del combate al no quedar enemigos');
+    assert.ok(ti.snapshot().enc === undefined, 'la instantánea ya no lleva combate');
+  }
+
+  // Duelo por turnos: sólo ataca quien tiene el turno
+  {
+    const di = new Instance({ ...adef, id: 'arena-t', duel: { a: 'y1', b: 'y2', bet: 0, startAt: 0 } }, { ...ahooks, turns: true });
+    const y1 = mk('y1'), y2 = mk('y2');
+    di.join(y1, { x: 4, y: 5 }); di.join(y2, { x: 5, y: 5 });
+    for (let i = 0; i < 20 && !(di.enc && di.enc.active); i++) { di.tick(Date.now()); await sleep(20); }
+    assert.ok(di.enc && di.enc.order.length === 2, 'el duelo empieza por turnos');
+    const who = di.enc.active.id, other = who === 'y1' ? 'y2' : 'y1';
+    di.attack(other, 'pv:' + who);
+    assert.ok(!di.players.get(other).target, 'fuera de su turno no puede atacar');
+    di.attack(who, 'pv:' + other);
+    assert.strictEqual(di.players.get(who).target, 'pv:' + other, 'en su turno sí');
+  }
+
   // Jefe de mundo: aparece cerca de los héroes y reparte botín a quien le hizo daño
   const WW = 30;
   const wdef = { id: 'world', kind: 'world', name: 'Mundo', w: WW, h: WW, tiles: '.'.repeat(WW * WW).split('').map((c, i) => (i % WW === 0 || i < WW || i % WW === WW - 1 || i >= WW * (WW - 1) ? '#' : c)).join(''), start: { x: 15, y: 15 }, groups: [] };
@@ -440,9 +521,9 @@ async function instanceTests() {
   assert.strictEqual(meB.char.alloc.fue, 3);
   b.send({ t: 'char:points', alloc: { fue: 1 } });
   assert.match((await b.next((m) => m.t === 'error')).text, /puntos/);
-  // tope natural de 20: un enano guerrero con 18 de Vigor no puede subirlo a 21 aunque tuviera puntos
-  const vigRoom = RULES.statRoom({ cls: 'guerrero', look: { species: 'dwarf' }, alloc: { vig: 2 } }, 'vig');
-  assert.strictEqual(vigRoom, 20 - (5 + 4 + 3) - 2, 'hueco hasta 20');
+  // tope natural de 20: lo que queda hasta 20 después de la base, la clase y los puntos ya puestos
+  const vigRoom = RULES.statRoom({ cls: 'guerrero', look: { species: 'human' }, alloc: { vig: 2 } }, 'vig');
+  assert.strictEqual(vigRoom, 20 - (5 + 1 + 3) - 2, 'hueco hasta 20');
 
   // Tiendas: la bruja vende pociones, Takeshi armas y armaduras, el de la túnica pergaminos y bufos
   b.send({ t: 'shop:open', npc: 'bruja' });
@@ -664,18 +745,19 @@ async function instanceTests() {
   assert.strictEqual(ac.slots.length, 3, 'tres casillas');
   assert.ok(ac.slots[0] && ac.slots[0].name === 'Dani' && !ac.slots[1] && !ac.slots[2], 'el perfil antiguo va a la casilla 1');
   assert.deepStrictEqual(ac.servers.map((x) => x.id), MAP.SERVERS.map((x) => x.id), 'tres servidores');
-  // el editor manda raza, sexo, peinado y el reparto de los 5 primeros puntos (el servidor recorta lo que pase de 20)
-  lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Eva', look: { cls: 'picaro', cls2: 'mago', species: 'goblin', sex: 'f', hs: 'capucha', skin: 12, gob: { ears: 2, hair: 4, marks: 3, nose: 99, rings: 'x' } }, alloc: { des: 9, sue: 3 } });
+  // el editor manda sexo, peinado, rasgos y el reparto de los 5 primeros puntos (el servidor recorta lo que pase de 20)
+  lob.send({ t: 'char:new', token: tokD, slot: 1, name: 'Eva', look: { cls: 'picaro', cls2: 'mago', species: 'goblin', sex: 'f', hs: 'capucha', skin: 12, feat: { build: 2, height: 3, marks: 3, paint: 99, rings: 'x' } }, alloc: { des: 9, sue: 3 } });
   ac = await lob.next((m) => m.t === 'account');
   assert.strictEqual(ac.created, 1);
   assert.ok(ac.slots[1].name === 'Eva' && ac.slots[1].cls === 'picaro' && ac.slots[1].level === 1, 'personaje nuevo en la casilla 2');
-  assert.ok(ac.slots[1].look.species === 'goblin' && ac.slots[1].look.sex === 'f' && ac.slots[1].look.hs === 'capucha', 'raza, sexo y peinado');
+  assert.ok(ac.slots[1].look.species === 'human' && ac.slots[1].look.sex === 'f' && ac.slots[1].look.hs === 'capucha', 'sólo humanos, sexo y peinado');
+  assert.ok(MAP.HUMAN_SKINS.includes(ac.slots[1].look.skin), 'piel verde de goblin → piel humana');
   const eva = store.player(store.hash(tokD)).slots[1];
-  // rasgos de goblin: se guardan los válidos y los raros vuelven a su valor de partida
-  const gl = ac.slots[1].look.gob;
-  assert.ok(gl && gl.ears === 2 && gl.hair === 4 && gl.marks === 3 && gl.nose === 0 && gl.rings === 0 && gl.build === 1, 'rasgos de goblin guardados y limpios');
-  assert.strictEqual(eva.char.look.gob.ears, 2);
-  assert.strictEqual(MAP.cleanLook({ species: 'human', gob: { ears: 1 } }).gob, undefined, 'solo los goblins llevan rasgos de goblin');
+  // rasgos: se guardan los válidos y los raros vuelven a su valor de partida
+  const fl = ac.slots[1].look.feat;
+  assert.ok(fl && fl.build === 2 && fl.height === 3 && fl.marks === 3 && fl.paint === 0 && fl.rings === 0 && fl.beard === 0, 'rasgos guardados y limpios');
+  assert.strictEqual(eva.char.look.feat.height, 3);
+  assert.strictEqual(MAP.cleanLook({ gob: { ears: 1 } }).gob, undefined, 'ya no hay rasgos de goblin');
   // copia de seguridad firmada: si el servidor pierde la cuenta, el navegador la devuelve y se restaura
   assert.ok(ac.backup && ac.backup.d && ac.backup.sig, 'la cuenta llega con su copia de seguridad');
   const bk = ac.backup, saved = store.player(store.hash(tokD));
@@ -686,7 +768,7 @@ async function instanceTests() {
   lob.send({ t: 'hello', token: tokD, backup: bk });
   ac2 = await lob.next((m) => m.t === 'account');
   assert.ok(ac2.slots[1] && ac2.slots[1].name === 'Eva', 'la copia buena restaura la cuenta');
-  assert.strictEqual(store.player(store.hash(tokD)).slots[1].char.look.gob.ears, saved.slots[1].char.look.gob.ears);
+  assert.strictEqual(store.player(store.hash(tokD)).slots[1].char.look.feat.height, saved.slots[1].char.look.feat.height);
   await sleep(2500); // el servidor limita los mensajes de la pantalla de inicio
   assert.deepStrictEqual([eva.char.alloc.des, eva.char.alloc.sue], [5, 0], 'puntos iniciales: como mucho 5 y nunca más de 20 natural');
   assert.ok(RULES.derive(eva).natural.des <= RULES.STAT_MAX);

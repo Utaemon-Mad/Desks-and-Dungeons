@@ -330,16 +330,15 @@
     left.appendChild(pv);
     left.appendChild(el('div', 'ficha-name', u ? u.name : ''));
     const c1 = RULES.CLASSES[p.char.cls];
-    const race = RULES.RACES[d.race];
     const look = (u && u.look) || {};
-    left.appendChild(el('div', 'ficha-cls', `${c1.icon} ${c1.name} · ${race.name}${look.sex === 'f' ? ' (mujer)' : ''}`));
+    left.appendChild(el('div', 'ficha-cls', `${c1.icon} ${c1.name} · ${look.sex === 'f' ? 'humana' : 'humano'}`));
     left.appendChild(el('div', 'ficha-lvl', `Nivel ${d.level} · ${p.xp} PX`));
-    left.appendChild(el('div', 'muted small', race.perkText));
+    left.appendChild(el('div', 'muted small', RULES.RACES.human.perkText));
     if (d.points > 0) { const b = el('button', 'btn red', `⭐ Repartir ${d.points} puntos`); b.onclick = openLevelUp; left.appendChild(b); }
-    // aspecto, raza y clase: se cambian con el editor de personaje (sólo en la taberna)
-    const edit = el('button', 'btn alt', '✏️ Aspecto, raza y clase');
+    // aspecto y clase: se cambian con el editor de personaje (sólo en la taberna)
+    const edit = el('button', 'btn alt', '✏️ Aspecto y clase');
     edit.onclick = () => {
-      if (!inTavern()) { DD.toast('Vuelve a la taberna para cambiar tu aspecto, tu raza o tu clase.'); return; }
+      if (!inTavern()) { DD.toast('Vuelve a la taberna para cambiar tu aspecto o tu clase.'); return; }
       closeOverlay('charwin');
       DD.emit('open-editor', { look: { ...look, cls: p.char.cls, gear: undefined } });
     };
@@ -878,7 +877,10 @@
       p('🗝️ Mazmorras: elige un tema (o al azar) y el nivel (desde 1 hasta tu nivel + 3). Se genera una mazmorra nueva cada vez. Tus amigos pueden unirse desde la misma ventana. Derrota al jefe para abrir el portal de salida.');
       p('Controles: clic en el suelo para andar (mantén pulsado para seguir al ratón), clic en un enemigo para atacarlo sin parar, WASD o flechas para moverte. 1-8: habilidades. Q: poción de vida (Mayús+Q la grande), E: energía, R/T: brebajes, Z X C V: pergaminos. M: mapa. I: equipo.');
       p('👥 En grupo: a la izquierda ves la vida de tus compañeros. Alt+clic (o clic central, o la tecla P) marca un sitio para todos; con Mayús, un aviso de peligro. Si caes, en la taberna aparece «Volver con tu grupo» mientras tus amigos sigan dentro.');
-      p('Los arqueros y chamanes disparan a la casilla donde estás: ¡muévete y esquivarás el proyectil! Los jefes marcan en rojo el suelo antes de un gran golpe: sal de ahí.');
+      h('El combate por turnos');
+      p('Se explora en tiempo real, pero en cuanto un monstruo te ve se para el tiempo: todos tiran iniciativa (d20 + Destreza) y se juega por turnos, uno detrás de otro. Arriba ves el orden; el aro dorado marca quién juega.');
+      p('En tu turno tienes 👣 movimiento (unas 6 casillas, iluminadas en el suelo), ⚔️ una acción (atacar, una habilidad, 🛡️ defenderse o 💚 reanimar a un compañero caído), ✚ una acción adicional (pociones, pergaminos y bufos) y ↺ una reacción por ronda: si un enemigo sale de tu alcance, le das un ataque de oportunidad (y ellos a ti). Tienes 30 segundos; F o «Terminar turno» pasa al siguiente.');
+      p('Aturdido o congelado: pierdes tu siguiente turno. Ralentizado: la mitad de movimiento. Los jefes marcan en rojo el suelo y el golpe cae al empezar su siguiente turno: ¡aprovecha el tuyo para salir de ahí! Los duelos de la arena también son por turnos.');
       h('El mundo abierto');
       p('🗺️ Mundo: Brumaverde está en el centro y, cuanto más lejos, más nivel hace falta: valle (1-3), bosque (3-6), ciénaga (6-10), yermo (10-14), picos helados (14-19) y erial de ceniza (19-26). Si entras en una zona muy por encima de tu nivel, la corrupción te irá quitando vida.');
       p('Habla con la gente (clic sobre ellos): los que tienen ❗ te dan misiones y los que tienen ❓ esperan que se las entregues. Las piedras de viaje 🗿 de cada campamento te llevan de una a otra. M abre el mapa grande.');
@@ -896,10 +898,10 @@
       p('🤺 Duelos: desde la lista de héroes, reta a un amigo en el sótano de Alfonso, con una apuesta de oro si queréis. El ganador se lo lleva todo.');
       p('Espacio (o 🤸): voltereta de dos casillas que te hace invulnerable un instante. ⚙️ Menú → Gráficos: calidad, clima y temblor de cámara.');
       h('Subir de nivel');
-      p(`Empiezas con ${RULES.POINTS_START} puntos para repartir en el editor. Cada nivel da 1 punto más, y cada 5 niveles uno extra (hasta el nivel ${RULES.MAX_LEVEL}). Aparecerá un icono rojo bajo tu retrato: púlsalo para repartirlos. Ninguna característica pasa de ${RULES.STAT_MAX} de forma natural (raza + clase + puntos); el equipo sí puede subirla más.`);
+      p(`Empiezas con ${RULES.POINTS_START} puntos para repartir en el editor. Cada nivel da 1 punto más, y cada 5 niveles uno extra (hasta el nivel ${RULES.MAX_LEVEL}). Aparecerá un icono rojo bajo tu retrato: púlsalo para repartirlos. Ninguna característica pasa de ${RULES.STAT_MAX} de forma natural (base + clase + puntos); el equipo sí puede subirla más.`);
     } else if (guideTab === 'clases') {
-      h('Razas');
-      for (const id of RULES.RACE_IDS) { const R = RULES.RACES[id]; p(`${R.name}: ${Object.entries(R.mods).map(([s, v]) => `${v > 0 ? '+' : ''}${v} ${RULES.statName(s)}`).join(', ')}. ${R.perkText}`); }
+      h('Humanos');
+      p(`Todos los héroes son humanos (${RULES.RACES.human.perkText.toLowerCase()}). Lo que os distingue es la clase y el aspecto: en el editor eliges sexo, peinado, piel, pelo, complexión, altura, barba, cejas, marcas, pintura y pendientes.`);
       for (const [id, k] of Object.entries(RULES.CLASSES)) {
         h(`${k.icon} ${k.name}`);
         p(`${k.desc} Característica principal: ${RULES.statName(k.main)} (${Object.entries(k.base).map(([s, v]) => `+${v} ${RULES.statName(s)}`).join(', ')}). Prefiere armaduras de ${k.armor.map((a) => RULES.ARMOR_TYPES[a].toLowerCase()).join(', ')} y ${k.weapons.map((w) => (RULES.WEAPONS[w] || RULES.OFFHANDS[w]).name.toLowerCase()).join(', ')}; puede llevar cualquier cosa si cumple los requisitos.`);

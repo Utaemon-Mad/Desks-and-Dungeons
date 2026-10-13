@@ -47,9 +47,10 @@
     if (kind === 'chain') { rough = 0.5; metal = 0.75; }
     if (kind === 'leather') rough = 0.7;
     if (kind === 'bone') rough = 0.6;
+    if (kind === 'lacquer') { rough = 0.22; metal = 0.15; } // laca japonesa: brillante pero sin ser metal
     if (kind === 'glow') { emissive = color; ei = 1.6; rough = 0.4; }
     // rareza: los mágicos brillan en azul, los raros en amarillo, los únicos se doran
-    const metalish = kind === 'metal' || kind === 'shiny' || kind === 'chain' || kind === 'trim';
+    const metalish = kind === 'metal' || kind === 'shiny' || kind === 'chain' || kind === 'trim' || kind === 'lacquer';
     if (kind === 'trim') { rough = 0.3; metal = 0.8; if (setTrim) c = new THREE.Color(setTrim); }
     if (metalish && rarity === 'magico') { emissive = '#3050ff'; ei = 0.18; }
     if (metalish && rarity === 'raro') { emissive = '#ffcc33'; ei = 0.14; if (kind === 'trim') c = new THREE.Color(C.gold); }
@@ -69,6 +70,9 @@
   const box = () => G('box', () => new (T().BoxGeometry)(1, 1, 1));
   const cone = (seg = 10) => G('k' + seg, () => new (T().ConeGeometry)(1, 1, seg));
   const torus = (r, t, ts = 24) => G(`t${r},${t},${ts}`, () => new (T().TorusGeometry)(r, t, 8, ts));
+  // trozos de toro y de cilindro (costillas del kabuto y shikoro, que dejan la cara libre)
+  const arc = (t, a0, al, ts = 20) => G(`ta${t},${a0},${al}`, () => new (T().TorusGeometry)(1, t, 6, ts, al).rotateZ(a0));
+  const cylArc = (rt, rb, gap) => G(`ca${rt},${rb},${gap}`, () => new (T().CylinderGeometry)(rt, rb, 1, 22, 1, true, gap, Math.PI * 2 - gap * 2));
   // media caja redondeada (peto y espaldar): una esfera estirada hacia las esquinas para abrazar el torso
   const shell = (backSide) => G('shell' + (backSide ? 'b' : 'f'), () => {
     const g = new (T().SphereGeometry)(1, 28, 18, backSide ? Math.PI : 0, Math.PI, 0, Math.PI);
@@ -93,6 +97,16 @@
     const p = g.attributes.position, idx = g.index.array, keep = [];
     const face = new THREE.Vector3(0, -0.1, 1).normalize(), v = new THREE.Vector3();
     const inside = (i) => v.set(p.getX(i), p.getY(i), p.getZ(i)).normalize().dot(face) > Math.cos(ang);
+    for (let i = 0; i < idx.length; i += 3) if (inside(idx[i]) && inside(idx[i + 1]) && inside(idx[i + 2])) keep.push(idx[i], idx[i + 1], idx[i + 2]);
+    g.setIndex(keep);
+    return g;
+  });
+  // menpō: la mitad de abajo de la cara (de la nariz a la barbilla)
+  const maskLowGeo = () => G('maskLow', () => {
+    const THREE = T(), g = new THREE.SphereGeometry(1, 28, 18);
+    const p = g.attributes.position, idx = g.index.array, keep = [];
+    const face = new THREE.Vector3(0, -0.45, 1).normalize(), v = new THREE.Vector3();
+    const inside = (i) => { v.set(p.getX(i), p.getY(i), p.getZ(i)); return v.y < -0.12 && v.clone().normalize().dot(face) > Math.cos(0.85); };
     for (let i = 0; i < idx.length; i += 3) if (inside(idx[i]) && inside(idx[i + 1]) && inside(idx[i + 2])) keep.push(idx[i], idx[i + 1], idx[i + 2]);
     g.setIndex(keep);
     return g;
@@ -156,17 +170,18 @@
     const bones = {};
     P.model.traverse((c) => { if (c.isBone) bones[c.name] = c; });
     rootObj.updateMatrixWorld(true);
-    // medidas del cuerpo y de la cabeza (en reposo)
+    // medidas del cuerpo y de la cabeza (en reposo), con la malla ya deformada por el esqueleto: así cuentan la
+    // cabeza más pequeña y el tronco más largo de las proporciones humanas (humanize, en models.js)
     let body = null;
     P.model.traverse((c) => { if (c.isSkinnedMesh && /_Body$/.test(c.name)) body = c; });
-    const bb = body ? new THREE.Box3().setFromObject(body) : new THREE.Box3(new THREE.Vector3(-0.18, 0.17, -0.16), new THREE.Vector3(0.18, 0.59, 0.16));
+    const bb = body ? new THREE.Box3().setFromObject(body, true) : new THREE.Box3(new THREE.Vector3(-0.18, 0.17, -0.16), new THREE.Vector3(0.18, 0.59, 0.16));
     const hw = (bb.max.x - bb.min.x) / 2, hd = (bb.max.z - bb.min.z) / 2;
-    const hb = P.headMesh ? new THREE.Box3().setFromObject(P.headMesh) : new THREE.Box3(new THREE.Vector3(-0.24, 0.54, -0.21), new THREE.Vector3(0.24, 1.02, 0.23));
+    const hb = P.headMesh ? new THREE.Box3().setFromObject(P.headMesh, true) : new THREE.Box3(new THREE.Vector3(-0.24, 0.54, -0.21), new THREE.Vector3(0.24, 1.02, 0.23));
     const hc = hb.getCenter(new THREE.Vector3()), hr = (hb.max.x - hb.min.x) / 2;
     const groups = new Map();
     const tmp = new THREE.Object3D();
     // pone una copia de la geometría g en (x,y,z) con giro (rx,ry,rz) y escala (sx,sy,sz), pegada al hueso
-    // zoom: agranda las piezas alrededor de un punto (guantes y botas, que en estos cuerpos cabezones se verían diminutos)
+    // zoom: agranda un poco las piezas alrededor de un punto (guantes y botas, para que se lean bien desde lejos)
     let zoom = null;
     const put = (bone, material, g, x, y, z, rx = 0, ry = 0, rz = 0, sx = 1, sy = sx, sz = sx) => {
       if (!bones[bone]) return;
@@ -180,6 +195,31 @@
       groups.get(key).list.push(gg.applyMatrix4(tmp.matrix));
     };
     const both = (fn) => { fn(1, 'l'); fn(-1, 'r'); };
+    // giro de una placa colgada alrededor de la cintura: mira hacia fuera (ángulo th) y se abre por abajo (tilt)
+    const qa = new THREE.Quaternion(), qb = new THREE.Quaternion(), eu = new THREE.Euler();
+    const around = (th, tilt) => {
+      qa.setFromAxisAngle(new THREE.Vector3(Math.cos(th), 0, -Math.sin(th)), tilt).multiply(qb.setFromAxisAngle(new THREE.Vector3(0, 1, 0), th));
+      eu.setFromQuaternion(qa); return [eu.x, eu.y, eu.z];
+    };
+    // grosor de brazos y piernas (malla ya deformada) para que mangas y quijotes abracen la extremidad
+    const limbR = {};
+    P.model.traverse((c) => {
+      if (!c.isSkinnedMesh) return;
+      const m = /_(Arm|Leg)(Left|Right)$/.exec(c.name);
+      if (!m) return;
+      const b3 = new THREE.Box3().setFromObject(c, true);
+      limbR[m[1].toLowerCase()] = m[1] === 'Arm' ? (b3.max.z - b3.min.z) / 2 : Math.min(b3.max.x - b3.min.x, b3.max.z - b3.min.z) / 2;
+    });
+    // tubo que va de un hueso al siguiente (de la articulación a, hasta una fracción del camino a b), pegado al primero
+    const up = new THREE.Vector3(0, 1, 0), qq = new THREE.Quaternion(), ee = new THREE.Euler();
+    const tube = (bone, next, m, r0, r1, from = 0, to = 1, seg = 14) => {
+      if (!bones[bone] || !bones[next]) return;
+      const a = bones[bone].getWorldPosition(new THREE.Vector3()), b = bones[next].getWorldPosition(new THREE.Vector3());
+      const d = b.clone().sub(a), len = d.length() * (to - from);
+      const mid = a.clone().addScaledVector(d, (from + to) / 2);
+      ee.setFromQuaternion(qq.setFromUnitVectors(up, d.normalize()));
+      put(bone, m, cyl(r1, r0, 1, seg, true), mid.x, mid.y, mid.z, ee.x, ee.y, ee.z, 1, len, 1);
+    };
     const rar = (slot) => gear[slot + 'R'];
     const setTrim = o.setTrim || null;
 
@@ -213,6 +253,38 @@
         if (p === 'collar') put('chest', mat('cloth', sc.cloth), cyl(1, 0.8, 1, 20, true), 0, bb.max.y + 0.015, -0.01, -0.2, 0, 0, hw * 0.62, 0.07, hd * 0.68);
         if (p === 'trimNeck') put('chest', trim, torus(1, 0.012, 28), 0, bb.max.y - 0.03, 0.005, Math.PI / 2, 0, 0, hw * 0.6, hd * 0.66, 1);
         if (p === 'runes' && sc.glow) { const gm = mat('glow', sc.glow); for (const [x, y] of [[0, 0.02], [-hw * 0.45, -0.05], [hw * 0.45, -0.05]]) put('chest', gm, box(), x, cy + y, Math.sqrt(Math.max(0, 1 - (x / (hw * 1.03)) ** 2)) * hd * 1.09 + 0.004, 0, 0, Math.PI / 4, 0.022, 0.022, 0.004); }
+        // ---- samurái: dō lacado con sus lamas atadas, sode (hombreras de placas), kusazuri (faldón) y mon ----
+        if (p === 'doBands') {
+          const lac = mat('lacquer', sc.cloth, r), lace = mat('cloth', sc.trim);
+          const [a, b, c] = fr();
+          put('chest', lac, front, 0, cy + 0.02, 0.005, 0, 0, 0, a, b, c + 0.01); put('chest', lac, back, 0, cy + 0.02, -0.005, 0, 0, 0, a, b, c);
+          for (let i = 0; i < 5; i++) put('chest', lace, torus(1, 0.007, 36), 0, cy - 0.09 + i * 0.042, 0, Math.PI / 2, 0, 0, hw * (1.05 - (i === 4 ? 0.06 : 0)), hd * 1.13, 1);
+          for (const x of [-0.5, -0.17, 0.17, 0.5]) put('chest', lace, box(), x * hw, cy - 0.01, Math.sqrt(Math.max(0, 1 - (x * 1.0) ** 2)) * hd * 1.1, 0, x * 0.9, 0, 0.012, 0.17, 0.008);
+        }
+        if (p === 'sode' || p === 'sodeBig' || p === 'sodeSmall') both((sx, s) => {
+          const A = bones['upperarm' + s], B = bones['lowerarm' + s];
+          if (!A || !B) return;
+          const a = A.getWorldPosition(new THREE.Vector3()), b = B.getWorldPosition(new THREE.Vector3());
+          const n = p === 'sodeBig' ? 5 : p === 'sodeSmall' ? 3 : 4, wz = p === 'sodeBig' ? 0.19 : p === 'sodeSmall' ? 0.12 : 0.15;
+          const lac = mat('lacquer', sc.cloth, r), lace = mat('cloth', sc.trim), ar = (limbR.arm || 0.05);
+          // en reposo el brazo está en cruz: las lamas van sobre él y, al bajar el brazo, cuelgan por fuera
+          for (let i = 0; i < n; i++) {
+            const k = 0.05 + i * 0.16, x = a.x + (b.x - a.x) * k, y = a.y + (b.y - a.y) * k + ar * 1.45 - i * 0.004;
+            put('upperarm' + s, lac, box(), x, y, a.z, 0, 0, sx * 0.18, 0.05, 0.012, wz);
+            put('upperarm' + s, lace, box(), x + sx * 0.012, y + 0.007, a.z, 0, 0, sx * 0.18, 0.006, 0.004, wz * 0.98);
+          }
+        });
+        if (p === 'kusazuri') {
+          const lac = mat('lacquer', sc.cloth, r), lace = mat('cloth', sc.trim);
+          for (let i = 0; i < 8; i++) {
+            const th = i / 8 * Math.PI * 2, sxn = Math.sin(th), bone = Math.abs(sxn) > 0.5 ? (sxn > 0 ? 'upperlegl' : 'upperlegr') : 'hips';
+            const R = 1.12, x = sxn * hw * R, z = Math.cos(th) * hd * R * 1.05, y = bb.min.y - 0.06;
+            const [rx, ry, rz] = around(th, -0.22);
+            put(bone, lac, box(), x, y, z, rx, ry, rz, hw * 0.62, 0.14, 0.012);
+            for (const dy of [-0.045, 0, 0.045]) put(bone, lace, box(), x + sxn * 0.007, y + dy, z + Math.cos(th) * 0.007, rx, ry, rz, hw * 0.6, 0.007, 0.006);
+          }
+        }
+        if (p === 'mon') { put('chest', trim, torus(0.04, 0.008), 0, cy + 0.05, hd * 1.15, 0, 0, 0); put('chest', trim, sphere(10, 8), 0, cy + 0.05, hd * 1.14, 0, 0, 0, 0.022, 0.022, 0.008); }
         // hombreras (pegadas al brazo para que acompañen el movimiento)
         const pad = (sx, s, m, k, extra) => {
           const x = sx * (hw * 0.95), y = bb.max.y - 0.04;
@@ -229,6 +301,12 @@
         if (p === 'pauldronSpike') both((sx, s) => pad(sx, s, metal, 1.25, (x, y) => { for (const [dz, h] of [[-0.05, 0.08], [0, 0.12], [0.05, 0.08]]) put('upperarm' + s, metal, cone(), x + sx * 0.03, y + 0.07 + h * 0.3, dz, 0, 0, -sx * 0.35, 0.018, h, 0.018); }));
         if (p === 'pauldronWing') both((sx, s) => pad(sx, s, metal, 1.3, (x, y) => { put('upperarm' + s, trim, torus(0.11, 0.01, 28), x + sx * 0.01, y - 0.005, 0, Math.PI / 2, 0, -sx * 0.55); put('upperarm' + s, metal, wingGeo(), x + sx * 0.02, y + 0.02, -0.03, 0, sx > 0 ? 0 : Math.PI, -sx * 0.2, 0.9); }));
       }
+      // brazos: las corazas llevan brazales de placas y las cotas, mangas de malla (hasta el codo)
+      const ar = (limbR.arm || 0.05) * 1.18;
+      const metalChest = sc.parts.some((p) => p === 'breast' || p === 'carapace');
+      if (sc.parts.includes('doBands')) both((sx, s) => tube('upperarm' + s, 'lowerarm' + s, mat('cloth', sc.trim), ar * 0.95, ar * 0.9, 0.1, 1.0));
+      if (metalChest || sc.parts.includes('mail')) both((sx, s) => tube('upperarm' + s, 'lowerarm' + s, metalChest ? metal : chain, ar, ar * 0.92, 0.1, 1.02));
+      if (metalChest) both((sx, s) => tube('lowerarm' + s, 'wrist' + s, metal, ar * 0.94, ar * 0.86, 0.05, 0.6));
       if (sc.glow && (sc.parts.includes('breast') || sc.parts.includes('collar'))) put('chest', mat('glow', sc.glow), sphere(10, 8), 0, cy + 0.04, hd * 1.16, 0, 0, 0, 0.018);
     }
 
@@ -240,9 +318,34 @@
       const chain = mat('chain', sh.cloth || C.chain, r), boneM = mat('bone', C.bone), blackM = mat('cloth', '#0a0808');
       const R = hr * 1.08, y0 = hc.y + 0.01, z0 = hc.z;
       for (const p of sh.parts) {
+        // ---- samurái: kabuto con costillas y shikoro (cubrenuca en capas), kuwagata (cuernos dorados), menpō, hachimaki y jingasa ----
+        if (p === 'kabuto') {
+          const lac = mat('lacquer', sh.metal || '#1a1a1e', r), lace = mat('cloth', sh.cloth || '#2a4a9a');
+          put('head', lac, sphere(24, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), 0, y0 + 0.01, z0, 0, 0, 0, R * 1.02, R * 0.98, R * 1.02);
+          for (let i = 0; i < 6; i++) put('head', trim, arc(0.012, 0, Math.PI), 0, y0 + 0.01, z0, 0, i / 6 * Math.PI, 0, R * 1.03, R * 0.99, R * 1.03);
+          put('head', trim, cyl(0.02, 0.03, 0.02, 12), 0, y0 + R * 0.99, z0);
+          for (let i = 0; i < 3; i++) {
+            put('head', lac, cylArc(1, 1.18, 0.95), 0, y0 - 0.01 - i * 0.045, z0 - 0.01, 0, 0, 0, R * (1.06 + i * 0.1), 0.05, R * (1.06 + i * 0.1));
+            put('head', lace, cylArc(1, 1, 0.95), 0, y0 - 0.032 - i * 0.045, z0 - 0.01, 0, 0, 0, R * (1.14 + i * 0.1), 0.006, R * (1.14 + i * 0.1));
+          }
+          for (const sx of [-1, 1]) put('head', lac, box(), sx * Math.sin(0.95) * R * 1.12, y0 - 0.015, z0 + Math.cos(0.95) * R * 1.12, 0, sx * 1.1, sx * 0.2, 0.012, 0.07, 0.06);
+          put('head', lac, box(), 0, y0 + 0.01, z0 + R * 1.0, 0.25, 0, 0, R * 1.5, 0.012, 0.06);
+        }
+        if (p === 'kuwagata') { for (const sx of [-1, 1]) put('head', trim, box(), sx * 0.045, y0 + R * 0.62, z0 + R * 0.96, 0.15, 0, -sx * 0.32, 0.016, R * 1.15, 0.008); put('head', sh.glow ? mat('glow', sh.glow) : trim, sphere(12, 8), 0, y0 + R * 0.24, z0 + R * 1.03, 0, 0, 0, 0.026, 0.026, 0.01); }
+        if (p === 'menpo') {
+          put('head', mat('lacquer', '#7a1414', r), maskLowGeo(), 0, y0, z0 + 0.008, 0, 0, 0, R * 1.04, R * 1.04, R * 1.08);
+          for (const sx of [-1, 1]) put('head', mat('cloth', '#e8e0d0'), box(), sx * 0.03, y0 - R * 0.42, z0 + R * 1.06, 0, 0, sx * 0.35, 0.05, 0.01, 0.01);
+        }
+        if (p === 'hachimaki') {
+          const band = mat('cloth', sh.cloth || '#eeeeee');
+          put('head', band, torus(1, 0.016, 32), 0, y0 + 0.03, z0, Math.PI / 2 - 0.08, 0, 0, R * 1.0, R * 1.02, 1);
+          put('head', mat('cloth', sh.trim || '#c8102a'), sphere(10, 8), 0, y0 + 0.04, z0 + R * 1.01, 0, 0, 0, 0.02, 0.02, 0.006);
+          for (const sx of [-1, 1]) put('head', band, box(), sx * 0.03, y0 - 0.04, z0 - R * 1.02, 0.35, 0, sx * 0.25, 0.02, 0.12, 0.006);
+        }
+        if (p === 'jingasa') { put('head', mat('lacquer', sh.metal || '#2a2018', r), cone(24), 0, y0 + R * 0.72, z0, 0, 0, 0, R * 2.0, R * 0.55, R * 2.0); put('head', trim, torus(1, 0.01, 32), 0, y0 + R * 0.46, z0, Math.PI / 2, 0, 0, R * 1.95, R * 1.95, 1); put('head', mat('cloth', sh.cloth || '#c8102a'), sphere(10, 8), 0, y0 + R * 1.0, z0, 0, 0, 0, 0.022); }
         if (p === 'dome') put('head', metal, sphere(24, 12, 0, Math.PI * 2, 0, Math.PI * 0.5), 0, y0, z0, 0, 0, 0, R, R * 1.02, R);
-        if (p === 'nasal') put('head', metal, box(), 0, y0 - 0.05, z0 + R * 0.98, -0.08, 0, 0, 0.035, 0.16, 0.025);
-        if (p === 'cheeks') for (const sx of [-1, 1]) put('head', metal, box(), sx * R * 0.72, y0 - 0.09, z0 + R * 0.55, 0, sx * 0.6, 0, 0.03, 0.16, 0.12);
+        if (p === 'nasal') put('head', metal, box(), 0, y0 - R * 0.2, z0 + R * 0.95, -0.08, 0, 0, R * 0.09, R * 0.6, R * 0.06);
+        if (p === 'cheeks') for (const sx of [-1, 1]) put('head', metal, box(), sx * R * 0.86, y0 - R * 0.32, z0 + R * 0.32, 0.1, sx * 0.75, 0, R * 0.09, R * 0.62, R * 0.5);
         if (p === 'greatHelm') { put('head', metal, cyl(1, 1.03, 1, 24), 0, y0 - 0.04, z0, 0, 0, 0, R * 1.02, 0.44, R * 1.02); put('head', metal, sphere(24, 8, 0, Math.PI * 2, 0, Math.PI * 0.5), 0, y0 + 0.18, z0, 0, 0, 0, R * 1.02, 0.08, R * 1.02); put('head', blackM, box(), 0, y0 - 0.06, z0 + R * 1.02, 0, 0, 0, R * 1.3, 0.025, 0.01); put('head', trim, box(), 0, y0 - 0.02, z0 + R * 1.03, 0, 0, 0, 0.03, 0.3, 0.012); for (let i = -2; i <= 2; i++) put('head', blackM, sphere(6, 4), i * 0.035, y0 - 0.15, z0 + R * 1.02, 0, 0, 0, 0.008); }
         if (p === 'wings') for (const sx of [-1, 1]) put('head', trim, wingGeo(), sx * R * 0.95, y0 + 0.02, z0 - 0.02, 0, sx > 0 ? -0.3 : Math.PI + 0.3, -sx * 0.15, 1.1);
         if (p === 'horns') for (const sx of [-1, 1]) put('head', boneM, horn(0.28, 0.04, 2.2), sx * R * 0.85, y0 + 0.06, z0, 0, sx * 1.4, -sx * 0.6);
@@ -283,9 +386,16 @@
         const wp = W.getWorldPosition(new THREE.Vector3()), hp = H.getWorldPosition(new THREE.Vector3());
         const cx = (wp.x + bones['lowerarm' + s].getWorldPosition(new THREE.Vector3()).x) / 2;
         const lowerB = 'lowerarm' + s, handB = 'hand' + s;
-        zoom = [wp.x, wp.y, wp.z, 1.4];
+        zoom = [wp.x, wp.y, wp.z, 1.12];
         const cuff = (m, len, rad, flare = 1) => put(lowerB, m, cyl(rad * flare, rad, len, 16), wp.x - sx * len / 2 + sx * 0.005, wp.y, wp.z, 0, 0, sx * Math.PI / 2);
         for (const p of sg.parts) {
+          if (p === 'kote') {
+            // manga de tela con placas lacadas por encima del antebrazo y la mano
+            const lac = mat('lacquer', sg.metal || '#1a1a1e', r);
+            cuff(cloth, 0.13, 0.05, 1.08);
+            for (let i = 0; i < 3; i++) put(lowerB, lac, box(), wp.x - sx * (0.03 + i * 0.04), wp.y + 0.046, wp.z, 0, 0, 0, 0.034, 0.01, 0.05);
+            put(lowerB, trim, box(), wp.x - sx * 0.005, wp.y + 0.04, wp.z, 0, 0, 0, 0.008, 0.012, 0.055);
+          }
           if (p === 'wraps') for (let i = 0; i < 3; i++) put(lowerB, cloth, torus(0.042, 0.008, 16), wp.x - sx * i * 0.022, wp.y, wp.z, 0, Math.PI / 2, 0.3);
           if (p === 'wrapsLong') for (let i = 3; i < 6; i++) put(lowerB, cloth, torus(0.045, 0.008, 16), wp.x - sx * i * 0.022, wp.y, wp.z, 0, Math.PI / 2, -0.3);
           if (p === 'cuffCloth') cuff(cloth, 0.06, 0.048, 1.15);
@@ -320,8 +430,29 @@
         const lp = L.getWorldPosition(new THREE.Vector3()), fp = F.getWorldPosition(new THREE.Vector3());
         const legB = 'lowerleg' + s, footB = 'foot' + s;
         const shinY = (lp.y + fp.y) / 2;
-        zoom = [fp.x, 0, fp.z, 1.35];
+        const lr = (limbR.leg || 0.05) * 1.12;
+        // muslos: las grebas de placas llevan quijote y las de malla, calzas de malla (del faldón a la rodilla)
+        if (sb.parts.includes('greave')) tube('upperleg' + s, legB, metal, lr * 1.12, lr, 0.3, 0.98);
+        else if (sb.parts.includes('chainLeg')) tube('upperleg' + s, legB, chain, lr * 1.1, lr * 0.98, 0.25, 1);
+        zoom = [fp.x, 0, fp.z, 1.1];
         for (const p of sb.parts) {
+          if (p === 'suneate') {
+            // espinilleras de tablillas lacadas sobre la polaina de tela
+            const lac = mat('lacquer', sb.metal || '#1a1a1e', r), h = lp.y - fp.y;
+            put(legB, cloth, cyl(0.05, 0.045, h, 14), lp.x, shinY, lp.z, 0, 0, 0);
+            for (const k of [-1, 0, 1]) put(legB, lac, box(), lp.x + k * 0.026, shinY + 0.005, lp.z + 0.05 - Math.abs(k) * 0.012, 0, k * 0.5, 0, 0.022, h * 0.82, 0.008);
+            put(legB, trim, torus(0.054, 0.005, 16), lp.x, lp.y - 0.02, lp.z, Math.PI / 2, 0, 0);
+          }
+          if (p === 'haidate') {
+            const lac = mat('lacquer', sb.metal || '#1a1a1e', r), U = bones['upperleg' + s];
+            if (U) {
+              const up = U.getWorldPosition(new THREE.Vector3()), my = (up.y + lp.y) / 2 + 0.02;
+              put('upperleg' + s, mat('cloth', sb.cloth || '#2a2a3a'), box(), (up.x + lp.x) / 2, my, lp.z + lr * 0.95, -0.08, 0, 0, lr * 2.3, (up.y - lp.y) * 0.62, 0.01);
+              for (let i = 0; i < 3; i++) for (let j = -2; j <= 2; j++) put('upperleg' + s, lac, box(), (up.x + lp.x) / 2 + j * lr * 0.42, my + 0.04 - i * 0.04, lp.z + lr * 0.95 + 0.008, -0.08, 0, 0, lr * 0.36, 0.03, 0.006);
+            }
+          }
+          if (p === 'tabi') put(footB, mat('cloth', '#eceae4'), sphere(14, 10, 0, Math.PI * 2, 0, Math.PI / 2), fp.x, 0.0, fp.z + 0.035, 0, 0, 0, 0.05, 0.05, 0.09);
+          if (p === 'waraji') { put(footB, mat('leather', '#c8a868'), box(), fp.x, 0.006, fp.z + 0.035, 0, 0, 0, 0.088, 0.012, 0.155); for (const dz of [0.0, 0.05]) put(footB, mat('cloth', sb.trim || '#2a4a9a'), box(), fp.x, 0.028, fp.z + dz, 0, 0, 0, 0.095, 0.01, 0.012); }
           if (p === 'sandal') { put(footB, leather, box(), fp.x, 0.008, fp.z + 0.035, 0, 0, 0, 0.085, 0.014, 0.15); for (const dz of [0.0, 0.05]) put(footB, mat('leather', '#3a2414'), box(), fp.x, 0.03, fp.z + dz, 0, 0, 0, 0.09, 0.012, 0.014); }
           if (p === 'slipper') put(footB, cloth, sphere(14, 10, 0, Math.PI * 2, 0, Math.PI / 2), fp.x, 0.0, fp.z + 0.035, 0, 0, 0, 0.05, 0.05, 0.09);
           if (p === 'curlToe') put(footB, cloth, horn(0.06, 0.012, 2.5), fp.x, 0.02, fp.z + 0.12, -0.3, 0, 0);
@@ -333,7 +464,7 @@
           if (p === 'scalesLeg') { const sm = mat('metal', sb.scale || C.steel, r); for (let i = 0; i < 3; i++) put(legB, sm, sphere(10, 6, 0, Math.PI * 2, 0, Math.PI / 2), lp.x, lp.y - 0.015 - i * 0.022, lp.z + 0.05, Math.PI / 2 + 0.4, 0, 0, 0.035, 0.02, 0.03); }
           if (p === 'chainLeg') put(legB, chain, cyl(0.053, 0.05, lp.y - fp.y, 14), lp.x, shinY + 0.01, lp.z, 0, 0, 0);
           if (p === 'greave') { put(legB, metal, sphere(16, 10, 0, Math.PI, 0, Math.PI), lp.x, shinY, lp.z + 0.004, 0, 0, 0, 0.055, 0.058, 0.062); put(legB, metal, cyl(0.05, 0.047, lp.y - fp.y, 14), lp.x, shinY, lp.z, 0, 0, 0); if (sb.trim) put(legB, trim, torus(0.054, 0.006, 16), lp.x, fp.y + 0.01, lp.z, Math.PI / 2, 0, 0); if (sb.glow) put(legB, mat('glow', sb.glow), box(), lp.x, shinY, lp.z + 0.064, 0, 0, 0, 0.012, 0.04, 0.004); }
-          if (p === 'kneeCop') put(legB, metal, sphere(14, 10), lp.x, lp.y + 0.005, lp.z + 0.04, 0, 0, 0, 0.036, 0.032, 0.024);
+          if (p === 'kneeCop') put(legB, metal, sphere(14, 10), lp.x, lp.y, lp.z + lr * 0.55, 0, 0, 0, lr * 0.75, lr * 0.7, lr * 0.55);
           if (p === 'kneeSpike') put(legB, metal, cone(6), lp.x, lp.y + 0.01, lp.z + 0.07, Math.PI / 2, 0, 0, 0.012, 0.045, 0.012);
           if (p === 'sabaton') { put(footB, metal, box(), fp.x, 0.024, fp.z + 0.04, 0, 0, 0, 0.09, 0.048, 0.155); for (let i = 0; i < 3; i++) put(footB, metal, box(), fp.x, 0.05, fp.z + 0.04 + i * 0.03, 0.2, 0, 0, 0.085, 0.01, 0.028); }
           if (p === 'layered') for (let i = 0; i < 3; i++) put(legB, metal, torus(0.053, 0.006, 16), lp.x, fp.y + 0.015 + i * 0.022, lp.z, Math.PI / 2, 0, 0);
@@ -362,7 +493,7 @@
   // ¿Este casco tapa el pelo? (las diademas y coronas no)
   function coversHair(gear) {
     const sh = gear && spec('casco', gear);
-    return !!sh && !sh.parts.some((p) => p === 'circlet' || p === 'crown' || p === 'boneMask');
+    return !!sh && !sh.parts.some((p) => p === 'circlet' || p === 'crown' || p === 'boneMask' || p === 'hachimaki');
   }
 
   root.ARMOR3D = { build, chestStyle, coversHair, SPEC };

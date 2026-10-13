@@ -216,64 +216,64 @@
     brujo: 'mago', maga: 'mago', elfo: 'explorador', bardo: 'picaro',
   };
 
-  // Razas (lo que se ve; sus características están en las reglas)
-  const SPECIES = {
-    human:  { name: 'Humano', scale: 1 },
-    elf:    { name: 'Elfo', scale: 1.04, slim: 0.94 },
-    dwarf:  { name: 'Enano', scale: 0.84, wide: 1.16 },
-    orc:    { name: 'Orco', scale: 1.08, wide: 1.1 },
-    goblin: { name: 'Goblin', scale: 0.74, wide: 0.96 },
-  };
-  const LEGACY_SPECIES = { dragonborn: 'human', tiefling: 'human', halfling: 'human', gnome: 'dwarf', goliath: 'orc' };
-  // Tonos de piel: los humanos, elfos y enanos usan los cinco primeros; orcos y goblins, verdes y grises
-  const SKINS = ['#f6d3b3', '#e8b48a', '#c98a5e', '#8d5a3b', '#5c3a26', '#8aab62', '#6a8a4a', '#c0605a', '#8a4a8a', '#5a6ab8', '#a8aeb8', '#7e8692', '#a8b85a', '#6aa07a', '#f2e4d4'];
-  const SPECIES_SKINS = { elf: [14, 0, 1, 2, 3], orc: [5, 6, 10, 11, 3], goblin: [5, 6, 12, 13] };
-  const skinsFor = (species) => SPECIES_SKINS[species] || [0, 1, 2, 3, 4];
-  const HAIRS = ['#2b2018', '#6b4226', '#c4472d', '#e8c25a', '#d8d8d8', '#3a6fd8', '#d85aa8', '#8a8a8a', '#6a1a1a'];
-  // Sexo y peinado: cada peinado usa la cabeza de un modelo (y, si hace falta, una barba)
+  // Sólo hay humanos (las demás razas se quitaron: los personajes antiguos pasan a humanos). SPECIES se queda
+  // para el código que todavía mira look.species.
+  const SPECIES = { human: { name: 'Humano', scale: 1 } };
+  // Tonos de piel: los 15 primeros son de versiones anteriores (verdes y grises de orcos y goblins incluidos, que ya no se
+  // ofrecen); los humanos van de muy clara a muy oscura en HUMAN_SKINS
+  const SKINS = ['#f6d3b3', '#e8b48a', '#c98a5e', '#8d5a3b', '#5c3a26', '#8aab62', '#6a8a4a', '#c0605a', '#8a4a8a', '#5a6ab8', '#a8aeb8', '#7e8692', '#a8b85a', '#6aa07a', '#f2e4d4',
+    '#fde7d6', '#d9a27a', '#b5835a', '#a06a44', '#6e432b', '#3e2618'];
+  const HUMAN_SKINS = [15, 14, 0, 1, 16, 2, 17, 18, 3, 19, 4, 20];
+  const skinsFor = () => HUMAN_SKINS;
+  const HAIRS = ['#2b2018', '#6b4226', '#c4472d', '#e8c25a', '#d8d8d8', '#3a6fd8', '#d85aa8', '#8a8a8a', '#6a1a1a',
+    '#141110', '#4a3020', '#a0602a', '#b08850', '#f2e6c0', '#3a8a4a', '#7a3ab8'];
+  // orden de los colores de pelo en el editor: naturales primero, de oscuro a claro, y luego los teñidos
+  const HAIR_ORDER = [9, 0, 10, 1, 11, 2, 8, 12, 3, 13, 7, 4, 5, 14, 15, 6];
+  // Sexo y peinado: cada peinado usa la cabeza de un modelo; todos valen para los dos sexos
   const SEXES = { m: 'Hombre', f: 'Mujer' };
-  const HAIRSTYLES = {
-    m: [{ id: 'corto', name: 'Corto', head: 'Knight' }, { id: 'barba', name: 'Corto con barba', head: 'Knight', beard: true }, { id: 'calvo', name: 'Calvo con barba', head: 'Barbarian' }],
-    f: [{ id: 'melena', name: 'Melena', head: 'Rogue' }, { id: 'coleta', name: 'Coleta', head: 'Mage' }, { id: 'capucha', name: 'Capucha', head: 'Rogue_Hooded' }],
-  };
-  const hairstyle = (sex, hs) => (HAIRSTYLES[sex] || HAIRSTYLES.m).find((h) => h.id === hs) || (HAIRSTYLES[sex] || HAIRSTYLES.m)[0];
+  const HAIR_LIST = [
+    { id: 'corto', name: 'Corto', head: 'Knight' }, { id: 'melena', name: 'Melena', head: 'Rogue' }, { id: 'coleta', name: 'Coleta', head: 'Mage' },
+    { id: 'calvo', name: 'Rapado y barbudo', head: 'Barbarian' }, { id: 'capucha', name: 'Capucha', head: 'Rogue_Hooded' },
+  ];
+  const HAIRSTYLES = { m: HAIR_LIST, f: HAIR_LIST };
+  const HS_DEFAULT = { m: 'corto', f: 'melena' };
+  const hairstyle = (sex, hs) => HAIR_LIST.find((h) => h.id === hs) || HAIR_LIST.find((h) => h.id === HS_DEFAULT[sex === 'f' ? 'f' : 'm']);
 
-  // Normaliza el aspecto que llega de un cliente (o de una versión anterior del juego)
-  // Rasgos propios de los goblins (modelo de cabeza hecho a mano): cada opción es un índice de estas listas
-  const GOBLIN = {
-    head: { name: 'Cabeza', opts: ['Redonda', 'Alargada', 'Ancha', 'Pequeña'] },
-    ears: { name: 'Orejas', opts: ['Hoja larga', 'Murciélago', 'Caídas', 'Mordisqueadas', 'Cortas'] },
-    nose: { name: 'Nariz', opts: ['Ganchuda', 'Recta y larga', 'Respingona', 'Zanahoria', 'Aguja'] },
-    eyes: { name: 'Ojos', opts: ['Ámbar', 'Limón', 'Oro viejo', 'Azufre'] },
-    look: { name: 'Mirada', opts: ['Pícara', 'Despierta', 'Furiosa', 'Bizca', 'Dormilona'] },
-    teeth: { name: 'Dientes', opts: ['Colmillos', 'Sierra', 'Diente de oro', 'Mellado', 'Dientón'] },
-    hair: { name: 'Peinado', opts: ['Calvo', 'Cresta', 'Moño', 'Trenzas', 'Alborotado', 'Mechones', 'Coleta'] },
-    rings: { name: 'Pendientes', opts: ['Aros de oro', 'Aros de plata', 'Cascada', 'Rubí', 'Huesos', 'Aro en la nariz'] },
-    marks: { name: 'Marcas', opts: ['Ninguna', 'Verrugas', 'Pecas', 'Cicatriz', 'Pintura roja', 'Pintura azul'] },
-    build: { name: 'Complexión', opts: ['Flacucho', 'Normal', 'Rechoncho'] },
+  // Rasgos que se eligen en el editor: cada opción es un índice de estas listas (se guardan en look.feat)
+  const FEATURES = {
+    build: { name: 'Complexión', opts: ['Delgada', 'Normal', 'Atlética', 'Fornida', 'Corpulenta'] },
+    height: { name: 'Altura', opts: ['Baja', 'Media', 'Alta', 'Muy alta'] },
+    beard: { name: 'Barba', opts: ['Sin barba', 'Perilla', 'Bigote', 'Bigote y perilla', 'Barba corta', 'Barba poblada', 'Barba larga'] },
+    brows: { name: 'Cejas', opts: ['Las suyas', 'Pobladas', 'Muy pobladas'] },
+    marks: { name: 'Marcas', opts: ['Ninguna', 'Cicatriz', 'Pecas', 'Pintura de guerra', 'Tatuaje', 'Parche en el ojo'] },
+    paint: { name: 'Color de la pintura', opts: ['Rojo', 'Azul', 'Negro', 'Blanco', 'Ocre'] },
+    rings: { name: 'Pendientes', opts: ['Ninguno', 'Aro de oro', 'Aro de plata', 'Dos aros', 'Colmillo'] },
   };
-  const GOBLIN_KEYS = Object.keys(GOBLIN);
-  // valores de partida: los chicos con cresta y las chicas con trenzas
-  function goblinDefaults(sex) { return { head: 0, ears: 0, nose: 0, eyes: 0, look: 0, teeth: 0, hair: sex === 'f' ? 3 : 1, rings: 0, marks: 0, build: 1 }; }
-  function cleanGoblin(g, sex) {
-    const d = goblinDefaults(sex), out = {};
-    for (const k of GOBLIN_KEYS) { const v = g && g[k]; out[k] = Number.isInteger(v) && v >= 0 && v < GOBLIN[k].opts.length ? v : d[k]; }
+  const FEATURE_KEYS = Object.keys(FEATURES);
+  const PAINTS = ['#b8261c', '#2a5ab8', '#1a1614', '#ece6da', '#c08a2a'];
+  const BUILD_SCALE = [0.88, 1, 1.05, 1.12, 1.22];
+  const HEIGHT_SCALE = [0.93, 1, 1.06, 1.12];
+  function featDefaults() { return { build: 1, height: 1, beard: 0, brows: 0, marks: 0, paint: 0, rings: 0 }; }
+  function cleanFeat(f) {
+    const d = featDefaults(), out = {};
+    for (const k of FEATURE_KEYS) { const v = f && f[k]; out[k] = Number.isInteger(v) && v >= 0 && v < FEATURES[k].opts.length ? v : d[k]; }
     return out;
   }
 
+  // Normaliza el aspecto que llega de un cliente (o de una versión anterior del juego)
   function cleanLook(look) {
     look = look || {};
     let cls = Object.prototype.hasOwnProperty.call(CLASSES, look.cls) ? look.cls : LEGACY_CLASS[look.cls];
     if (!Object.prototype.hasOwnProperty.call(CLASSES, cls)) cls = 'guerrero';
-    let species = Object.prototype.hasOwnProperty.call(SPECIES, look.species) ? look.species : LEGACY_SPECIES[look.species];
-    if (!Object.prototype.hasOwnProperty.call(SPECIES, species)) species = 'human';
     const idx = (v, n) => (Number.isInteger(v) && v >= 0 && v < n ? v : 0);
     const sex = look.sex === 'f' ? 'f' : 'm';
-    const hs = hairstyle(sex, look.hs || (species === 'dwarf' && sex === 'm' ? 'barba' : null)).id;
-    const out = { cls, species, sex, hs, skin: idx(look.skin, SKINS.length), hair: idx(look.hair, HAIRS.length) };
-    if (!skinsFor(species).includes(out.skin)) out.skin = skinsFor(species)[0];
-    if (species === 'goblin') out.gob = cleanGoblin(look.gob, sex);
-    return out;
+    const feat = cleanFeat(look.feat);
+    // peinado de antes: «corto con barba» es el corto con barba poblada
+    if (!look.feat && look.hs === 'barba') feat.beard = 5;
+    const hs = hairstyle(sex, look.hs).id;
+    let skin = idx(look.skin, SKINS.length);
+    if (!HUMAN_SKINS.includes(skin)) skin = 2;
+    return { cls, species: 'human', sex, hs, skin, hair: idx(look.hair, HAIRS.length), feat };
   }
 
   // Los tres servidores (salas) del juego: cada uno con su taberna, su mundo y sus partidas.
@@ -287,7 +287,7 @@
   const SERVER_NAME_MAX = 20;
 
   const MAP = createMap();
-  Object.assign(MAP, { SERVERS, SERVER_NAME_MAX, createMap, defaultItems, sanitizeItems, MERCHANTS, merchantAt, CLASSES, LEGACY_CLASS, SPECIES, SKINS, SPECIES_SKINS, skinsFor, HAIRS, SEXES, HAIRSTYLES, hairstyle, cleanLook, GOBLIN, GOBLIN_KEYS, goblinDefaults, cleanGoblin });
+  Object.assign(MAP, { SERVERS, SERVER_NAME_MAX, createMap, defaultItems, sanitizeItems, MERCHANTS, merchantAt, CLASSES, LEGACY_CLASS, SPECIES, SKINS, HUMAN_SKINS, skinsFor, HAIRS, HAIR_ORDER, SEXES, HAIRSTYLES, HAIR_LIST, hairstyle, cleanLook, FEATURES, FEATURE_KEYS, PAINTS, BUILD_SCALE, HEIGHT_SCALE, featDefaults, cleanFeat });
 
   if (typeof module !== 'undefined' && module.exports) module.exports = MAP;
   else root.MAP = MAP;

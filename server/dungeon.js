@@ -74,12 +74,15 @@ class Instance {
       this.mod = AFFIXES[Math.floor(rnd() * AFFIXES.length)];
       this.modMf = 40;
     }
+    // combate por turnos (server/turns.js); hooks.turns === false lo deja en tiempo real
+    this.turns = hooks.turns !== undefined ? !!hooks.turns : process.env.DD_REALTIME !== '1';
+    this.enc = null; this.lag = 0;
     this.duel = def.duel || null;                     // arena: { a, b, bet, startAt }
     this.herbs = new Map((def.herbs || []).map((h) => [h.id, { ...h, readyAt: 0 }]));
     this.worldBoss = null;
-    this.nextEventAt = this.kind === 'world' ? Date.now() + (EVENT_MS || PROG.WORLD_EVENT.firstMs) : 0;
+    this.nextEventAt = this.kind === 'world' ? this.clock() + (EVENT_MS || PROG.WORLD_EVENT.firstMs) : 0;
     for (const n of this.npcs) this.blocked.add(n.y * this.w + n.x);
-    const now = Date.now();
+    const now = this.clock();
     for (const p of def.props || []) if (PROPS[p.k] && PROPS[p.k].b) this.blocked.add(p.y * this.w + p.x);
     // en las mazmorras generadas, alguno de los cofres normales es un mímico
     for (const c of def.chests || []) { const id = 'c' + ++this.seq; this.chests.set(id, { id, x: c.x, y: c.y, open: false, secret: c.secret || undefined, mimic: !c.secret && def.theme && this.kind === 'dungeon' && rnd() < 0.12 || undefined }); }
@@ -261,7 +264,7 @@ class Instance {
   // pueblos y campamentos: los monstruos no entran a por nadie
   inSafe(p) { return !!(this.def.safe && this.def.safe.some((z) => Math.max(Math.abs(p.x - z.x), Math.abs(p.y - z.y)) <= z.r)); }
   freeForPet(x, y) { return this.walkTile(x, y) && !this.enemyAt(x, y) && !this.chestAt(x, y); }
-  petAt(x, y) { for (const pt of this.pets.values()) if (pt.downUntil <= Date.now() && pt.x === x && pt.y === y) return pt; return null; }
+  petAt(x, y) { for (const pt of this.pets.values()) if (pt.downUntil <= this.clock() && pt.x === x && pt.y === y) return pt; return null; }
 
   tickPets(now) {
     for (const pet of this.pets.values()) {
@@ -335,11 +338,11 @@ class Instance {
   }
 
   hurtPet(pet, dmg, o = {}) {
-    if (pet.downUntil > Date.now()) return;
+    if (pet.downUntil > this.clock()) return;
     dmg = Math.max(1, Math.round(dmg * (o.magic ? 0.9 : 0.75)));
     pet.hp -= dmg;
     this.event({ e: 'hit', by: o.by || null, t: pet.id, dmg, kind: o.kind || 'melee' });
-    if (pet.hp <= 0) { pet.downUntil = Date.now() + 30000; this.event({ e: 'petdown', id: pet.id, owner: pet.owner, name: pet.name }); }
+    if (pet.hp <= 0) { pet.downUntil = this.clock() + 30000; this.event({ e: 'petdown', id: pet.id, owner: pet.owner, name: pet.name }); }
   }
 
   // ---------- Mundo: montura, charlas y viajes ----------
@@ -347,6 +350,7 @@ class Instance {
     const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p) return;
     if (this.kind !== 'world') return this.whisper(p, 'Sólo puedes montar en el mundo abierto.');
+    if (this.enc) return this.whisper(p, '⚔️ Ahora no: hay un combate en marcha.');
     const m = this.hooks.mountFor ? this.hooks.mountFor(p.user) : null;
     if (!m) return this.whisper(p, `Necesitas una montura (nivel ${RULES.MOUNT_LEVEL}, en el Establo de la taberna).`);
     p.mounted = !p.mounted;
@@ -359,6 +363,7 @@ class Instance {
     const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     const n = this.npcs.find((x) => x.id === npcId);
     if (!p || !n) return;
+    if (this.enc) return this.whisper(p, '⚔️ Ahora no: hay un combate en marcha.');
     p.kdir = null; p.target = null; p.pending = null;
     if (cheb(p, n) <= 2) { this.hooks.talk(p.user, n); return; }
     p.talkTo = npcId; p.goal = { x: n.x, y: n.y }; p.path = [];
@@ -385,12 +390,13 @@ class Instance {
     const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p) return;
     if (this.kind !== 'world') return this.whisper(p, 'Aquí no hay dónde pescar.');
+    if (this.enc) return this.whisper(p, '⚔️ Ahora no: hay un combate en marcha.');
     const w = this.waterNear(p);
     if (!w) return this.whisper(p, '🎣 Acércate a la orilla (agua, vado o ciénaga) para pescar.');
     if (p.fishing) return;
     p.mounted = false; p.path = []; p.goal = null; p.target = null; p.kdir = null;
     const zone = this.def.zones ? Number(this.def.zones[p.y * this.w + p.x]) || 0 : 0;
-    p.fishing = { biteAt: Date.now() + (2000 + rnd() * 3500) * FAST, bit: 0, zone, at: w };
+    p.fishing = { biteAt: this.clock() + (2000 + rnd() * 3500) * FAST, bit: 0, zone, at: w };
     p.dir = dirName(w.x - p.x, w.y - p.y);
     this.event({ e: 'fish', id: userId, x: w.x, y: w.y });
     this.whisper(p, '🎣 Lanzas el sedal… cuando pique, ¡tira! (pulsa otra vez)');
@@ -402,7 +408,7 @@ class Instance {
     p.fishing = null;
     this.event({ e: 'fishend', id: userId });
     if (!f.bit) return this.whisper(p, 'Demasiado pronto: el pez se asusta.');
-    if (Date.now() - f.bit > 1400) return this.whisper(p, 'Demasiado tarde: se ha escapado.');
+    if (this.clock() - f.bit > 1400) return this.whisper(p, 'Demasiado tarde: se ha escapado.');
     if (this.hooks.fish) this.hooks.fish(p.user, f.zone);
     this.event({ e: 'fx', kind: 'splash', x: f.at.x, y: f.at.y });
   }
@@ -410,14 +416,15 @@ class Instance {
     const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     const h = this.herbs.get(id);
     if (!p || !h) return;
-    if (h.readyAt > Date.now()) return this.whisper(p, 'Ya la han recogido. Volverá a crecer.');
+    if (this.enc) return this.whisper(p, '⚔️ Ahora no: hay un combate en marcha.');
+    if (h.readyAt > this.clock()) return this.whisper(p, 'Ya la han recogido. Volverá a crecer.');
     p.kdir = null; p.target = null; p.pending = null; p.fishing = null;
     if (cheb(p, h) <= 1) return this.takeHerb(p, h);
     p.gatherTo = id; p.goal = { x: h.x, y: h.y }; p.path = [];
   }
   takeHerb(p, h) {
     p.gatherTo = null; p.goal = null; p.path = [];
-    h.readyAt = Date.now() + 120000;
+    h.readyAt = this.clock() + 120000;
     this.event({ e: 'fx', kind: 'buff', x: h.x, y: h.y, color: '#7dff8a' });
     if (this.hooks.herb) this.hooks.herb(p.user, h.zone);
   }
@@ -426,7 +433,15 @@ class Instance {
   roll(userId, dx, dy) {
     const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p) return;
-    const now = Date.now();
+    if (this.enc) {
+      if (!this.spend(p, 'action', true)) return;
+      p.tb.action--; p.dodging = true;
+      this.event({ e: 'fx', kind: 'buff', x: p.x, y: p.y, color: '#7ad0ff' });
+      this.whisper(p, '🛡️ Te pones a la defensiva: hasta tu próximo turno es más fácil esquivar.');
+      this.privDirty(p); this.dirty = true;
+      return;
+    }
+    const now = this.clock();
     if (now < p.rollAt || now < p.stunUntil || (this.duel && now < this.duel.startAt)) return;
     const c = p.user.combat;
     if (c.en < 8) return this.whisper(p, 'No te queda energía para esquivar.');
@@ -529,6 +544,7 @@ class Instance {
     const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p) return;
     dx = Math.sign(Number(dx) || 0); dy = Math.sign(Number(dy) || 0);
+    if (this.enc && !this.myTurn(p, !!(dx || dy))) { p.kdir = null; return; }
     p.kdir = dx || dy ? [dx, dy] : null;
     if (p.kdir) { p.path = []; p.goal = null; p.target = null; p.pending = null; p.fishing = null; p.gatherTo = null; }
   }
@@ -536,14 +552,21 @@ class Instance {
   go(userId, x, y) {
     const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p || !Number.isInteger(x) || !Number.isInteger(y)) return;
+    if (this.enc && !this.myTurn(p)) return;
     p.kdir = null; p.target = null; p.pending = null; p.talkTo = null; p.fishing = null; p.gatherTo = null;
     p.goal = { x, y };
     p.path = this.path(p, p.goal, (a, b) => this.freeForPlayer(a, b));
+    // por turnos: hasta donde llegue el movimiento que le queda
+    if (this.enc && p.tb) {
+      if (p.tb.move <= 0) { p.path = []; p.goal = null; return this.whisper(p, '👣 Ya no te queda movimiento este turno.'); }
+      if (p.path.length > p.tb.move) { p.path = p.path.slice(0, p.tb.move); p.goal = { ...p.path[p.path.length - 1] }; }
+    }
   }
 
   attack(userId, id) {
     const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p || !this.enemies.has(id) || id === 'pv:' + userId) return;
+    if (this.enc && !this.spend(p, 'action', true)) return;
     if (p.mounted) { p.mounted = false; this.dirty = true; }
     p.talkTo = null; p.fishing = null; p.gatherTo = null;
     p.kdir = null; p.path = []; p.goal = null; p.pending = null;
@@ -556,13 +579,16 @@ class Instance {
     const ab = p.d.abilities.find((x) => x.id === a.id);
     if (!ab) return;
     if (!ab.ready) return this.whisper(p, `${ab.name} se aprende a nivel ${ab.unlock}.`);
-    const now = Date.now();
+    const now = this.clock();
     const c = p.user.combat;
     if ((c.cds[ab.id] || 0) > now) return;
     if (c.en < ab.cost) return this.whisper(p, 'No te queda energía.');
+    // por turnos: los bufos y auras son acción adicional; lo demás, la acción del turno
+    const cost = ['buff', 'aura'].includes(ab.kind) ? 'bonus' : 'action';
+    if (this.enc && !this.spend(p, cost, true)) return;
     if (p.mounted) { p.mounted = false; this.dirty = true; }
     p.kdir = null;
-    p.pending = { ab, target: typeof a.target === 'string' ? a.target : null, x: Number.isInteger(a.x) ? a.x : null, y: Number.isInteger(a.y) ? a.y : null };
+    p.pending = { ab, cost, target: typeof a.target === 'string' ? a.target : null, x: Number.isInteger(a.x) ? a.x : null, y: Number.isInteger(a.y) ? a.y : null };
     this.tryPending(p, now);
   }
 
@@ -570,13 +596,16 @@ class Instance {
     const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     const C = RULES.CONSUMABLES[cid];
     if (!p || !C) return;
-    const now = Date.now();
+    const now = this.clock();
     const c = p.user.combat;
     if ((c.cds['cons:' + cid] || 0) > now) return;
     if (this.mod === 'sobrios' && !C.spell) return this.whisper(p, '🚫 Desafío «Abstemios»: esta semana no hay pociones en el Descenso.');
     if (this.kind === 'arena' && C.spell && C.spell.kind === 'return') return this.whisper(p, 'En la arena no hay huida posible.');
+    // por turnos: beber o usar un pergamino es la acción adicional del turno
+    if (this.enc && !this.spend(p, 'bonus', true)) return;
     if (C.spell && C.spell.kind !== 'return' && C.spell.kind !== 'healAll' && !this.nearestEnemy(p, C.spell.range)) return this.whisper(p, 'No hay enemigos a tiro.');
     if (!this.hooks.giveCons(p.user, cid, -1)) return this.whisper(p, `No te quedan: ${C.name}.`);
+    if (this.enc && p.tb) p.tb.bonus--;
     c.cds['cons:' + cid] = now + (C.spell ? 1500 : 1000);
     if (C.heal) this.heal(p, Math.round(p.d.hp * C.heal), C.name);
     if (C.energy) c.en = Math.min(p.d.en, c.en + Math.round(p.d.en * C.energy));
@@ -608,8 +637,9 @@ class Instance {
   enemiesNear(c, r, by) { return [...this.enemies.values()].filter((e) => (!by || e.owner !== by.user.id) && cheb(e, c) <= r && this.los(c, e)); }
 
   // ---------- Tiempo ----------
-  tick(now) {
+  tick(real) {
     const dt = 0.05;
+    const now = this.advanceClock(real);
     // se acabó el minuto tras el jefe: todos salen con su recompensa
     if (this.portalEnd && now >= this.portalEnd) { this.portalEnd = 0; for (const p of [...this.players.values()]) this.winExit(p); return; }
     // recogida automática: el oro, los materiales y las pociones a 2 casillas o menos van solos a la bolsa
@@ -628,23 +658,42 @@ class Instance {
     this.tickDoors();
     const pl = [...this.players.values()];
     this.tickWorldEvent(now);
+    if (this.enc) this.encTick();
+    const act = this.enc && this.enc.active;
     for (const e of [...this.enemies.values()]) {
       if (!this.enemies.has(e.id) || e.pvp) continue;
       // en el mundo sólo se mueven los enemigos cerca de algún héroe
       if (this.kind === 'world' && !pl.some((p) => cheb(p, e) <= 28)) continue;
+      if (this.enc) {
+        // por turnos: sólo actúa el que tiene el turno; los demás del combate sólo sufren sus venenos
+        if (act && act.k === 'e' && act.id === e.id) this.encEnemy(e, now);
+        else if (this.inEnc('e', e.id)) this.tickDots(e, now);
+        else if (!e.aggro) this.noticeHeroes(e);
+        continue;
+      }
       this.tickEnemy(e, now, dt);
     }
-    this.tickPets(now);
+    // alguien ha visto a un héroe (o empieza el duelo): se para el tiempo
+    if (this.turns && !this.enc && (this.kind === 'arena' ? this.duel && real >= this.duel.startAt && this.players.size >= 2 && !this.duelOver : [...this.enemies.values()].some((e) => e.aggro && !e.pvp))) this.encStart();
+    if (!this.enc) this.tickPets(now);
     this.tickProjectiles(now);
     this.tickTeles(now);
     this.tickAuras(now);
-    if (this.dirty && now - this.lastFlush >= FLUSH_MS) this.flush();
+    if (this.dirty && real - this.lastFlush >= FLUSH_MS) this.flush();
+  }
+
+  // fuera de su turno, un monstruo dormido sigue mirando: si ve a un héroe, entra en el combate
+  noticeHeroes(e) {
+    for (const p of this.players.values()) {
+      if (p.downed || this.inSafe(p) || cheb(e, p) > AGGRO || !this.los(e, p)) continue;
+      e.aggro = p.user.id; this.wakePack(e, p.user.id); return;
+    }
   }
 
   // Tumbado: un compañero a su lado lo reanima en unos segundos; si nadie llega a tiempo, vuelve a la taberna
   tickDowned(p, now, dt) {
     const D = p.downed;
-    const helper = [...this.players.values()].find((o) => o !== p && !o.downed && cheb(o, p) <= 1);
+    const helper = !this.enc && [...this.players.values()].find((o) => o !== p && !o.downed && cheb(o, p) <= 1);
     const was = Math.floor(D.rev * 4);
     D.rev = helper ? D.rev + dt : Math.max(0, D.rev - dt * 0.5);
     if (Math.floor(D.rev * 4) !== was) this.dirty = true;
@@ -668,11 +717,13 @@ class Instance {
   tickPlayer(p, now, dt) {
     if (p.downed) return this.tickDowned(p, now, dt);
     const c = p.user.combat;
+    // por turnos sólo se mueve quien tiene el turno (y no hay regeneración en mitad del combate)
+    if (this.enc && !this.isActive(p)) return;
     // regeneración (más rápida fuera de combate)
     const calm = now - p.lastHurt > 5000 ? 2.5 : 1;
     const regen = p.d.hpRegen * calm * (p.regenUntil > now ? 5 : 1);
-    if (c.hp < p.d.hp) { c.hp = Math.min(p.d.hp, c.hp + regen * dt); this.privDirty(p); }
-    if (c.en < p.d.en) { c.en = Math.min(p.d.en, c.en + p.d.enRegen * dt); this.privDirty(p); }
+    if (!this.enc && c.hp < p.d.hp) { c.hp = Math.min(p.d.hp, c.hp + regen * dt); this.privDirty(p); }
+    if (!this.enc && c.en < p.d.en) { c.en = Math.min(p.d.en, c.en + p.d.enRegen * dt); this.privDirty(p); }
     for (const [k, b] of Object.entries(p.tbuffs)) if (b.until <= now) { delete p.tbuffs[k]; this.dirty = true; }
     // zonas del mundo: la corrupción castiga a quien no tiene nivel para estar ahí
     if (this.def.zones) {
@@ -713,11 +764,19 @@ class Instance {
       const t = this.enemies.get(p.target);
       if (!t) p.target = null;
       else if (this.inReach(p, t, p.d.weapon.range)) {
+        // por turnos: un ataque con la acción del turno y se acaba la orden
+        if (this.enc) { if (p.tb && p.tb.action > 0) { p.tb.action--; this.weaponAttack(p, t, now); } p.target = null; p.path = []; p.goal = null; this.dirty = true; return; }
         if (now >= p.nextAttack) this.weaponAttack(p, t, now);
         if (p.d.weapon.kind === 'melee' || cheb(p, t) <= p.d.weapon.range) return; // quieto mientras pega
       }
     }
     if (now < p.nextStep) return;
+    // por turnos: sin movimiento no hay pasos (y lo que quedaba lejos se cancela)
+    if (this.enc && (!p.tb || p.tb.move <= 0)) {
+      if (p.target || p.pending) this.whisper(p, 'No llegas: te has quedado sin movimiento este turno.');
+      p.path = []; p.goal = null; p.target = null; p.pending = null; p.kdir = null;
+      return;
+    }
     let step = null;
     if (p.kdir) {
       const [dx, dy] = p.kdir;
@@ -750,9 +809,11 @@ class Instance {
     const speed = (p.mounted && p.mount ? 1 / (1 + p.mount.speed / 100) : 1) * (p.slowUntil > now ? 1.8 : 1) / (1 + this.buffSum(p, 'haste') / 100);
     p.sm = Math.round(p.d.moveMs * (dx && dy ? 1.41 : 1) * speed);
     p.nextStep = now + p.sm;
+    const from = { x: p.x, y: p.y };
     p.x += dx; p.y += dy;
     p.dir = dirName(dx, dy);
     this.dirty = true;
+    if (this.enc && p.tb) { p.tb.move--; this.encLeaveReachOfEnemies(p, from); if (!this.players.has(p.user.id) || p.downed) return; }
     this.onEnter(p);
   }
 
@@ -783,7 +844,7 @@ class Instance {
       if (cave) { this.players.delete(p.user.id); this.event({ e: 'leave', id: p.user.id }); return this.hooks.portal(p.user, cave, { x: p.x, y: p.y + 1 }); }
     }
     for (const l of [...this.loot.values()]) if (l.x === p.x && l.y === p.y) this.pickUp(p, l);
-    for (const h of this.herbs.values()) if (h.x === p.x && h.y === p.y && h.readyAt <= Date.now()) this.takeHerb(p, h);
+    for (const h of this.herbs.values()) if (h.x === p.x && h.y === p.y && h.readyAt <= this.clock()) this.takeHerb(p, h);
     // en el Descenso el portal lleva al piso siguiente al pisarlo; en las mazmorras normales
     // se sale con el botón «Salir ya» o al acabar la cuenta atrás (así nadie sale sin querer)
     if (this.portal && this.def.descent && p.x === this.portal.x && p.y === this.portal.y) this.winExit(p);
@@ -857,9 +918,9 @@ class Instance {
     // ¡era un mímico! el cofre desaparece y salta a morder; al matarlo suelta el botín del cofre
     if (ch.mimic) {
       this.chests.delete(ch.id);
-      const id = this.addEnemy('mimico', ch.x, ch.y, this.level, Date.now(), { elite: this.level >= 8 });
+      const id = this.addEnemy('mimico', ch.x, ch.y, this.level, this.clock(), { elite: this.level >= 8 });
       const m = id && this.enemies.get(id);
-      if (m) { m.mimic = true; m.aggro = p.user.id; m.nextAttack = Date.now() + 600; }
+      if (m) { m.mimic = true; m.aggro = p.user.id; m.nextAttack = this.clock() + 600; }
       this.event({ e: 'mimic', id, x: ch.x, y: ch.y, by: p.user.id });
       this.dirty = true;
       return;
@@ -944,7 +1005,8 @@ class Instance {
     let dmg = base;
     let crit = false;
     if (!o.noCrit && (p.critNext || rnd() * 100 < p.d.crit)) { crit = true; dmg *= p.d.critMult; p.critNext = false; }
-    if (e.vulnUntil > Date.now()) dmg *= 1 + e.vuln / 100;
+    if (this.enc) dmg *= this.turnDmgMult(p, e, o); // por turnos, un golpe vale por unos segundos de pelea
+    if (e.vulnUntil > this.clock()) dmg *= 1 + e.vuln / 100;
     // combos entre compañeros: aprovechar lo que ha preparado otro
     const combo = this.combo(p, e, o);
     if (combo) { dmg *= combo.mult; if (combo.crit) crit = true; }
@@ -952,8 +1014,8 @@ class Instance {
     dmg *= 1 - RULES.reduction(o.magic ? e.m.armor * 0.5 : e.m.armor, p.d.level);
     if (o.elem) {
       dmg += o.elem.dmg;
-      if (o.elem.slow && !e.pvp) { e.slowUntil = Math.max(e.slowUntil, Date.now() + RULES.ELEMENTS.frio.slow); e.slowBy = p.user.id; }
-      if (o.elem.poison > 0 && !e.pvp) e.dots.push({ by: p.user.id, per: o.elem.poison / 3, left: 3, next: Date.now() + 1000 });
+      if (o.elem.slow && !e.pvp) { e.slowUntil = Math.max(e.slowUntil, this.clock() + RULES.ELEMENTS.frio.slow); e.slowBy = p.user.id; }
+      if (o.elem.poison > 0 && !e.pvp) e.dots.push({ by: p.user.id, per: o.elem.poison / 3, left: 3, next: this.clock() + 1000 });
     }
     if (e.pvp) {
       // duelo: el golpe va al héroe rival (ya reducido por su armadura)
@@ -1011,6 +1073,7 @@ class Instance {
     }
     // ¡se lanza!
     p.pending = null;
+    if (this.enc) { if (!p.tb || p.tb[pd.cost || 'action'] <= 0) return; p.tb[pd.cost || 'action']--; }
     c.en -= ab.cost;
     c.cds[ab.id] = now + ab.cd * FAST * (1 - p.d.cdr / 100);
     // legendario «Eco»: a veces la habilidad sale gratis
@@ -1126,7 +1189,7 @@ class Instance {
 
   addDot(p, e, total, dur) {
     const ticks = Math.max(1, Math.round(dur / 1000));
-    e.dots.push({ by: p.user.id, per: total / ticks, left: ticks, next: Date.now() + 1000 });
+    e.dots.push({ by: p.user.id, per: total / ticks, left: ticks, next: this.clock() + 1000 });
   }
 
   tickAuras(now) {
@@ -1145,7 +1208,7 @@ class Instance {
   // y el marcado por un compañero, todavía más. Sólo cuentan los preparativos de otro jugador.
   combo(p, e, o) {
     if (this.players.size < 2 || e.pvp || !p.user) return null;
-    const now = Date.now(), me = p.user.id;
+    const now = this.clock(), me = p.user.id;
     let c = null;
     if (e.slowUntil > now && e.slowBy && e.slowBy !== me && !o.magic) { c = { name: '❄️ ¡Hielo roto!', mult: 1.5, crit: true }; e.slowUntil = 0; }
     else if (e.stunUntil > now && e.stunBy && e.stunBy !== me && e.stunCombo !== e.stunUntil) { c = { name: '💫 ¡Golpe al indefenso!', mult: 1.35, crit: true }; e.stunCombo = e.stunUntil; }
@@ -1180,8 +1243,9 @@ class Instance {
 
   killEnemy(p, e) {
     this.enemies.delete(e.id);
+    if (this.enc) setImmediate(() => { if (this.enc) this.encCheckEnd(); });
     this.stat(p, 'kills', 1);
-    if (e.group) { e.group.alive.delete(e.id); if (!e.group.alive.size) e.group.respawnAt = Date.now() + RESPAWN_MS; }
+    if (e.group) { e.group.alive.delete(e.id); if (!e.group.alive.size) e.group.respawnAt = this.clock() + RESPAWN_MS; }
     const party = [...this.players.values()];
     const total = e.summoned ? e.m.xp / 3 : e.m.xp;
     const share = total * (1 + 0.2 * (party.length - 1)) / Math.max(1, party.length) * (this.modMf ? 1.2 : 1);
@@ -1191,13 +1255,13 @@ class Instance {
       if (o === p) shown = xp;
       this.hooks.reward(o.user, xp, 0);
       const pet = this.pets.get(o.user.id);
-      if (pet && pet.downUntil <= Date.now() && this.hooks.petXp && (this.kind !== 'world' || cheb(o, e) <= 20)) this.hooks.petXp(o.user, Math.max(1, Math.round(xp * 0.6)));
+      if (pet && pet.downUntil <= this.clock() && this.hooks.petXp && (this.kind !== 'world' || cheb(o, e) <= 20)) this.hooks.petXp(o.user, Math.max(1, Math.round(xp * 0.6)));
     }
     this.event({ e: 'die', id: e.id, k: e.k, x: e.x, y: e.y, by: p.user.id, xp: shown || Math.round(share), boss: e.m.boss || undefined, elite: e.m.elite || undefined });
     // poderes legendarios al matar
     const L = p.d.leg || {};
     if (L.sed) this.heal(p, Math.max(1, Math.round(p.d.hp * 0.06)), 'Sed de sangre');
-    if (L.frenesi) { p.tbuffs.frenesi = { haste: 30, until: Date.now() + 4000 }; this.sendPrivate(p); }
+    if (L.frenesi) { p.tbuffs.frenesi = { haste: 30, until: this.clock() + 4000 }; this.sendPrivate(p); }
     if (L.estallido && !this.blasting) {
       this.blasting = true; // los que mueren por el estallido no vuelven a estallar
       this.event({ e: 'fx', kind: 'nova', x: e.x, y: e.y, radius: 1, color: '#ff8a1a' });
@@ -1211,13 +1275,13 @@ class Instance {
       const cells = [];
       for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (this.walkTile(e.x + dx, e.y + dy)) cells.push([e.x + dx, e.y + dy]);
       const id = 't' + ++this.seq;
-      this.teles.push({ id, by: e.id, orphan: true, cells, at: Date.now() + 900, dmg: roll(e.m.dmg) * 1.6, magic: true, level: e.m.level, kind: 'nova' });
+      this.teles.push({ id, by: e.id, orphan: true, cells, at: this.clock() + 900, dmg: roll(e.m.dmg) * 1.6, magic: true, level: e.m.level, kind: 'nova' });
       this.event({ e: 'tele', id, kind: 'nova', cells, dur: 900 });
     }
     // jefe de mundo: recompensa para todos los que le hicieron daño
     if (e.wb) {
       this.worldBoss = null;
-      this.nextEventAt = Date.now() + (EVENT_MS || PROG.WORLD_EVENT.everyMs);
+      this.nextEventAt = this.clock() + (EVENT_MS || PROG.WORLD_EVENT.everyMs);
       for (const o of [...this.enemies.values()]) if (o.summoned) { this.enemies.delete(o.id); this.event({ e: 'die', id: o.id, k: o.k, x: o.x, y: o.y, xp: 0 }); }
       const heroes = [...e.hitters].map((id) => this.players.get(id)).filter(Boolean);
       if (this.hooks.worldBoss) this.hooks.worldBoss(heroes.map((h) => h.user), e.m, p.user);
@@ -1236,7 +1300,7 @@ class Instance {
       this.bossDead = true;
       const spot = this.freeNear(e.x, e.y, (a, b) => this.walkTile(a, b) && ![...this.loot.values()].some((l) => l.x === a && l.y === b));
       this.portal = spot;
-      if (!this.def.descent) this.portalEnd = Date.now() + PORTAL_MS;
+      if (!this.def.descent) this.portalEnd = this.clock() + PORTAL_MS;
       this.event({ e: 'portal', x: spot.x, y: spot.y, name: e.m.name, left: this.def.descent ? 0 : PORTAL_MS });
       if (this.def.raid && this.hooks.raidDone) this.hooks.raidDone(this);
       // el resto de la sala huye: no queda nadie que pelee por su señor
@@ -1247,11 +1311,12 @@ class Instance {
   // ---------- Daño a los héroes ----------
   hurtPlayer(p, dmg, o = {}) {
     const c = p.user.combat;
-    const now = Date.now();
+    const now = this.clock();
     p.lastHurt = now;
     if (p.downed) return;
     if (p.iframeUntil > now && o.kind !== 'corrupt') { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true }); return; }
-    if (o.canDodge && rnd() * 100 < p.d.dodge) { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true }); return; }
+    if (o.canDodge && rnd() * 100 < p.d.dodge + (p.dodging ? 40 : 0)) { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true }); return; }
+    if (this.enc && o.by) dmg *= this.turnHurtMult(this.enemies.get(o.by), o); // por turnos pega más cada vez
     if (o.raw) { /* ya viene reducido (duelos) */ } else if (o.magic) dmg *= 1 - p.d.magicRes / 100;
     else if (o.level) dmg *= 1 - RULES.reduction(p.d.armor, o.level);
     let blocked = false;
@@ -1261,8 +1326,8 @@ class Instance {
     // legendario «Égida»: el escudo absorbe primero
     if (p.shield > 0) { const a = Math.min(p.shield, dmg); p.shield -= a; dmg -= a; if (p.shield <= 0) p.shield = 0; }
     c.hp -= dmg;
-    if (p.d.leg && p.d.leg.egida && c.hp > 0 && c.hp < p.d.hp * 0.3 && Date.now() >= (p.egidaReady || 0)) {
-      p.shield = Math.round(p.d.hp * 0.35); p.egidaReady = Date.now() + 45000;
+    if (p.d.leg && p.d.leg.egida && c.hp > 0 && c.hp < p.d.hp * 0.3 && this.clock() >= (p.egidaReady || 0)) {
+      p.shield = Math.round(p.d.hp * 0.35); p.egidaReady = this.clock() + 45000;
       this.event({ e: 'fx', kind: 'aura', id: p.user.id, until: 2500, radius: 1 });
       this.event({ e: 'leg', id: p.user.id, name: '🛡️ Égida' });
     }
@@ -1498,16 +1563,17 @@ class Instance {
 
   tele(e, kind, cells, ms, dmg, magic, now) {
     const id = 't' + ++this.seq;
-    this.teles.push({ id, by: e.id, cells, at: now + ms, dmg, magic, level: e.m.level, kind });
-    this.event({ e: 'tele', id, kind, cells, dur: ms });
+    const turn = !!this.enc;
+    this.teles.push({ id, by: e.id, cells, at: turn ? Infinity : now + ms, turnOf: turn ? e.id : undefined, dmg, magic, level: e.m.level, kind });
+    this.event({ e: 'tele', id, kind, cells, dur: ms, turn: turn || undefined });
   }
 
   tickTeles(now) {
     for (let i = this.teles.length - 1; i >= 0; i--) {
       const t = this.teles[i];
+      if (!t.orphan && !this.enemies.has(t.by)) { this.teles.splice(i, 1); this.event({ e: 'boom', id: t.id, kind: t.kind, fizzle: true }); continue; }
       if (now < t.at) continue;
       this.teles.splice(i, 1);
-      if (!t.orphan && !this.enemies.has(t.by)) continue;
       const set = new Set(t.cells.map(([x, y]) => x + ',' + y));
       this.event({ e: 'boom', id: t.id, kind: t.kind });
       for (const p of [...this.players.values()]) if (set.has(p.x + ',' + p.y)) this.hurtPlayer(p, t.dmg, { by: t.by, level: t.level, magic: t.magic, kind: t.kind });
@@ -1530,13 +1596,13 @@ class Instance {
   // ---------- Estado para los clientes ----------
   privateState(p) {
     const c = p.user.combat;
-    return { hp: Math.round(c.hp), maxHp: p.d.hp, en: Math.floor(c.en), maxEn: p.d.en, cds: c.cds, now: Date.now(), nextAttack: p.nextAttack, atkMs: p.d.atkMs, tbuffs: Object.keys(p.tbuffs), crit: p.critNext };
+    return { hp: Math.round(c.hp), maxHp: p.d.hp, en: Math.floor(c.en), maxEn: p.d.en, cds: c.cds, now: this.clock(), react: this.enc ? (p.react > 0 ? 1 : 0) : undefined, dodging: p.dodging || undefined, nextAttack: p.nextAttack, atkMs: p.d.atkMs, tbuffs: Object.keys(p.tbuffs), crit: p.critNext };
   }
 
   sendPrivate(p) { p.privDirty = false; this.hooks.send(p.user, { t: 'dme', ...this.privateState(p) }); }
 
   snapshot(viewer) {
-    const now = Date.now();
+    const now = this.clock();
     // en el mundo cada jugador recibe sólo lo que tiene cerca
     const near = viewer && this.kind === 'world' ? (o) => cheb(o, viewer) <= 26 : () => true;
     return {
@@ -1546,6 +1612,7 @@ class Instance {
       herbs: [...this.herbs.values()].filter((h) => h.readyAt <= now && near(h)).map((h) => ({ id: h.id, x: h.x, y: h.y, zone: h.zone })),
       chests: [...this.chests.values()],
       loot: [...this.loot.values()].filter((l) => near(l) && (!l.owner || (viewer && l.owner === viewer.user.id))).map((l) => ({ id: l.id, x: l.x, y: l.y, gold: l.gold ? 1 : undefined, cons: l.cons, mat: l.mat, r: l.item ? l.item.rarity : undefined, slot: l.item ? l.item.slot : undefined, name: l.item ? l.item.name : undefined, it: l.item || undefined })),
+      enc: this.encView(),
       portal: this.portal,
       portalLeft: this.portalEnd ? Math.max(0, this.portalEnd - now) : undefined,
       start: this.start,
@@ -1571,5 +1638,7 @@ class Instance {
     return { id: this.id, name: this.def.name, theme: this.def.theme, level: this.level, players: [...this.players.values()].map((p) => p.user.name), bossDead: this.bossDead, raid: !!this.def.raid };
   }
 }
+
+require('./turns.js')(Instance, { rnd, cheb, roll, dirName, AGGRO, LEASH });
 
 module.exports = { Instance };

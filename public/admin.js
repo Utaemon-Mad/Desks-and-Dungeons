@@ -7,6 +7,26 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 11, date: 'Octubre', title: 'El camino del samurái', items: [
+      '⚔️ Katanas: arma a dos manos, más rápida que el mandoble y que aprovecha la Destreza. Doce modelos, de la Uchigatana a la Muramasa y la Hoja del dragón dormido. Guerreros y pícaros la prefieren.',
+      '🏯 Armaduras samurái en cuero y placas: dō lacado con sus lamas atadas, sode (hombreras de placas), kusazuri (faldón), kabuto con cubrenuca y kuwagata, menpō, kote, suneate y haidate, tabi y sandalias waraji. Y para los ligeros, hachimaki y jingasa.',
+      '🛡️ Las armaduras se ajustan mejor: cascos y piezas se miden sobre el cuerpo ya proporcionado, guantes y botas ya no van agrandados, las corazas llevan brazales, las cotas mangas de malla y las grebas cubren también el muslo.',
+    ] },
+    { v: 10, date: 'Octubre', title: 'Héroes humanos', items: [
+      '🧑 Todos los héroes son humanos: se acabaron elfos, enanos, orcos y goblins. Si tenías uno, ahora es humano (conserva algo de su planta) y te devolvemos los puntos para repartirlos de nuevo.',
+      '🎨 Editor con muchas más opciones: 5 peinados para cualquiera, 12 tonos de piel, 16 colores de pelo, complexión, altura, barba (perilla, bigote, corta, poblada, larga), cejas, marcas (cicatriz, pecas, pintura de guerra, tatuaje, parche) con su color y pendientes. 🎲 Al azar te propone uno.',
+      '🧍 Proporciones más humanas: cabeza más pequeña, piernas y brazos más largos y cuerpo más esbelto.',
+      '💡 Mazmorras menos oscuras, sobre todo en el móvil, y nuevo ajuste de brillo en ⚙️ Menú → Ajustes → Gráficos (Oscuro, Normal, Claro, Muy claro).',
+      '🚪 Nadie te espera nada más entrar: los monstruos ya no aparecen junto a la casilla de salida.',
+    ] },
+    { v: 9, date: 'Octubre', title: 'Combate por turnos', items: [
+      '🎲 El combate ahora es por turnos, como en D&D: se explora en tiempo real, pero cuando un monstruo te ve se para el tiempo y cada uno juega su turno por orden de iniciativa (d20 + Destreza).',
+      '👣 En tu turno: unas 6 casillas de movimiento (iluminadas en el suelo), ⚔️ una acción (atacar, habilidad, defenderse o reanimar), ✚ una acción adicional (pociones y bufos) y ↺ una reacción para el ataque de oportunidad.',
+      '⏱️ 30 segundos para decidir; F o «Terminar turno» para pasar. Arriba ves el orden de la ronda y el aro dorado marca quién juega.',
+      '👑 Los jefes avisan en el suelo y el golpe cae en su siguiente turno: usa el tuyo para apartarte. Aturdido = pierdes el turno; ralentizado = la mitad de movimiento.',
+      '🤺 Los duelos de la arena también son por turnos.',
+      '⚖️ Daño ajustado a los turnos: cada turno son unos 6 segundos de pelea, así que un ataque pega como varios golpes del tiempo real (las armas rápidas, más). Los combates normales duran 2-5 rondas y los jefes algo más; en grupo, jefes y élites aguantan más.',
+    ] },
     { v: 8, date: 'Octubre', title: 'Una taberna con alma', items: [
       '🗺️ MESA DE PARTIDA: la mesa grande es una sola. Siéntate y la cámara la mira desde arriba con todos los jugadores; se abre el plano de la próxima mazmorra (¡la de verdad!). Marcad el plano, elegid tema y nivel, jugad a los dados o comerciad, y cuando todos digáis «listo» bajáis juntos.',
       '🌙 La luz de la luna entra por las ventanas y dibuja la cruz del marco en el suelo.',

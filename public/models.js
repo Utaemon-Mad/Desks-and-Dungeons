@@ -74,6 +74,7 @@
       case 'daga': mesh(box(0.03, 0.2, 0.01), steel, 0, 0.16, 0, g); mesh(box(0.09, 0.02, 0.03), accent, 0, 0.05, 0, g); mesh(cyl(0.015, 0.015, 0.07, 5), mat(LEATHER_D), 0, 0, 0, g); break;
       case 'hacha': mesh(cyl(0.018, 0.018, 0.5, 5), wood, 0, 0.18, 0, g); { const h = mesh(box(0.16, 0.13, 0.025), steel, 0.07, 0.38, 0, g); h.rotation.z = 0.15; } mesh(box(0.03, 0.03, 0.03), accent, 0, 0.42, 0, g); break;
       case 'maza': mesh(cyl(0.02, 0.02, 0.42, 5), wood, 0, 0.16, 0, g); mesh(geo('dodec', () => new THREE.DodecahedronGeometry(0.075)), steel, 0, 0.4, 0, g); mesh(sph(0.025, 5, 4), accent, 0, 0.48, 0, g); break;
+      case 'katana': mesh(box(0.034, 0.6, 0.01), steel, 0.01, 0.38, 0, g).rotation.z = -0.05; mesh(cyl(0.04, 0.04, 0.012, 10), accent, 0, 0.07, 0, g); mesh(cyl(0.018, 0.018, 0.2, 5), mat('#1a1a22'), 0, -0.04, 0, g); break;
       case 'espadon': mesh(box(0.05, 0.72, 0.014), steel, 0, 0.45, 0, g); mesh(box(0.24, 0.03, 0.05), accent, 0, 0.08, 0, g); mesh(cyl(0.02, 0.02, 0.18, 5), mat(LEATHER_D), 0, -0.02, 0, g); break;
       case 'martillo': mesh(cyl(0.02, 0.02, 0.62, 5), wood, 0, 0.22, 0, g); mesh(box(0.22, 0.12, 0.12), steel, 0, 0.52, 0, g); mesh(box(0.05, 0.13, 0.13), accent, 0, 0.52, 0, g); break;
       case 'lanza': mesh(cyl(0.018, 0.018, 1.0, 5), wood, 0, 0.35, 0, g); mesh(cone(0.04, 0.16, 5), steel, 0, 0.92, 0, g); mesh(cyl(0.03, 0.03, 0.03, 6), accent, 0, 0.84, 0, g); break;
@@ -276,7 +277,6 @@
       const O = offhand(gear.o, gear.or, gear.set, P.handL);
       if (O) { O.position.set(-0.04, 0.06, 0.1); if (gear.o === 'orbe') O.position.set(0, -0.05, 0.12); P.off = O; }
     }
-    // tamaño según la raza
     const sc = (MAP.SPECIES[species] || {}).scale || 1;
     root.scale.setScalar(sc);
     root.userData.parts = P;
@@ -351,7 +351,7 @@
   const CLASS_CHAR = { guerrero: 'Barbarian', paladin: 'Knight', sacerdote: 'Mage', mago: 'Mage', druida: 'Mage', explorador: 'Rogue', picaro: 'Rogue_Hooded' };
   const NPC_CHAR = { bruja: ['Mage', '#2a1a34'], mercader: ['Rogue', '#28305a'], encapuchado: ['Rogue_Hooded', '#2a2226'], tabernero: ['Barbarian', '#6a4a2a'] };
   // Arma de la mochila → pieza del pack (las que no están se hacen con el modelo low poly propio)
-  const WEAPON_PROP = { espada: 'sword_1handed', espadon: 'sword_2handed', hacha: 'axe_1handed', daga: 'dagger', baston: 'staff', varita: 'wand', ballesta: 'crossbow_2handed' };
+  const WEAPON_PROP = { espada: 'sword_1handed', espadon: 'sword_2handed', katana: 'sword_2handed', hacha: 'axe_1handed', daga: 'dagger', baston: 'staff', varita: 'wand', ballesta: 'crossbow_2handed' };
 
   function loadAssets(base = 'assets/kaykit/') {
     if (GL.loading) return GL.loading;
@@ -574,7 +574,7 @@
       G.mixer.update(dt);
       return;
     }
-    if (st.deadAt) { if (fire('dead', st.deadAt)) glPlay(G, 'Death_A', true, 0.08); G.mixer.update(dt); return; }
+    if (st.deadAt) { if (fire('dead', st.deadAt)) glPlay(G, 'Death_A', true, 0.08); G.mixer.update(dt); applyHuman(G); return; }
     if (fire('roll', st.rollAt)) glPlay(G, 'Dodge_Forward', true, 0.05);
     else if (fire('cast', st.castAt)) glPlay(G, G.kind === 'magic' ? 'Spellcast_Shoot' : 'Spellcast_Raise', true);
     else if (fire('atk', st.attackAt)) { const l = ATTACK_CLIPS[G.kind] || ATTACK_CLIPS.melee1; glPlay(G, l[(G.n = (G.n || 0) + 1) % l.length], true, 0.06); }
@@ -592,6 +592,7 @@
     if (G.shot && G.base) G.base.setEffectiveWeight(0.0);
     if (G.float) model.userData.parts.model.position.y = 0.12 + Math.sin(t * 2.4) * 0.04;
     G.mixer.update(dt);
+    applyHuman(G);
   }
   // Pose fija (retratos): el modelo en un fotograma de una animación
   function posePeek(model, clip = 'Idle', time = 0.4) {
@@ -600,6 +601,7 @@
     const a = glAction(G, clip, false);
     if (!a) return;
     a.reset().play(); G.mixer.update(time);
+    applyHuman(G);
   }
 
   // Geometría de una pieza de escenario (todas sus mallas juntas) para dibujar muchas copias de golpe
@@ -660,6 +662,42 @@
     return m;
   }
 
+  // Proporciones más humanas para los modelos KayKit (que son cabezones): cabeza más pequeña y piernas, brazos y tronco
+  // más largos. La cabeza se encoge con la escala de su hueso; lo demás se alarga separando las articulaciones (la
+  // posición de cada hueso respecto a su padre), así la malla se estira sin engordar. Las animaciones escriben posición y
+  // escala de todos los huesos, pero sólo cuando cambian: por eso se recuerda lo que se puso para no estirar dos veces.
+  const HUMAN_SCALE = { head: 0.62 };
+  const HUMAN_LEN = { spine: 1.12, chest: 1.12, head: 1.08, lowerarml: 1.22, lowerarmr: 1.22, wristl: 1.22, wristr: 1.22, lowerlegl: 1.9, lowerlegr: 1.9, footl: 2, footr: 2 };
+  const HUMAN_SLIM = 0.88;
+  function humanize(root, slim) {
+    const G = root.userData.gl, P = root.userData.parts;
+    if (!G || !P || !P.model) return;
+    const bones = {};
+    P.model.traverse((c) => { if (c.isBone && (HUMAN_SCALE[c.name] || HUMAN_LEN[c.name])) bones[c.name] = c; });
+    if (!bones.footl || !bones.head) return;
+    // las piernas largas meten los pies bajo el suelo: se sube el modelo lo que bajan los pies
+    const y0 = new THREE.Vector3(), y1 = new THREE.Vector3();
+    root.updateMatrixWorld(true); bones.footl.getWorldPosition(y0);
+    G.prop = { bones, last: {} };
+    applyHuman(G);
+    root.updateMatrixWorld(true); bones.footl.getWorldPosition(y1);
+    P.model.position.y += (y0.y - y1.y) / Math.max(0.001, root.scale.y);
+    const k = HUMAN_SLIM * (slim ? 0.94 : 1);
+    P.model.scale.x *= k; P.model.scale.z *= k;
+  }
+  function applyHuman(G) {
+    if (!G || !G.prop) return;
+    const { bones, last } = G.prop;
+    for (const n in bones) {
+      const bn = bones[n];
+      if (HUMAN_SCALE[n]) bn.scale.setScalar(HUMAN_SCALE[n]);
+      if (HUMAN_LEN[n] && !(last[n] && last[n].equals(bn.position))) {
+        bn.position.multiplyScalar(HUMAN_LEN[n]);
+        (last[n] || (last[n] = new THREE.Vector3())).copy(bn.position);
+      }
+    }
+  }
+
   // Héroe con modelo de verdad: clase → modelo, colores de piel, pelo y ropa, casco, capa y armas
   function buildHeroGL(look) {
     const npc = look.npc || null;
@@ -668,7 +706,6 @@
     const gear = look.gear || (npc ? {} : DEFAULT_GEAR[cid]);
     const set = gear.set && SET_COL[gear.set];
     const [name, npcCloth] = NPC_CHAR[npc] || [CLASS_CHAR[cid] || 'Knight', null];
-    const species = look.species || 'human';
     const skin = MAP.SKINS[look.skin] || MAP.SKINS[0];
     const hair = npc === 'bruja' ? '#b8b8c0' : MAP.HAIRS[look.hair] || MAP.HAIRS[0];
     // el peto manda en el color de la ropa (y algunos llevan capa); los conjuntos, en su color
@@ -681,24 +718,20 @@
     const hs = !npc && MAP.hairstyle ? MAP.hairstyle(look.sex, look.hs) : null;
     const helmet = !!gear.casco && !npc && !(hs && hs.id === 'capucha');
     const cape = !!set || gear.pechoR === 'unico' || gear.pechoR === 'raro' || npc === 'bruja' || !!(chestSt && chestSt.cape);
-    const goblin = species === 'goblin' && !npc && globalThis.GOBLIN3D;
     const root = buildGL(name, {
       skin, hair, cloth, helmet: helmet && !A3, cape, capeColor: set ? set[1] : RARITY[gear.pechoR] || cloth, set: gear.set,
       w: gear.w, wr: gear.wr, wt: gear.wt, wS: gear.wS, o: gear.o, or: gear.or, ot: gear.ot, oS: gear.oS, weaponKind: kind, mug: npc === 'tabernero',
-      head: hs && !goblin ? hs.head : null,
+      head: hs ? hs.head : null,
     });
-    // los goblins llevan su propia cabeza hecha a mano (goblin.js), con todas sus opciones
-    const gob = goblin && MAP.cleanGoblin ? MAP.cleanGoblin(look.gob, look.sex) : null;
-    if (goblin) globalThis.GOBLIN3D.build(root.userData.parts, { skin, hair, gob, sex: look.sex, helmet: A3 ? A3.coversHair(gear) : !!gear.casco, seed: JSON.stringify(gob) + skin });
-    else raceFeatures(root, species, { skin, hair, beard: look.beard || ((hs && hs.beard) || (species === 'dwarf' && hs && hs.head !== 'Barbarian' && look.sex !== 'f') ? hair : null), helmet, head: (hs && hs.head) || name });
-    const SP = MAP.SPECIES[species] || {};
-    root.scale.setScalar(SP.scale || 1);
-    const body = root.userData.parts.model;
-    if (SP.wide) { body.scale.x *= SP.wide; body.scale.z *= SP.wide; }
-    if (SP.slim) { body.scale.x *= SP.slim; body.scale.z *= SP.slim; }
+    const feat = !npc && MAP.cleanFeat ? MAP.cleanFeat(look.feat) : {};
+    faceFeatures(root, { skin, hair, feat, beard: look.beard, head: (hs && hs.head) || name });
+    humanize(root, look.sex === 'f');
+    // complexión y altura del editor
+    const body = root.userData.parts.model, bs = (MAP.BUILD_SCALE || [])[feat.build] || 1;
+    body.scale.x *= bs; body.scale.z *= bs;
+    root.scale.setScalar((MAP.HEIGHT_SCALE || [])[feat.height] || 1);
     // armaduras que se ven: petos, hombreras, yelmos, guanteletes, grebas… (armor3d.js)
     if (A3) A3.build(root, gear, { setTrim: set ? set[1] : null });
-    if (gob) { const b = globalThis.GOBLIN3D.BUILD[gob.build] || 1; body.scale.x *= b; body.scale.z *= b; }
     // brillo del equipo bueno: el arma destella de vez en cuando con el color de su calidad
     const wcol = gear.wleg ? RULES.LEGENDARY_COLOR : ['raro', 'unico', 'conjunto'].includes(gear.wr) ? RARITY[gear.wr] : null;
     const Pw = root.userData.parts.weapon;
@@ -731,34 +764,71 @@
     return root;
   }
 
-  // Rasgos de raza sobre la cabeza del modelo: orejas de elfo y de goblin, colmillos de orco y barba
-  // (se colocan con la caja de la cabeza y se pegan al hueso de la cabeza para que se muevan con ella)
+  // Rasgos de la cara elegidos en el editor (look.feat): barba, cejas, marcas y pendientes. Se colocan sobre la
+  // superficie de la cabeza (un rayo de frente contra la malla) y se pegan al hueso de la cabeza para moverse con ella.
   const linHex = (hex) => '#' + new THREE.Color(hex).convertSRGBToLinear().getHexString();
-  function raceFeatures(root, species, o) {
-    const P = root.userData.parts;
-    if (!P.head || !P.headMesh || (species === 'human' && !o.beard)) return;
+  const FACE_RAY = new THREE.Raycaster();
+  function faceFeatures(root, o) {
+    const P = root.userData.parts, f = o.feat || {};
+    const beardOld = o.beard && !f.beard ? 5 : f.beard || 0; // NPC con barba de antes
+    if (!P.head || !P.headMesh || !(beardOld || f.brows || f.marks || f.rings)) return;
     root.updateMatrixWorld(true);
     P.headMesh.geometry.computeBoundingBox();
-    const box = P.headMesh.geometry.boundingBox.clone().applyMatrix4(P.headMesh.matrixWorld);
-    const c = box.getCenter(new THREE.Vector3()), size = box.getSize(new THREE.Vector3());
+    const hb = P.headMesh.geometry.boundingBox.clone().applyMatrix4(P.headMesh.matrixWorld);
+    const c = hb.getCenter(new THREE.Vector3()), size = hb.getSize(new THREE.Vector3());
+    const W = size.x, H = size.y;
+    // z de la cara en (x, y): rayo de delante hacia atrás contra la cabeza
+    const surf = (x, y) => {
+      FACE_RAY.set(new THREE.Vector3(x, y, hb.max.z + W), new THREE.Vector3(0, 0, -1));
+      const hit = FACE_RAY.intersectObject(P.headMesh, false)[0];
+      return hit ? hit.point.z : hb.max.z - size.z * 0.1;
+    };
+    const eyeY = hb.min.y + H * 0.4, mouthY = hb.min.y + H * 0.2, chinY = hb.min.y + H * 0.08;
     const g = new THREE.Group();
-    const skin = mat(linHex(o.skin));
-    if (species === 'elf') {
-      for (const sx of [-1, 1]) {
-        const e = mesh(cone(size.x * 0.055, size.x * 0.32, 5), skin, c.x + sx * size.x * 0.5, c.y - size.y * 0.02, c.z - size.z * 0.06, g);
-        e.rotation.z = -sx * 0.95; e.rotation.x = -0.25;
-      }
-    }
-    if (species === 'orc') {
-      for (const sx of [-1, 1]) mesh(cone(size.x * 0.035, size.y * 0.13, 5), mat('#f0e6c8'), c.x + sx * size.x * 0.14, box.min.y + size.y * 0.24, box.max.z - size.z * 0.06, g);
-    }
-    if (o.beard) {
-      // barba poblada: una esfera achatada bajo la boca y una punta
-      const bm = mat(linHex(o.beard));
-      const b = mesh(sph(size.x * 0.27, 8, 6), bm, c.x, box.min.y + size.y * 0.16, box.max.z - size.z * 0.2, g);
-      b.scale.set(1, 0.9, 0.55);
-      const t = mesh(cone(size.x * 0.16, size.y * 0.22, 6), bm, c.x, box.min.y - size.y * 0.04, box.max.z - size.z * 0.17, g);
+    const hair = mat(linHex(o.hair)), skinD = mat(linHex(shade(o.skin, -0.28)));
+    const paint = mat(linHex((MAP.PAINTS || [])[f.paint] || '#b8261c'));
+    const at = (geo, m, x, y, dz = 0) => mesh(geo, m, x, y, surf(x, y) + dz, g);
+    const bald = o.head === 'Barbarian'; // esa cabeza ya trae su barba
+    // ---- barba ----
+    const B = bald ? 0 : beardOld;
+    if (B === 1 || B === 3) { const t = at(cone(W * 0.07, H * 0.13, 6), hair, c.x, chinY - H * 0.02, -W * 0.02); t.rotation.x = Math.PI; t.scale.z = 0.7; }
+    if (B === 2 || B === 3) for (const sx of [-1, 1]) { const m = at(box(W * 0.15, H * 0.035, W * 0.05), hair, c.x + sx * W * 0.07, mouthY + H * 0.05, 0); m.rotation.z = sx * -0.25; }
+    if (B === 4) { const b = at(sph(W * 0.24, 8, 6), hair, c.x, mouthY - H * 0.05, -W * 0.14); b.scale.set(1.05, 0.62, 0.5); }
+    if (B >= 5) {
+      const b = at(sph(W * 0.27, 8, 6), hair, c.x, mouthY - H * 0.04, -W * 0.15); b.scale.set(1, 0.9, 0.55);
+      const L = B === 6 ? 0.42 : 0.22;
+      const t = mesh(cone(W * 0.16, H * L, 6), hair, c.x, hb.min.y - H * (L * 0.5 - 0.08), b.position.z + W * 0.02, g);
       t.rotation.x = Math.PI; t.scale.z = 0.6;
+    }
+    // ---- cejas ----
+    if (f.brows) for (const sx of [-1, 1]) {
+      const x = c.x + sx * W * 0.17;
+      const e = at(box(W * 0.2, H * (f.brows === 2 ? 0.06 : 0.04), W * 0.05), hair, x, eyeY + H * 0.1, 0);
+      e.rotation.z = sx * -0.12;
+    }
+    // ---- marcas ----
+    if (f.marks === 1) { const s = at(box(W * 0.03, H * 0.24, W * 0.03), mat('#b8706a'), c.x - W * 0.17, eyeY, 0.002); s.rotation.z = 0.35; }
+    if (f.marks === 2) {
+      const dots = [[-0.25, -0.06], [-0.2, -0.1], [-0.28, -0.12], [-0.15, -0.07], [0.25, -0.06], [0.2, -0.1], [0.28, -0.12], [0.15, -0.07], [-0.05, -0.04], [0.05, -0.04]];
+      for (const [dx, dy] of dots) at(sph(W * 0.014, 4, 3), skinD, c.x + dx * W, eyeY + dy * H, 0);
+    }
+    if (f.marks === 3) for (const sx of [-1, 1]) { const p = at(box(W * 0.24, H * 0.07, W * 0.04), paint, c.x + sx * W * 0.17, eyeY - H * 0.005, -W * 0.005); p.rotation.y = sx * 0.35; }
+    if (f.marks === 4) for (let i = 0; i < 3; i++) { const t = at(box(W * 0.02, H * 0.16, W * 0.03), paint, c.x + W * (0.16 + i * 0.05), mouthY + H * 0.06, 0); t.rotation.y = 0.5; }
+    if (f.marks === 5) {
+      const x = c.x + W * 0.17;
+      const e = at(new THREE.CylinderGeometry(W * 0.09, W * 0.09, W * 0.03, 10), mat('#1a1614'), x, eyeY, W * 0.005);
+      e.rotation.x = Math.PI / 2;
+      const s = mesh(box(W * 0.96, H * 0.025, size.z * 0.94), mat('#2a2018'), c.x, eyeY + H * 0.07, c.z, g); s.rotation.z = -0.3;
+    }
+    // ---- pendientes ----
+    if (f.rings && o.head !== 'Rogue_Hooded') {
+      const gold = mat('#e8c25a', { metal: 0.9, rough: 0.3 }), silver = mat('#d8dce4', { metal: 0.9, rough: 0.3 });
+      const sides = f.rings === 3 ? [-1, 1] : [1];
+      for (const sx of sides) {
+        const x = c.x + sx * W * 0.47, y = eyeY - H * 0.13, z = c.z - size.z * 0.02;
+        if (f.rings === 4) { const t = mesh(cone(W * 0.022, H * 0.08, 5), mat('#f0e6c8'), x, y - H * 0.05, z, g); t.rotation.x = Math.PI; }
+        else { const r = mesh(new THREE.TorusGeometry(W * 0.045, W * 0.011, 6, 14), f.rings === 2 ? silver : gold, x, y - H * 0.03, z, g); r.rotation.y = Math.PI / 2; }
+      }
     }
     P.head.attach(g);
   }

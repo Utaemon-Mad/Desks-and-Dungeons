@@ -71,6 +71,7 @@
         case 'hacha': for (let i = 0; i < 11; i++) p.px(3 + i, 14 - i, wood); p.rect(9, 2, 4, 6, steelD); p.col(13, 2, 7, steel); p.rect(10, 3, 2, 4, steel); p.px(9, 4, glow); break;
         case 'maza': for (let i = 0; i < 9; i++) p.px(3 + i, 14 - i, wood); p.rect(10, 2, 4, 4, steelD); p.px(11, 3, steel); p.px(12, 1, steelD); p.px(14, 3, steelD); p.px(9, 4, steelD); p.px(12, 6, glow); break;
         case 'espadon': for (let i = 0; i < 11; i++) { p.px(3 + i, 12 - i, steel); p.px(4 + i, 12 - i, steelD); p.px(3 + i, 11 - i, steel); } p.row(12, 1, 5, '#c8a040'); p.px(2, 14, wood); p.px(1, 15, wood); p.px(14, 1, glow); break;
+        case 'katana': for (let i = 0; i < 11; i++) { const y = 12 - i - (i > 7 ? 1 : 0); p.px(3 + i, y, steel); p.px(4 + i, y, steelD); } p.row(12, 2, 4, '#c8a040'); p.px(2, 13, '#2a2a30'); p.px(1, 14, '#2a2a30'); p.px(1, 15, '#c8a040'); p.px(14, 1, glow); break;
         case 'martillo': for (let i = 0; i < 10; i++) p.px(3 + i, 14 - i, wood); p.rect(8, 1, 7, 5, steelD); p.row(1, 8, 14, steel); p.px(11, 3, glow); break;
         case 'lanza': for (let i = 0; i < 12; i++) p.px(1 + i, 14 - i, wood); p.rect(12, 1, 3, 3, steel); p.px(14, 0, steel); p.px(11, 4, glow); break;
         case 'arco': for (let i = 0; i < 12; i++) { const x = 3 + Math.round(Math.sin(i / 11 * Math.PI) * 6); p.px(x, 2 + i, wood); } p.col(3, 2, 13, '#e8e0d0'); p.px(8, 7, glow); break;

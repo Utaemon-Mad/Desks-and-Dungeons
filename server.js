@@ -211,9 +211,9 @@ function onlineChar(cid) {
 
 function lookFrom(profile) {
   const l = profile.char.look || {};
-  return { ...MAP.cleanLook({ cls: profile.char.cls, species: l.species, sex: l.sex, hs: l.hs, skin: l.skin, hair: l.hair, gob: l.gob }), gear: RULES.gearLook(profile.equip), aura: PROG.AURAS[profile.aura] ? profile.aura : undefined };
+  return { ...MAP.cleanLook({ cls: profile.char.cls, sex: l.sex, hs: l.hs, skin: l.skin, hair: l.hair, feat: l.feat }), gear: RULES.gearLook(profile.equip), aura: PROG.AURAS[profile.aura] ? profile.aura : undefined };
 }
-const charLook = (look) => { const c = { species: look.species, sex: look.sex, hs: look.hs, skin: look.skin, hair: look.hair }; if (look.gob) c.gob = { ...look.gob }; return c; };
+const charLook = (look) => { const c = { species: 'human', sex: look.sex, hs: look.hs, skin: look.skin, hair: look.hair }; if (look.feat) c.feat = { ...look.feat }; return c; };
 
 function derive(profile) { return RULES.derive(profile); }
 
@@ -245,15 +245,14 @@ function setupProfile(profile, look) {
   for (const [id, until] of Object.entries(profile.buffs)) if (until <= Date.now()) delete profile.buffs[id];
 }
 
-// Cambio de clase o de raza: los puntos se devuelven (las características base cambian) y se da el equipo inicial
-// que falte de la clase nueva. El sexo, el peinado y los colores se cambian sin más.
+// Cambio de clase: los puntos se devuelven (las características base cambian) y se da el equipo inicial
+// que falte de la clase nueva. El aspecto (sexo, peinado, colores y rasgos) se cambia sin más.
 function changeChar(profile, look) {
   const c = profile.char;
   const cls = RULES.classId(look.cls) || c.cls;
-  const race = RULES.raceId(look.species);
-  const changed = { cls: cls !== c.cls, race: race !== RULES.raceId(c.look && c.look.species) };
-  c.look = charLook({ ...look, species: race });
-  if (changed.cls || changed.race) c.alloc = Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0]));
+  const changed = { cls: cls !== c.cls };
+  c.look = charLook(look);
+  if (changed.cls) c.alloc = Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0]));
   if (changed.cls) {
     c.cls = cls;
     for (const it of RULES.starterItems(cls, rnd)) if (!profile.equip[it.slot]) profile.equip[it.slot] = it;
@@ -946,6 +945,9 @@ wss.on('connection', (ws) => {
       case 'dfish': { const i = inst(); if (i && allowGame()) i.hook(user.id); break; }
       case 'dgather': { const i = inst(); if (i && allowGame()) i.gather(user.id, String(msg.id)); break; }
       case 'droll': { const i = inst(); if (i && allowGame()) i.roll(user.id, msg.dx, msg.dy); break; }
+      // combate por turnos: terminar el turno y reanimar a un compañero caído (server/turns.js)
+      case 'dend': { const i = inst(); if (i) i.endTurn(user.id); break; }
+      case 'drevive': { const i = inst(); if (i && allowGame()) i.revive(user.id, msg.id ? String(msg.id) : null); break; }
 
       // ----- Forja de Brunilda (en la taberna) -----
 

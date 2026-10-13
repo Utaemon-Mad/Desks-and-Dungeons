@@ -50,8 +50,10 @@
     for (const en of m.enemies) upsert(en.id, en, 'enemy', now);
     for (const pt of m.pets || []) upsert(pt.id, pt, 'pet', now);
     for (const e of game.ents.values()) if (e.static) e.alive = true;
+    game.enc = m.enc || null;
     for (const ev of m.events || []) onEvent(ev, now);
     for (const [id, e] of game.ents) if (!e.alive) game.ents.delete(id);
+    if (D.updateTurns) D.updateTurns(); // combate por turnos (public/dungeon/turns.js)
     // al llegar junto al muro agrietado que se pinchó, se rompe
     const pb = game.pendingBreak, meP = pb && game.ents.get(DD.myId);
     if (meP && Math.max(Math.abs(meP.x - pb.x), Math.abs(meP.y - pb.y)) <= 1) { DD.net.send({ t: 'dbreak', x: pb.x, y: pb.y }); game.pendingBreak = null; }
@@ -120,6 +122,7 @@
 
   function onEvent(ev, now) {
     const me = DD.myId;
+    if (D.turnEvent && D.turnEvent(ev)) return; // avisos del combate por turnos
     switch (ev.e) {
       case 'hit': {
         const t = game.ents.get(ev.t);
@@ -296,8 +299,8 @@
     $('#dmount').classList.toggle('hidden', !(m.dungeon.kind === 'world' && DD.me && DD.me.mount));
     DD.toast(m.dungeon.kind === 'world'
       ? `${m.dungeon.name}: explora, pesca junto al agua (🎣/G), recoge hierbas y vuelve al pueblo (casa iluminada) para descansar.`
-      : m.dungeon.kind === 'arena' ? 'Duelo: clic en tu rival para atacarle, habilidades con 1-8, Espacio para esquivar. ¡Gana quien quede en pie!'
-      : 'Clic para andar, clic en un enemigo para atacarlo. 1-8 habilidades, Q/E pociones, Espacio esquiva, Alt+clic o P marca un sitio para el grupo. Derrota al jefe para abrir el portal.');
+      : m.dungeon.kind === 'arena' ? 'Duelo por turnos: en tu turno anda, clic en tu rival para atacarle, 1-8 habilidades, F termina el turno. ¡Gana quien quede en pie!'
+      : 'Explora con clic o WASD. Si un monstruo te ve, se para el tiempo y se juega por turnos: en el tuyo anda por las casillas iluminadas, ataca o usa una habilidad (acción), una poción (adicional) y F termina. Derrota al jefe para abrir el portal.');
   });
   DD.on('dsnap', (m) => { if (game.active) { applySnap(m); updateVision(); } });
   DD.on('dme', (m) => { game.you = m; game.youAt = performance.now(); D.updateHud(); });
@@ -335,12 +338,13 @@
   $('#dexit').onclick = () => DD.net.send({ t: 'dleave' });
 
   // Tiempo del servidor (para las esperas de habilidades)
-  const serverNow = () => (game.you ? game.you.now + (performance.now() - game.youAt) : Date.now());
+  // por turnos el reloj de juego se para mientras se decide: no se adelanta
+  const serverNow = () => (game.you ? game.you.now + (game.enc ? 0 : performance.now() - game.youAt) : Date.now());
 
   // ---------- Ataque automático (se activa en Ajustes) ----------
   // Si estás quieto y hay un enemigo a tu alcance, le atacas solo; las habilidades siguen siendo cosa tuya
   setInterval(() => {
-    if (!game.active || !DD.gfx || !DD.gfx.autoAttack || !game.map || game.map.kind === 'arena') return;
+    if (!game.active || !DD.gfx || !DD.gfx.autoAttack || !game.map || game.map.kind === 'arena' || game.enc) return; // por turnos se ataca a mano
     const me = game.ents.get(DD.myId);
     if (!me || me.moving || game.keys.size || game.joyDir || !game.you || game.you.hp <= 0) { game.autoTarget = null; return; }
     const arma = DD.me && DD.me.equip && DD.me.equip.arma;
@@ -419,6 +423,8 @@
   }
   function clickAt(cx, cy, repeat) {
     const { x, y } = screenToTile(cx, cy);
+    // por turnos, fuera de tu turno no se manda nada (sólo un aviso al pulsar)
+    if (game.enc && !(D.myTurn && D.myTurn())) { if (!repeat) DD.toast('⏳ Espera tu turno.'); return; }
     if (!repeat) game.pendingBreak = null;
     const { w, h } = game.map;
     if (x < 0 || y < 0 || x >= w || y >= h) return;
@@ -562,7 +568,8 @@
     stage.scene.background = new THREE.Color(bg);
     stage.scene.fog = new THREE.Fog(bg, world ? 16 : 13, world ? 34 : 26);
     // mazmorras oscuras: poca luz ambiente (con el color del tema) y que manden las antorchas y el farol
-    stage.hemi.intensity = world ? 0.62 : game.map.kind === 'arena' ? 0.3 : T.amb || 0.16;
+    // nunca del todo a oscuras: en el móvil (pantalla pequeña y con reflejos) algo más de luz ambiente
+    stage.hemi.intensity = world ? 0.62 : game.map.kind === 'arena' ? 0.4 : Math.max(T.amb || 0.16, VIEW3D.touch ? 0.38 : 0.26);
     stage.grade = world ? null : GRADES[game.map.kind === 'arena' ? 'arena' : game.map.theme] || null;
     stage.hemi.color.set(world ? '#7a8ac0' : T.sky);
     stage.hemi.groundColor.set(world ? '#2a2a1a' : T.ground || '#140c0a');
@@ -1236,6 +1243,7 @@
     vg.addColorStop(0, 'rgba(0,0,0,0)'); vg.addColorStop(1, hurt ? `rgba(120,0,0,${0.3 + hurt * 0.3})` : 'rgba(0,0,0,.45)');
     g.fillStyle = vg; g.fillRect(0, 0, innerWidth, innerHeight);
     if (game.you && game.you.hp / game.you.maxHp < 0.3) { g.fillStyle = `rgba(150,0,0,${0.08 + Math.sin(now / 200) * 0.05})`; g.fillRect(0, 0, innerWidth, innerHeight); }
+    if (D.drawTurns) D.drawTurns(now);
     D.drawOverlay(now);
     D.drawPings(now);
     if (game.showMap) D.drawMinimap();

@@ -1,5 +1,6 @@
 // Nombre y aspecto de cada base de armadura y de arma, en tablas (las lee el servidor para los nombres y el
-// navegador para dibujarlas: armor3d.js y weapons3d.js). Cada nivel (normal, excepcional, élite) tiene 4 variantes;
+// navegador para dibujarlas: armor3d.js y weapons3d.js). Cada nivel (normal, excepcional, élite) tiene 4 variantes
+// (cuero y placas, una quinta de samurái);
 // el objeto guarda la suya en it.sk. Las variantes sólo cambian nombre y aspecto: las estadísticas salen del nivel.
 // Armadura: [nombre, género, { cloth, metal, trim, parts: [piezas de armor3d.js], cape, glow, shiny, scale, tabard }]
 // Arma: [nombre, género, { m: modelo 0-2 (por defecto el del nivel), metal, trim, gem, glow }]
@@ -33,18 +34,21 @@
           ["Cuero tachonado", "m", {cloth: "#5a3a20", metal: "#a9aeb7", trim: "#a9aeb7", parts: ["vest", "studs", "belt", "pads"]}],
           ["Coselete de cazador", "m", {cloth: "#6a4a2a", metal: "#5a3a20", trim: "#a8743a", parts: ["vest", "straps", "belt"]}],
           ["Pieles de lobo", "f", {cloth: "#7a6a5a", metal: "#5a3a20", trim: "#cdbb9a", parts: ["vest", "belt", "padsBig"]}],
+          ["Dō-maru de cuero", "m", {cloth: "#5a3a20", metal: "#5a3a20", trim: "#b02a2a", parts: ["doBands", "kusazuri", "belt"]}],
         ],
         [
           ["Piel de serpiente", "f", {cloth: "#4a5a2a", metal: "#3a4a22", trim: "#a8743a", parts: ["vest", "scales", "belt", "pads"], "scale": "#5a6e30"}],
           ["Piel de demonio", "f", {cloth: "#6a1a12", metal: "#26262c", trim: "#e8dcc0", parts: ["vest", "straps", "belt", "padSpikes"]}],
           ["Jubón endurecido", "m", {cloth: "#5a3a1a", metal: "#3a2414", trim: "#d9a93a", parts: ["vest", "studs", "straps", "belt", "padsBig"]}],
           ["Armadura de trofeos", "f", {cloth: "#4a3a2a", metal: "#26262c", trim: "#e8dcc0", parts: ["vest", "straps", "belt", "padSpikes"]}],
+          ["Haramaki lacado", "m", {cloth: "#2a2a30", metal: "#2a2a30", trim: "#2a8a5a", parts: ["doBands", "sodeSmall", "kusazuri", "belt"]}],
         ],
         [
           ["Piel de wyrm", "f", {cloth: "#2a4a3a", metal: "#1e3a2e", trim: "#d9a93a", parts: ["vest", "scales", "straps", "belt", "padsBig"], "scale": "#2e6a52"}],
           ["Caparazón de escarabajo", "m", {cloth: "#1a2a2a", metal: "#1e4a4a", trim: "#d9a93a", parts: ["carapace", "shellPads", "belt"]}],
           ["Piel de dragón", "f", {cloth: "#5a1a12", metal: "#3a0a08", trim: "#d9a93a", parts: ["vest", "scales", "belt", "padsBig"], "scale": "#8a2a1a"}],
           ["Coraza de sombras", "f", {cloth: "#1a1a24", metal: "#2a2a3a", trim: "#8a5aff", parts: ["carapace", "straps", "belt", "shellPads"], "glow": "#8a5aff"}],
+          ["Dō del rōnin", "m", {cloth: "#3a1a1a", metal: "#3a1a1a", trim: "#d9a93a", parts: ["doBands", "sode", "kusazuri", "belt"]}],
         ],
       ],
       malla: [
@@ -73,18 +77,21 @@
           ["Placa gótica", "f", {cloth: "#3a3a40", metal: "#4a4e58", trim: "#4a4e58", parts: ["breast", "ridge", "back", "pauldronSpike", "gorget", "faulds"]}],
           ["Peto de campaña", "m", {cloth: "#5a5a60", metal: "#a9aeb7", trim: "#a8743a", parts: ["breast", "back", "pauldronSmall", "belt", "faulds"]}],
           ["Placa de hierro negro", "f", {cloth: "#2a2a30", metal: "#26262c", trim: "#a9aeb7", parts: ["breast", "ridge", "back", "pauldronRound", "faulds"]}],
+          ["Dō de samurái", "m", {cloth: "#1a1a1e", metal: "#1a1a1e", trim: "#2a4a9a", parts: ["doBands", "sode", "kusazuri", "belt"]}],
         ],
         [
           ["Placa ornamentada", "f", {cloth: "#5a5a62", metal: "#a9aeb7", trim: "#d9a93a", parts: ["breast", "ornate", "back", "pauldronLayer", "gorget", "faulds", "trimNeck"], "cape": true}],
           ["Placa repujada", "f", {cloth: "#5a4a3a", metal: "#a8743a", trim: "#d9a93a", parts: ["breast", "ornate", "back", "pauldronRound", "faulds", "trimNeck"]}],
           ["Placa de templario", "f", {cloth: "#e8e0d0", metal: "#a9aeb7", trim: "#d9a93a", parts: ["breast", "ornate", "back", "pauldronRound", "gorget", "faulds", "tabard"], "tabard": "#8a1a1a", "cape": true}],
           ["Placa de guerra enana", "f", {cloth: "#5a4a3a", metal: "#a8743a", trim: "#d9a93a", parts: ["breast", "ridge", "back", "pauldronLayer", "gorget", "faulds"]}],
+          ["Armadura ō-yoroi", "f", {cloth: "#7a1414", metal: "#7a1414", trim: "#d9a93a", parts: ["doBands", "sodeBig", "kusazuri", "belt"]}],
         ],
         [
           ["Placa sagrada", "f", {cloth: "#d8d0b8", metal: "#eceff3", trim: "#d9a93a", parts: ["breast", "ornate", "back", "pauldronWing", "gorget", "faulds", "trimNeck"], "cape": true, "glow": "#fff2a0"}],
           ["Placa de arconte", "f", {cloth: "#2a1a1a", metal: "#26262c", trim: "#8a1a1a", parts: ["breast", "ridge", "back", "pauldronSpike", "gorget", "faulds", "trimNeck"], "cape": true, "glow": "#ff3a2a"}],
           ["Placa del dragón dorado", "f", {cloth: "#d9a93a", metal: "#d9a93a", trim: "#eceff3", parts: ["breast", "ornate", "back", "pauldronWing", "gorget", "faulds", "trimNeck"], "cape": true, "glow": "#ffd27a"}],
           ["Placa del vacío", "f", {cloth: "#1c1428", metal: "#2a1a3a", trim: "#8a5aff", parts: ["breast", "ridge", "back", "pauldronSpike", "gorget", "faulds", "runes"], "cape": true, "glow": "#8a5aff"}],
+          ["Armadura del shōgun", "f", {cloth: "#141418", metal: "#141418", trim: "#c8102a", parts: ["doBands", "sodeBig", "kusazuri", "belt", "mon"], "glow": "#ffd27a"}],
         ],
       ],
     },
@@ -115,18 +122,21 @@
           ["Casquete", "m", {cloth: "#5a3a20", metal: "#a9aeb7", trim: "#a9aeb7", parts: ["leatherCap", "band"]}],
           ["Gorra de explorador", "f", {cloth: "#7a5a3a", trim: "#5a3a20", parts: ["leatherCap", "plume"]}],
           ["Casco tachonado", "m", {cloth: "#4a3020", metal: "#a9aeb7", trim: "#a9aeb7", parts: ["leatherCap", "band"]}],
+          ["Hachimaki", "m", {cloth: "#eceae4", metal: "#5a3a20", trim: "#c8102a", parts: ["hachimaki"]}],
         ],
         [
           ["Sombrero de guerra", "m", {cloth: "#5a3a20", metal: 0, trim: "#a8743a", parts: ["brimHat"]}],
           ["Máscara de hueso", "f", {cloth: "#e8dcc0", metal: 0, trim: 0, parts: ["boneMask"]}],
           ["Sombrero de alas anchas", "m", {cloth: "#3a2a1a", trim: "#d9a93a", parts: ["brimHat", "plume"]}],
           ["Máscara de lobo", "f", {cloth: "#5a4a3a", parts: ["leatherCap", "boneMask"]}],
+          ["Jingasa", "m", {cloth: "#c8102a", metal: "#2a2018", trim: "#a8743a", parts: ["jingasa"]}],
         ],
         [
           ["Shako", "m", {cloth: "#3a2a5a", metal: "#d9a93a", trim: "#d9a93a", parts: ["shako", "plume"]}],
           ["Calavera de hidra", "f", {cloth: "#e8dcc0", metal: 0, trim: 0, parts: ["skullHelm"]}],
           ["Yelmo del caudillo", "m", {cloth: "#3a2a1a", metal: "#a8743a", trim: "#d9a93a", parts: ["leatherCap", "band", "horns"]}],
           ["Máscara del chamán", "f", {cloth: "#3a2a1a", parts: ["boneMask", "plume"]}],
+          ["Kabuto del rōnin", "m", {cloth: "#b02a2a", metal: "#3a1a1a", trim: "#d9a93a", parts: ["kabuto"]}],
         ],
       ],
       malla: [
@@ -155,18 +165,21 @@
           ["Gran yelmo", "m", {cloth: 0, metal: "#a9aeb7", trim: "#4a4e58", parts: ["greatHelm"]}],
           ["Capacete", "m", {metal: "#a9aeb7", parts: ["dome", "cheeks"]}],
           ["Yelmo de cubo", "m", {metal: "#4a4e58", trim: "#a9aeb7", parts: ["greatHelm"]}],
+          ["Kabuto", "m", {cloth: "#2a4a9a", metal: "#1a1a1e", trim: "#a8743a", parts: ["kabuto"]}],
         ],
         [
           ["Yelmo alado", "m", {cloth: 0, metal: "#a9aeb7", trim: "#d9a93a", parts: ["dome", "nasal", "wings"]}],
           ["Yelmo con cuernos", "m", {cloth: 0, metal: "#4a4e58", trim: "#e8dcc0", parts: ["dome", "cheeks", "horns"]}],
           ["Gran yelmo dorado", "m", {metal: "#a9aeb7", trim: "#d9a93a", parts: ["greatHelm", "plume"]}],
           ["Yelmo del toro", "m", {metal: "#4a4e58", trim: "#e8dcc0", parts: ["dome", "nasal", "horns", "cheeks"]}],
+          ["Kabuto con kuwagata", "m", {cloth: "#d9a93a", metal: "#7a1414", trim: "#d9a93a", parts: ["kabuto", "kuwagata"]}],
         ],
         [
           ["Corona", "f", {cloth: 0, metal: "#d9a93a", trim: "#d9a93a", parts: ["crown"]}],
           ["Cabeza de demonio", "f", {cloth: 0, metal: "#26262c", trim: "#8a1a1a", parts: ["dome", "demonHorns", "demonMask"], "glow": "#ff3a2a"}],
           ["Corona de espinas", "f", {metal: "#4a4e58", trim: "#8a8a90", parts: ["crown", "spikes"]}],
           ["Yelmo del serafín", "m", {metal: "#eceff3", trim: "#d9a93a", parts: ["dome", "nasal", "wings", "plume"], "glow": "#fff2a0"}],
+          ["Kabuto del shōgun", "m", {cloth: "#c8102a", metal: "#141418", trim: "#d9a93a", parts: ["kabuto", "kuwagata", "menpo"], "glow": "#ff3a2a"}],
         ],
       ],
     },
@@ -197,18 +210,21 @@
           ["Guantes de piel", "mp", {cloth: "#5a3a20", metal: 0, trim: "#cdbb9a", parts: ["cuffFur", "hand"]}],
           ["Guantes de arquero", "mp", {cloth: "#6a4a2a", parts: ["bracer", "hand"]}],
           ["Guantes de trampero", "mp", {cloth: "#5a4a3a", trim: "#cdbb9a", parts: ["cuffFur", "hand"]}],
+          ["Tekko de cuero", "mp", {cloth: "#5a3a20", metal: "#3a2616", trim: "#a8743a", parts: ["kote", "hand"]}],
         ],
         [
           ["Guantes de tiburón", "mp", {cloth: "#6a7078", metal: 0, trim: 0, parts: ["cuffLeather", "hand"]}],
           ["Brazales", "mp", {cloth: "#5a3a20", metal: "#a9aeb7", trim: 0, parts: ["bracer", "hand"]}],
           ["Brazales tachonados", "mp", {cloth: "#4a3020", metal: "#a9aeb7", parts: ["bracer", "hand", "studsArm"]}],
           ["Guantes de sombra", "mp", {cloth: "#2a2a30", parts: ["cuffLeather", "hand", "claws"]}],
+          ["Kote de cuero lacado", "mp", {cloth: "#2a2a30", metal: "#2a2a30", trim: "#2a8a5a", parts: ["kote", "hand"]}],
         ],
         [
           ["Guantes de vampiro", "mp", {cloth: "#5a0e10", metal: "#26262c", trim: 0, parts: ["bracer", "hand", "knuckleSpikes"]}],
           ["Brazales de ogro", "mp", {cloth: "#3a2616", metal: "#a9aeb7", trim: 0, parts: ["bracerBig", "hand", "studsArm"]}],
           ["Guantes de piel de dragón", "mp", {cloth: "#5a1a12", metal: "#3a0a08", parts: ["bracerBig", "hand", "knuckleSpikes"]}],
           ["Garras de bestia", "fp", {cloth: "#3a2a1a", trim: "#cdbb9a", parts: ["cuffFur", "hand", "claws"]}],
+          ["Kote del rōnin", "mp", {cloth: "#3a1a1a", metal: "#3a1a1a", trim: "#d9a93a", parts: ["kote", "hand"]}],
         ],
       ],
       malla: [
@@ -237,18 +253,21 @@
           ["Manoplas", "fp", {cloth: 0, metal: "#a9aeb7", trim: 0, parts: ["cuffPlate", "handBig"]}],
           ["Guanteletes de hierro", "mp", {metal: "#a9aeb7", parts: ["cuffPlate", "handPlate", "studsArm"]}],
           ["Manoplas de soldado", "fp", {metal: "#4a4e58", parts: ["cuffPlate", "handBig"]}],
+          ["Kote", "mp", {cloth: "#2a4a9a", metal: "#1a1a1e", trim: "#a8743a", parts: ["kote", "hand"]}],
         ],
         [
           ["Guanteletes de guerra", "mp", {cloth: 0, metal: "#a9aeb7", trim: "#d9a93a", parts: ["cuffFlare", "handPlate", "knuckleSpikes"]}],
           ["Puños de hierro", "mp", {cloth: 0, metal: "#4a4e58", trim: 0, parts: ["cuffPlate", "handBig"]}],
           ["Guanteletes de templario", "mp", {metal: "#a9aeb7", trim: "#d9a93a", parts: ["cuffFlare", "handPlate"]}],
           ["Puños de guerra enanos", "mp", {metal: "#a8743a", trim: "#d9a93a", parts: ["cuffFlare", "handBig", "knuckleSpikes"]}],
+          ["Kote lacados", "mp", {cloth: "#5a1414", metal: "#7a1414", trim: "#d9a93a", parts: ["kote", "handPlate"]}],
         ],
         [
           ["Guanteletes de ogro", "mp", {cloth: 0, metal: "#4a4e58", trim: "#a8743a", parts: ["cuffFlare", "handBig", "knuckleSpikes"]}],
           ["Guanteletes de arconte", "mp", {cloth: 0, metal: "#26262c", trim: "#8a1a1a", parts: ["cuffFlare", "handPlate", "claws"], "glow": "#ff3a2a"}],
           ["Guanteletes del serafín", "mp", {metal: "#eceff3", trim: "#d9a93a", parts: ["cuffFlare", "handPlate", "runeHand"], "glow": "#fff2a0"}],
           ["Guanteletes del vacío", "mp", {metal: "#2a1a3a", trim: "#8a5aff", parts: ["cuffFlare", "handBig", "claws", "runeHand"], "glow": "#8a5aff"}],
+          ["Kote del shōgun", "mp", {cloth: "#2a2a30", metal: "#141418", trim: "#d9a93a", parts: ["kote", "handPlate"]}],
         ],
       ],
     },
@@ -279,18 +298,21 @@
           ["Botas pesadas", "fp", {cloth: "#5a3a20", metal: 0, trim: 0, parts: ["boot", "fold"]}],
           ["Botas de cazador", "fp", {cloth: "#6a4a2a", parts: ["boot", "fold"]}],
           ["Botas de trampero", "fp", {cloth: "#5a4a3a", parts: ["boot", "scalesLeg"], "scale": "#7a6a5a"}],
+          ["Kyahan", "mp", {cloth: "#3a3a4a", metal: "#5a3a20", trim: "#b02a2a", parts: ["suneate", "tabi", "waraji"]}],
         ],
         [
           ["Botas de piel de demonio", "fp", {cloth: "#5a0e10", metal: "#26262c", trim: 0, parts: ["boot", "shinSpike"]}],
           ["Botas de tiburón", "fp", {cloth: "#6a7078", metal: 0, trim: 0, parts: ["boot", "fold"]}],
           ["Botas tachonadas", "fp", {cloth: "#4a3020", metal: "#a9aeb7", parts: ["boot", "kneeCop"]}],
           ["Botas de sombra", "fp", {cloth: "#2a2a30", parts: ["boot", "shinSpike"]}],
+          ["Waraji del caminante", "fp", {cloth: "#5a4a3a", metal: "#2a2a30", trim: "#2a8a5a", parts: ["suneate", "tabi", "waraji"]}],
         ],
         [
           ["Botas de wyrm", "fp", {cloth: "#2a4a3a", metal: 0, trim: "#d9a93a", parts: ["boot", "scalesLeg"], "scale": "#2e6a52"}],
           ["Botas de escarabajo", "fp", {cloth: "#1a2a2a", metal: "#1e4a4a", trim: 0, parts: ["boot", "shellShin"]}],
           ["Botas de piel de dragón", "fp", {cloth: "#5a1a12", trim: "#d9a93a", parts: ["boot", "scalesLeg"], "scale": "#8a2a1a"}],
           ["Botas de bestia", "fp", {cloth: "#3a2a1a", metal: "#3a2a1a", parts: ["boot", "fold", "shinSpike"]}],
+          ["Suneate del rōnin", "mp", {cloth: "#3a1a1a", metal: "#3a1a1a", trim: "#d9a93a", parts: ["suneate", "haidate", "tabi", "waraji"]}],
         ],
       ],
       malla: [
@@ -319,18 +341,21 @@
           ["Botas de placas", "fp", {cloth: 0, metal: "#a9aeb7", trim: 0, parts: ["greave", "sabaton"]}],
           ["Grebas de hierro", "fp", {metal: "#a9aeb7", parts: ["greave", "sabaton", "layered"]}],
           ["Botas de placas negras", "fp", {metal: "#26262c", parts: ["greave", "kneeCop", "sabaton"]}],
+          ["Suneate", "mp", {cloth: "#2a2a3a", metal: "#1a1a1e", trim: "#2a4a9a", parts: ["suneate", "tabi", "waraji"]}],
         ],
         [
           ["Grebas de guerra", "fp", {cloth: 0, metal: "#a9aeb7", trim: "#d9a93a", parts: ["greave", "kneeCop", "kneeSpike", "sabaton"]}],
           ["Grebas de batalla", "fp", {cloth: 0, metal: "#4a4e58", trim: 0, parts: ["greave", "kneeCop", "sabaton", "layered"]}],
           ["Grebas de templario", "fp", {metal: "#a9aeb7", trim: "#d9a93a", parts: ["greave", "kneeCop", "sabaton"]}],
           ["Grebas enanas", "fp", {metal: "#a8743a", trim: "#d9a93a", parts: ["greave", "kneeCop", "sabaton", "layered"]}],
+          ["Suneate y haidate", "mp", {cloth: "#5a1414", metal: "#7a1414", trim: "#d9a93a", parts: ["suneate", "haidate", "tabi", "waraji"]}],
         ],
         [
           ["Grebas de arconte", "fp", {cloth: 0, metal: "#26262c", trim: "#8a1a1a", parts: ["greave", "kneeSpike", "sabaton", "layered"], "glow": "#ff3a2a"}],
           ["Grebas del mito", "fp", {cloth: 0, metal: "#d9a93a", trim: "#eceff3", parts: ["greave", "kneeCop", "sabaton"]}],
           ["Grebas del serafín", "fp", {metal: "#eceff3", trim: "#d9a93a", parts: ["greave", "kneeCop", "sabaton"], "glow": "#fff2a0"}],
           ["Grebas del vacío", "fp", {metal: "#2a1a3a", trim: "#8a5aff", parts: ["greave", "kneeSpike", "sabaton", "layered"], "glow": "#8a5aff"}],
+          ["Grebas del shōgun", "fp", {cloth: "#2a2a30", metal: "#141418", trim: "#c8102a", parts: ["suneate", "haidate", "tabi", "waraji"]}],
         ],
       ],
     },
@@ -360,6 +385,11 @@
       [["Mandoble", "m", {}], ["Claymore", "f", {metal: "#eef2f8", trim: "#2a2a30", "gem": "#2a2a30"}], ["Espadón de bronce", "m", {metal: "#c8925a", trim: "#a8743a"}], ["Espadón negro", "m", {"m": 1, metal: "#3a3a42", trim: "#5a5a62", "gem": "#5a5a62"}]],
       [["Montante", "m", {}], ["Flamberge", "f", {"m": 0, trim: "#9aa0a8", "gem": "#2aa84a"}], ["Montante rúnico", "m", {trim: "#4a7aff", "gem": "#4a7aff", "glow": "#4a7aff"}], ["Espadón del verdugo", "m", {"m": 2, metal: "#e2e6ee", trim: "#dcae3c", "gem": "#d8102a", "glow": "#ffd27a"}]],
       [["Espada de campeón", "f", {}], ["Espada de cristal", "f", {"m": 1, metal: "#c8e8f8", trim: "#7ad0ff", "gem": "#7ad0ff", "glow": "#7ad0ff"}], ["Mandoble del alba", "m", {metal: "#f4f0dc", trim: "#ffd27a", "gem": "#fff2a0", "glow": "#fff2a0"}], ["Hoja del abismo", "f", {metal: "#2a1a3a", trim: "#8a5aff", "gem": "#8a5aff", "glow": "#8a5aff"}]],
+    ],
+    katana: [
+      [["Katana", "f", {}], ["Uchigatana", "f", {metal: "#eef2f8", trim: "#2a2a30", "wrap": "#1a1a22"}], ["Katana del ronin", "f", {metal: "#b8bec8", trim: "#a8743a", "wrap": "#5a2a1a"}], ["Katana negra", "f", {metal: "#3a3a42", trim: "#5a5a62", "wrap": "#2a2a30"}]],
+      [["Katana de guerra", "f", {}], ["Tachi", "m", {"m": 0, trim: "#c8a040", "wrap": "#1a2a5a"}], ["Katana del cerezo", "f", {metal: "#f0e4ea", trim: "#e88aa8", "wrap": "#7a1a3a", "glow": "#ff9ac0"}], ["Katana del samurái", "f", {"m": 2, metal: "#e2e6ee", trim: "#dcae3c", "wrap": "#8a1a1a", "glow": "#ffd27a"}]],
+      [["Katana del shōgun", "f", {}], ["Nodachi de la tormenta", "m", {metal: "#c8e8f8", trim: "#7ad0ff", "wrap": "#1a2a4a", "glow": "#7ad0ff"}], ["Muramasa", "f", {metal: "#3a1a1a", trim: "#d8102a", "wrap": "#1a0a0a", "glow": "#ff3a2a"}], ["Hoja del dragón dormido", "f", {metal: "#f4f0dc", trim: "#ffd27a", "wrap": "#2a1a10", "glow": "#fff2a0"}]],
     ],
     martillo: [
       [["Martillo de guerra", "m", {}], ["Mazo", "m", {metal: "#eef2f8", trim: "#2a2a30", "gem": "#2a2a30"}], ["Martillo de bronce", "m", {metal: "#c8925a", trim: "#a8743a"}], ["Martillo de hierro", "m", {"m": 1, metal: "#3a3a42", trim: "#5a5a62", "gem": "#5a5a62"}]],

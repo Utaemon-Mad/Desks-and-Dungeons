@@ -11,7 +11,7 @@
   const titleEl = $('#start'), slotsEl = $('#slots'), serversEl = $('#servers'), loginEl = $('#login');
   const SCREENS = [titleEl, slotsEl, serversEl, loginEl];
   const profile = (() => { try { return JSON.parse(load('dd-profile')) || {}; } catch { return {}; } })();
-  const look = MAP.cleanLook(Object.assign({ cls: 'guerrero', species: 'human', skin: 0, hair: 0 }, profile.look));
+  const look = MAP.cleanLook(Object.assign({ cls: 'guerrero', skin: 0, hair: 0 }, profile.look));
   const validServer = (id) => (MAP.SERVERS.some((x) => x.id === id) ? id : null);
   // nombre actual del servidor (el dueño puede cambiarlo; llega con la cuenta)
   const serverName = (id) => ((acct && acct.servers.find((x) => x.id === id)) || MAP.SERVERS.find((x) => x.id === id) || MAP.SERVERS[0]).name;
@@ -220,18 +220,18 @@
   });
 
   // ---------- Editor de personaje ----------
-  // create: héroe nuevo en una casilla (con el reparto de los primeros puntos); edit: cambiar aspecto, raza o clase
+  // create: héroe nuevo en una casilla (con el reparto de los primeros puntos); edit: cambiar aspecto o clase
   let edMode = 'create', edRot = 0.55, edZoom = false;
   const edAlloc = Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0]));
   const starterCache = {};
   const fmtMods = (mods) => Object.entries(mods).map(([k, v]) => `${v > 0 ? '+' : ''}${v} ${RULES.STATS.find((x) => x.id === k).abbr}`).join(' ');
-  const edChar = () => ({ cls: look.cls, alloc: { ...edAlloc }, look: { species: look.species } });
+  const edChar = () => ({ cls: look.cls, alloc: { ...edAlloc }, look: { species: 'human' } });
 
   function openEditor(mode) {
     edMode = mode;
     if (mode === 'create') { show(loginEl); screen = 'create'; } else loginEl.classList.remove('hidden');
     const create = mode === 'create';
-    $('#ed-title').textContent = create ? `NUEVO HÉROE · CASILLA ${createSlot + 1}` : 'ASPECTO, RAZA Y CLASE';
+    $('#ed-title').textContent = create ? `NUEVO HÉROE · CASILLA ${createSlot + 1}` : 'ASPECTO Y CLASE';
     $('#ed-submit').textContent = create ? 'CREAR Y JUGAR' : 'GUARDAR CAMBIOS';
     $('#ed-name-l').classList.toggle('hidden', !create);
     $('#ed-stats-sec').classList.toggle('hidden', !create);
@@ -268,49 +268,43 @@
   }
 
   function buildPickers() {
-    pickRow($('#sex-pick'), Object.entries(MAP.SEXES).map(([id, name]) => ({ id, label: name })), look.sex, (id) => { look.sex = id; look.hs = MAP.hairstyle(id, id === 'm' && look.species === 'dwarf' ? 'barba' : null).id; });
-    pickRow($('#species-pick'), RULES.RACE_IDS.map((id) => ({ id, label: RULES.RACES[id].name, sub: fmtMods(RULES.RACES[id].mods), title: RULES.RACES[id].perkText })), look.species, (id) => {
-      look.species = id;
-      if (!MAP.skinsFor(id).includes(look.skin)) look.skin = MAP.skinsFor(id)[0];
+    pickRow($('#sex-pick'), Object.entries(MAP.SEXES).map(([id, name]) => ({ id, label: name })), look.sex, (id) => {
+      if (look.hs === MAP.hairstyle(look.sex).id) look.hs = MAP.hairstyle(id).id; // el peinado de serie cambia con el sexo
+      look.sex = id;
+      if (id === 'f') look.feat.beard = 0;
     });
-    $('#ed-race-note').textContent = RULES.RACES[look.species].perkText;
     pickRow($('#class-pick'), RULES.CLASS_IDS.map((id) => { const k = RULES.CLASSES[id]; return { id, label: `${k.icon} ${k.name}`, sub: fmtMods(k.base), title: k.desc }; }), look.cls, (id) => { look.cls = id; });
     const K = RULES.CLASSES[look.cls];
     $('#login-sheet-note').textContent = `${K.desc} Prefiere: ${K.weapons.map((w) => (RULES.WEAPONS[w] || RULES.OFFHANDS[w]).name.toLowerCase()).join(', ')}.`;
-    pickRow($('#hs-pick'), MAP.HAIRSTYLES[look.sex].map((h) => ({ id: h.id, label: h.name })), look.hs, (id) => { look.hs = id; });
-    // goblins: su propio modelo de cabeza, con sus rasgos (el peinado sale de aquí y no de la lista general)
-    const isGob = look.species === 'goblin';
-    $('#hs-pick').classList.toggle('hidden', isGob);
-    $('#hs-title').textContent = isGob ? 'Colores' : 'Peinado';
-    $('#gob-sec').classList.toggle('hidden', !isGob);
-    if (isGob) {
-      look.gob = MAP.cleanGoblin(look.gob, look.sex);
-      const box = $('#gob-picks'); box.innerHTML = '';
-      for (const k of MAP.GOBLIN_KEYS) {
-        const F = MAP.GOBLIN[k];
-        const wrap = document.createElement('div'); wrap.className = 'gob-field';
-        wrap.innerHTML = '<div class="field-title"></div><div class="class-pick small"></div>';
-        wrap.firstChild.textContent = F.name;
-        box.appendChild(wrap);
-        pickRow(wrap.lastChild, F.opts.map((label, i) => ({ id: i, label })), look.gob[k], (id) => { look.gob[k] = id; });
-      }
-    } else delete look.gob;
+    pickRow($('#hs-pick'), MAP.HAIR_LIST.map((h) => ({ id: h.id, label: h.name })), look.hs, (id) => { look.hs = id; });
+    // rasgos: complexión, altura, barba, cejas, marcas, pintura y pendientes
+    look.feat = MAP.cleanFeat(look.feat);
+    const box = $('#feat-picks'); box.innerHTML = '';
+    for (const k of MAP.FEATURE_KEYS) {
+      if (k === 'paint' && look.feat.marks !== 3 && look.feat.marks !== 4) continue; // el color sólo cuenta con pintura o tatuaje
+      const F = MAP.FEATURES[k];
+      const wrap = document.createElement('div'); wrap.className = 'gob-field';
+      wrap.innerHTML = '<div class="field-title"></div><div class="class-pick small"></div>';
+      wrap.firstChild.textContent = F.name;
+      box.appendChild(wrap);
+      pickRow(wrap.lastChild, F.opts.map((label, i) => ({ id: i, label })), look.feat[k], (id) => { look.feat[k] = id; });
+    }
     const skinEl = $('#skin-pick'); skinEl.innerHTML = '';
-    MAP.skinsFor(look.species).forEach((i) => {
+    MAP.HUMAN_SKINS.forEach((i) => {
       const b = document.createElement('button'); b.type = 'button';
       b.style.background = MAP.SKINS[i]; b.className = look.skin === i ? 'on' : '';
       b.onclick = () => { look.skin = i; buildPickers(); };
       skinEl.appendChild(b);
     });
     const hairEl = $('#hair-pick'); hairEl.innerHTML = '';
-    MAP.HAIRS.forEach((col, i) => {
+    MAP.HAIR_ORDER.forEach((i) => {
       const b = document.createElement('button'); b.type = 'button';
-      b.style.background = col; b.className = look.hair === i ? 'on' : '';
+      b.style.background = MAP.HAIRS[i]; b.className = look.hair === i ? 'on' : '';
       b.onclick = () => { look.hair = i; buildPickers(); };
       hairEl.appendChild(b);
     });
 
-    // características: base de raza + clase, más los primeros puntos (sin pasar de 20)
+    // características: base humana + clase, más los primeros puntos (sin pasar de 20)
     clampAlloc();
     const base = RULES.baseStats(edChar());
     const left = RULES.POINTS_START - Object.values(edAlloc).reduce((a, b) => a + b, 0);
@@ -341,8 +335,7 @@
     const pv = $('#preview'), g = pv.getContext('2d');
     g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, pv.width, pv.height);
     try { g.drawImage(VIEW3D.snapshot({ ...look, gear }, pv.width, pv.height, edZoom ? 'bust' : 'full', edRot), 0, 0); } catch { drawHero(g, 130, 300, { ...look, gear }, { dir: 'E', t: 0 }); }
-    const R = RULES.RACES[look.species];
-    $('#ed-summary').textContent = `${R.name}${look.sex === 'f' ? ' · mujer' : ''} · ${K.icon} ${K.name}`;
+    $('#ed-summary').textContent = `${look.sex === 'f' ? 'Humana' : 'Humano'} · ${K.icon} ${K.name}`;
     const d = RULES.derive({ xp: 0, char: edMode === 'create' ? edChar() : { ...edChar(), alloc: Object.fromEntries(RULES.STAT_IDS.map((k) => [k, 0])) }, equip, bag: [], buffs: {} });
     const dv = [['❤️ Vida', d.hp], ['⚡ Energía', d.en], ['⚔️ Daño', `${d.dmg[0]}–${d.dmg[1]}`], ['✨ Hechizos', `${d.spell[0]}–${d.spell[1]}`], ['🛡️ Armadura', d.armor], ['🎯 Crítico', d.crit + '%'], ['💨 Esquiva', d.dodge + '%'], ['🔮 Res. mágica', d.magicRes + '%']];
     $('#ed-derived').innerHTML = '';
@@ -352,12 +345,17 @@
   $('#ed-rr').addEventListener('click', () => { edRot += 0.6; buildPickers(); });
   // primer plano de la cara en la vista previa (para afinar los rasgos)
   $('#ed-zoom').addEventListener('click', () => { edZoom = !edZoom; $('#ed-zoom').classList.toggle('on', edZoom); buildPickers(); });
-  // goblin al azar: todos los rasgos, el tono de piel y el color de pelo
-  $('#gob-rand').addEventListener('click', () => {
-    const r = (n) => Math.floor(Math.random() * n);
-    look.gob = Object.fromEntries(MAP.GOBLIN_KEYS.map((k) => [k, r(MAP.GOBLIN[k].opts.length)]));
-    const skins = MAP.skinsFor('goblin'); look.skin = skins[r(skins.length)];
-    look.hair = r(MAP.HAIRS.length);
+  // aspecto al azar: peinado, piel, pelo y rasgos (la complexión y la altura, más bien normales)
+  $('#feat-rand').addEventListener('click', () => {
+    const r = (n) => Math.floor(Math.random() * n), pick = (a) => a[r(a.length)];
+    look.hs = pick(MAP.HAIR_LIST).id;
+    look.skin = pick(MAP.HUMAN_SKINS);
+    look.hair = Math.random() < 0.85 ? pick(MAP.HAIR_ORDER.slice(0, 12)) : pick(MAP.HAIR_ORDER);
+    const f = Object.fromEntries(MAP.FEATURE_KEYS.map((k) => [k, r(MAP.FEATURES[k].opts.length)]));
+    if (Math.random() < 0.5) f.marks = 0;
+    if (Math.random() < 0.5) f.rings = 0;
+    if (look.sex === 'f') f.beard = 0;
+    look.feat = f;
     buildPickers();
   });
 
@@ -441,7 +439,7 @@
     'Espacio hace una voltereta: eres invulnerable un instante. Úsala contra los golpes de los jefes.',
     'Los jefes marcan el suelo en rojo antes de un gran golpe: ¡sal de ahí!',
     'Pasa el ratón por un objeto para comparar sus propiedades con lo que llevas puesto.',
-    'Los goblins encuentran más objetos mágicos: +15% de hallazgo mágico.',
+    'En el editor de personaje, 🎲 Al azar te propone un aspecto nuevo: peinado, piel, barba, marcas…',
     'Madre Zarza vende pociones: lleva unas cuantas antes de bajar a una mazmorra.',
     'Si caes, aparece «Volver con tu grupo» en la taberna mientras tus amigos sigan dentro.',
     'En ☰ Menú → Ajustes puedes cambiar el volumen, la calidad, el tamaño del texto y las teclas.',
