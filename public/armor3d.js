@@ -316,7 +316,10 @@
       const r = rar('casco');
       const metal = mat('metal', sh.metal || C.steel, r), trim = mat('trim', sh.trim || C.gold, r, setTrim), cloth = mat('cloth', sh.cloth || '#555'), leather = mat('leather', sh.cloth || C.leather);
       const chain = mat('chain', sh.cloth || C.chain, r), boneM = mat('bone', C.bone), blackM = mat('cloth', '#0a0808');
-      const R = hr * 1.08, y0 = hc.y + 0.01, z0 = hc.z;
+      // las piezas están medidas para una cabeza de referencia (la de los modelos KayKit originales) y se escalan a la
+      // de este personaje alrededor de su centro; el casco se estira hacia arriba si la cabeza es más alta que ancha
+      const RREF = 0.26, R = RREF, y0 = hc.y + 0.045, z0 = hc.z;
+      zoom = [hc.x, hc.y, hc.z, hr * 1.07 / RREF];
       for (const p of sh.parts) {
         // ---- samurái: kabuto con costillas y shikoro (cubrenuca en capas), kuwagata (cuernos dorados), menpō, hachimaki y jingasa ----
         if (p === 'kabuto') {
@@ -374,6 +377,7 @@
       }
     }
 
+    zoom = null;
     // ---------------- guantes ----------------
     const sg = spec('guantes', gear);
     if (sg) {

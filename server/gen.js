@@ -11,17 +11,20 @@ const PROPS = {
   throne: { b: 1 }, eggs: { b: 1 }, stalagmite: { b: 1 }, mushrooms: { b: 0, light: '#5affc8' }, tent: { b: 1 }, campfire: { b: 1, light: '#ff8a2a' },
   bones: { b: 0 }, skull: { b: 0 }, blood: { b: 0 }, rubble: { b: 0 }, web: { b: 0 }, candles: { b: 0, light: '#ffc86a' }, rug: { b: 0 },
   crystal: { b: 1, light: '#c86aff' }, lavarock: { b: 0, light: '#ff5a1a' }, puddle: { b: 0 },
+  ribcage: { b: 0 }, skullcandle: { b: 0, light: '#ffb050' }, coins: { b: 0 }, sack: { b: 1 }, keg: { b: 1 }, weapons: { b: 0 }, barrels: { b: 1 },
+  stump: { b: 1 }, rockb: { b: 1 }, bush: { b: 1 }, log: { b: 1 }, lantern: { b: 1, light: '#ffd27a' }, flowers: { b: 0 }, fern: { b: 0 },
   torch: { wall: 1, light: '#ffa040' }, banner: { wall: 1 }, chains: { wall: 1 }, shield: { wall: 1 }, crack: { wall: 1 }, secret: { wall: 1, light: '#ffcf6a' },
 };
 
 // Qué decorado lleva cada tema (peso relativo)
 const THEME_PROPS = {
-  cuevas:    { block: ['stalagmite', 'barrel', 'crate', 'tent', 'campfire', 'cage'], floor: ['bones', 'rubble', 'mushrooms', 'skull', 'puddle', 'blood'], wall: ['torch', 'torch', 'chains', 'crack'] },
-  cripta:    { block: ['pillar', 'sarcophagus', 'coffin', 'tomb', 'statue', 'altar'], floor: ['bones', 'skull', 'candles', 'web', 'rubble', 'blood'], wall: ['torch', 'banner', 'chains', 'crack'] },
-  fortaleza: { block: ['pillar', 'barrel', 'crate', 'rack', 'table', 'brazier', 'cage'], floor: ['rug', 'bones', 'blood', 'rubble', 'skull'], wall: ['torch', 'banner', 'banner', 'shield', 'chains'] },
-  nido:      { block: ['eggs', 'stalagmite', 'eggs', 'cage'], floor: ['web', 'web', 'bones', 'skull', 'mushrooms', 'puddle'], wall: ['torch', 'crack', 'chains'] },
-  volcan:    { block: ['pillar', 'brazier', 'statue', 'altar', 'crystal', 'stalagmite'], floor: ['lavarock', 'bones', 'rubble', 'skull', 'candles'], wall: ['torch', 'banner', 'crack'] },
-  abismo:    { block: ['pillar', 'brazier', 'statue', 'altar', 'crystal', 'stalagmite'], floor: ['lavarock', 'bones', 'skull', 'candles', 'rubble'], wall: ['torch', 'banner', 'crack'] },
+  cuevas:    { block: ['stalagmite', 'barrel', 'crate', 'tent', 'campfire', 'cage', 'barrels', 'sack'], floor: ['bones', 'rubble', 'mushrooms', 'skull', 'puddle', 'blood', 'coins', 'weapons'], wall: ['torch', 'torch', 'chains', 'crack'] },
+  cripta:    { block: ['pillar', 'sarcophagus', 'coffin', 'tomb', 'statue', 'altar'], floor: ['bones', 'skull', 'candles', 'web', 'rubble', 'blood', 'ribcage', 'skullcandle', 'ribcage'], wall: ['torch', 'banner', 'chains', 'crack'] },
+  fortaleza: { block: ['pillar', 'barrel', 'crate', 'rack', 'table', 'brazier', 'cage', 'keg', 'barrels', 'sack'], floor: ['rug', 'bones', 'blood', 'rubble', 'skull', 'weapons', 'coins'], wall: ['torch', 'banner', 'banner', 'shield', 'chains'] },
+  nido:      { block: ['eggs', 'stalagmite', 'eggs', 'cage'], floor: ['web', 'web', 'bones', 'skull', 'mushrooms', 'puddle', 'ribcage'], wall: ['torch', 'crack', 'chains'] },
+  volcan:    { block: ['pillar', 'brazier', 'statue', 'altar', 'crystal', 'stalagmite'], floor: ['lavarock', 'bones', 'rubble', 'skull', 'candles', 'skullcandle', 'coins'], wall: ['torch', 'banner', 'crack'] },
+  bosque:    { block: ['stump', 'rockb', 'bush', 'bush', 'log', 'tent'], floor: ['mushrooms', 'flowers', 'flowers', 'fern', 'fern', 'bones', 'puddle', 'skull'], wall: [] },
+  abismo:    { block: ['pillar', 'brazier', 'statue', 'altar', 'crystal', 'stalagmite'], floor: ['lavarock', 'bones', 'skull', 'candles', 'rubble', 'ribcage', 'skullcandle'], wall: ['torch', 'banner', 'crack'] },
 };
 
 function generate(o) {
@@ -30,6 +33,7 @@ function generate(o) {
   const level = Math.max(1, Math.min(RULES.MAX_LEVEL + 10, o.level | 0 || 1));
   const seed = o.seed || String(Math.random());
   const rand = RULES.seeded(`dungeon:${theme}:${level}:${seed}`);
+  const forest = theme === 'bosque'; // claros unidos por senderos: sin puertas ni antorchas en los muros
   const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
   const pickR = (arr) => arr[Math.floor(rand() * arr.length)];
 
@@ -57,7 +61,7 @@ function generate(o) {
 
     // ---------- Pasillos: árbol de mínima distancia y un par de ciclos ----------
     const corridor = (a, b) => {
-      const wide = rand() < 0.3;
+      const wide = forest || rand() < 0.3;
       let x = a.cx, y = a.cy;
       const horizFirst = rand() < 0.5;
       const carve = (cx, cy) => { if (get(cx, cy) === '#') set(cx, cy, '.'); if (wide && get(cx + 1, cy) === '#' && cx + 1 < W - 1) set(cx + 1, cy, '.'); };
@@ -80,8 +84,13 @@ function generate(o) {
     for (let i = 0; i < 2; i++) corridor(pickR(rooms), pickR(rooms));
 
     const inRoom = (x, y) => rooms.find((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) || null;
+    // en el bosque, los claros tienen bordes irregulares: se abren huecos sueltos alrededor de cada uno
+    if (forest) for (const r of rooms) for (let i = 0; i < r.w + r.h; i++) {
+      const side = ri(0, 3), x = side < 2 ? ri(r.x, r.x + r.w - 1) : side === 2 ? r.x - 1 : r.x + r.w, y = side >= 2 ? ri(r.y, r.y + r.h - 1) : side === 0 ? r.y - 1 : r.y + r.h;
+      if (get(x, y) === '#') set(x, y, '.');
+    }
     // Puertas donde un pasillo de una casilla entra en una sala
-    for (const r of rooms) {
+    if (!forest) for (const r of rooms) {
       const edge = [];
       for (let x = r.x; x < r.x + r.w; x++) { edge.push([x, r.y - 1, 0, -1]); edge.push([x, r.y + r.h, 0, 1]); }
       for (let y = r.y; y < r.y + r.h; y++) { edge.push([r.x - 1, y, -1, 0]); edge.push([r.x + r.w, y, 1, 0]); }
@@ -141,7 +150,13 @@ function generate(o) {
     for (const r of rooms) {
       // pilares simétricos en salas grandes
       if (r.w >= 8 && r.h >= 6 && (theme === 'cripta' || theme === 'fortaleza' || theme === 'volcan' || theme === 'abismo' || r.boss)) {
-        for (const [x, y] of [[r.x + 1, r.y + 1], [r.x + r.w - 2, r.y + 1], [r.x + 1, r.y + r.h - 2], [r.x + r.w - 2, r.y + r.h - 2]]) if (get(x, y) === '.' && !nearDoor(x, y)) addProp(r.boss && theme !== 'nido' ? 'pillar' : 'pillar', x, y);
+        for (const [x, y] of [[r.x + 1, r.y + 1], [r.x + r.w - 2, r.y + 1], [r.x + 1, r.y + r.h - 2], [r.x + r.w - 2, r.y + r.h - 2]]) if (get(x, y) === '.' && !nearDoor(x, y)) addProp(forest ? 'rockb' : 'pillar', x, y);
+      }
+      // el bosque se alumbra con farolillos y hogueras (no hay muros para las antorchas)
+      if (forest) for (let i = 0, n = r.w * r.h > 40 ? 2 : 1; i < 12 && n > 0; i++) {
+        const x = ri(r.x + 1, r.x + r.w - 2), y = ri(r.y + 1, r.y + r.h - 2);
+        if (get(x, y) !== '.' || used.has(key(x, y)) || nearDoor(x, y)) continue;
+        addProp(r.start || rand() < 0.6 ? 'lantern' : 'campfire', x, y); n--;
       }
       const nb = r.start ? 1 : ri(1, 3);
       for (let i = 0; i < nb * 3 && props.filter((p) => inRoom(p.x, p.y) === r && PROPS[p.k].b).length < nb + 2; i++) {
@@ -152,18 +167,18 @@ function generate(o) {
         if (get(x, y) !== '.' || used.has(key(x, y)) || nearDoor(x, y)) continue;
         addProp(pickR(TP.block), x, y);
       }
-      const nf = ri(2, 5);
+      const nf = ri(3, 7);
       for (let i = 0; i < nf; i++) {
         const x = ri(r.x, r.x + r.w - 1), y = ri(r.y, r.y + r.h - 1);
         if (get(x, y) !== '.' || used.has(key(x, y))) continue;
         addProp(pickR(TP.floor), x, y);
       }
-      if (r.boss && theme !== 'nido' && theme !== 'cuevas') { const x = r.cx, y = r.y; if (get(x, y) === '.' && !used.has(key(x, y)) && !nearDoor(x, y)) addProp('throne', x, y); }
+      if (r.boss && theme !== 'nido' && theme !== 'cuevas' && !forest) { const x = r.cx, y = r.y; if (get(x, y) === '.' && !used.has(key(x, y)) && !nearDoor(x, y)) addProp('throne', x, y); }
       if (r.boss) for (let i = 0; i < 4; i++) { const x = ri(r.x, r.x + r.w - 1), y = ri(r.y, r.y + r.h - 1); if (get(x, y) === '.' && !used.has(key(x, y))) addProp(theme === 'nido' ? 'web' : 'bones', x, y); }
     }
     // En los muros con suelo debajo (la cara que se ve): antorchas, estandartes, cadenas
     for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
-      if (get(x, y) !== '#' || !walk(get(x, y + 1)) || get(x, y - 1) !== '#') continue;
+      if (forest || get(x, y) !== '#' || !walk(get(x, y + 1)) || get(x, y - 1) !== '#') continue;
       const r = inRoom(x, y + 1);
       // antorchas cada tres casillas en el muro de cada sala (y alguna en los pasillos); entre medias, adornos
       if (r && (x - r.x) % 3 === 1) props.push({ k: 'torch', x, y });

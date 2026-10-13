@@ -627,6 +627,7 @@
     fortaleza: { gain: [1.05, 0.97, 0.9], lift: [0.012, 0.004, 0], saturation: 1.0, vignette: 0.45 },
     nido: { gain: [0.95, 1.06, 0.9], lift: [0, 0.01, 0], saturation: 1.05, vignette: 0.5 },
     volcan: { gain: [1.12, 0.96, 0.82], lift: [0.02, 0.004, 0], saturation: 1.15, vignette: 0.5, bloom: 0.75 },
+    bosque: { gain: [0.94, 1.04, 0.98], lift: [0, 0.012, 0.02], saturation: 1.12, vignette: 0.5, bloom: 0.7 },
     abismo: { gain: [1.18, 0.9, 0.8], lift: [0.03, 0, 0], saturation: 1.2, vignette: 0.58, bloom: 0.85 },
     arena: { gain: [1.08, 0.98, 0.88], lift: [0.012, 0.005, 0], saturation: 1.1, vignette: 0.55, bloom: 0.65 },
   };

@@ -288,7 +288,7 @@
     gigantes:   { name: 'Gigantismo', icon: '🦣', desc: 'Enemigos enormes: +50% de vida y +50% de experiencia.' },
   };
   const weekMod = (week = weekKey()) => { const ids = Object.keys(WEEKLY_MODS); return ids[((week % ids.length) + ids.length) % ids.length]; };
-  const DESCENT_THEMES = ['cuevas', 'cripta', 'nido', 'fortaleza', 'volcan', 'abismo'];
+  const DESCENT_THEMES = ['cuevas', 'cripta', 'nido', 'bosque', 'fortaleza', 'volcan', 'abismo'];
   const descentTheme = (floor) => DESCENT_THEMES[(floor - 1) % DESCENT_THEMES.length];
   const descentLevel = (startLevel, floor) => startLevel + floor - 1;
   // Mejoras de la taberna: se pagan entre todos con donaciones; cada nivel suma sus bonificaciones a quien esté en ese servidor

@@ -369,6 +369,7 @@
     fortaleza: { floor: ['#504640', '#5a4a36'], seam: '#2e2622', wall: '#625852', top: '#151212', fog: '#080606', liquid: '#1e3a5a', sky: '#8a6a5a', amb: 0.17, ground: '#140c08', mist: '#a09080', mistA: 0.18 },
     nido: { floor: ['#36402e', '#3c4632'], seam: '#222a1c', wall: '#44523a', top: '#0e120c', fog: '#040604', liquid: '#2a3a1a', sky: '#5a7a4a', amb: 0.14, ground: '#0a1008', mist: '#8ac87a', mistA: 0.3 },
     volcan: { floor: ['#2e2628', '#342a2c'], seam: '#1a1214', wall: '#463434', top: '#100a0a', fog: '#0a0404', liquid: '#c8400a', sky: '#a04a2a', amb: 0.15, ground: '#4a1a08', mist: '#ff7a3a', mistA: 0.22 },
+    bosque: { floor: ['#3e5a2a', '#466432'], seam: '#2a3a1a', wall: '#3a4a2a', top: '#16220e', fog: '#060c06', liquid: '#2a4a46', sky: '#7a9ac8', amb: 0.3, ground: '#1a2a10', mist: '#a8d0b0', mistA: 0.16 },
     abismo: { floor: ['#2a1a1c', '#30181a'], seam: '#120808', wall: '#4a2a2a', top: '#0e0606', fog: '#0a0202', liquid: '#e0400a', sky: '#802010', amb: 0.13, ground: '#3a0a06', mist: '#c83a2a', mistA: 0.28 },
   };
   // Color de cada casilla del mundo (la textura del suelo se pinta con estos colores y algo de ruido)
@@ -380,6 +381,37 @@
   };
   const WATER = new Set(['w', 'q', '~', 'l', '%', 'v']);
   const rand = (seed) => { const s = Math.sin(seed * 127.1 + 311.7) * 43758.5453; return s - Math.floor(s); };
+
+  // Suelo del bosque: hierba con matices, briznas, hojas caídas y tierra pisada en los senderos; bajo los árboles, mantillo oscuro
+  function forestTile(g, map, x, y, X, Y, px) {
+    const ch = map.tiles[y * map.w + x], seed = x * 12.9 + y * 78.2;
+    const wall = (xx, yy) => xx < 0 || yy < 0 || xx >= map.w || yy >= map.h || map.tiles[yy * map.w + xx] === '#';
+    if (ch === '~') { g.fillStyle = '#10201c'; g.fillRect(X, Y, px, px); return; }
+    if (ch === '#') {
+      g.fillStyle = rand(seed) > 0.5 ? '#1c2a12' : '#22301a'; g.fillRect(X, Y, px, px);
+      for (let i = 0; i < 6; i++) { g.fillStyle = ['#3a2a14', '#2a3a18', '#4a3418'][i % 3]; g.fillRect(X + rand(seed + i) * px, Y + rand(seed + i * 3) * px, 3, 2); }
+      return;
+    }
+    // ¿sendero? (casilla estrecha entre árboles): tierra pisada
+    const narrow = (wall(x - 1, y) && wall(x + 1, y)) || (wall(x, y - 1) && wall(x, y + 1)) || (wall(x - 1, y) + wall(x + 1, y) + wall(x, y - 1) + wall(x, y + 1) >= 2 && rand(seed + 4) < 0.5);
+    g.fillStyle = '#40602c'; g.fillRect(X, Y, px, px);
+    if (narrow) { g.fillStyle = 'rgba(92,70,42,.75)'; g.beginPath(); g.ellipse(X + px / 2, Y + px / 2, px * 0.55, px * 0.5, 0, 0, 7); g.fill(); for (let i = 0; i < 5; i++) { g.fillStyle = 'rgba(60,44,26,.6)'; g.fillRect(X + rand(seed + 9 + i) * px, Y + rand(seed + 13 + i) * px, 2, 2); } }
+    // briznas de hierba
+    for (let i = 0; i < 18; i++) { const bx = X + rand(seed + 20 + i) * px, by = Y + rand(seed + 40 + i) * px; g.strokeStyle = rand(seed + 60 + i) > 0.5 ? 'rgba(130,170,70,.55)' : 'rgba(20,40,14,.45)'; g.lineWidth = 1; g.beginPath(); g.moveTo(bx, by); g.lineTo(bx + (rand(seed + i) - 0.5) * 3, by - 3 - rand(seed + 80 + i) * 3); g.stroke(); }
+    // hojas caídas y florecillas
+    if (rand(seed + 7) < 0.35) for (let i = 0; i < 4; i++) { g.fillStyle = ['#8a5a1a', '#a87a2a', '#6a3a14'][i % 3]; g.beginPath(); g.ellipse(X + rand(seed + 100 + i) * px, Y + rand(seed + 110 + i) * px, 2.4, 1.3, rand(seed + i) * 3, 0, 7); g.fill(); }
+    if (rand(seed + 8) < 0.18) for (let i = 0; i < 3; i++) { g.fillStyle = ['#f0e8f0', '#f0d84a', '#c8a0f0'][Math.floor(rand(seed + 120 + i) * 3)]; g.fillRect(X + rand(seed + 130 + i) * px, Y + rand(seed + 140 + i) * px, 2, 2); }
+  }
+
+  // manchas grandes de otros verdes por encima de todo el suelo (cruzan las casillas, así no se ve la cuadrícula)
+  function forestBlobs(g, map, px) {
+    for (let i = 0; i < map.w * map.h * 0.9; i++) {
+      const x = rand(i * 3.17) * map.w * px, y = rand(i * 7.31) * map.h * px, r = px * (0.5 + rand(i * 1.7) * 1.4);
+      const tone = rand(i * 9.1);
+      g.fillStyle = tone < 0.35 ? 'rgba(96,130,54,.16)' : tone < 0.7 ? 'rgba(24,44,18,.18)' : 'rgba(110,90,46,.12)';
+      g.beginPath(); g.ellipse(x, y, r, r * (0.6 + rand(i) * 0.4), rand(i * 2.2) * 3, 0, 7); g.fill();
+    }
+  }
 
   function floorTexture(map, theme) {
     const world = map.kind === 'world';
@@ -399,6 +431,7 @@
         g.fillRect(X + (n * 4 | 0), Y + ((1 - n) * 4 | 0), px / 2, px / 2);
         continue;
       }
+      if (theme === 'bosque') { forestTile(g, map, x, y, X, Y, px); if (x === map.w - 1 && y === map.h - 1) forestBlobs(g, map, px); continue; }
       if (ch === '#') { g.fillStyle = T.top; g.fillRect(X, Y, px, px); continue; }
       if (ch === '~' || ch === '%') { g.fillStyle = ch === '%' ? '#3a1408' : '#0e1a22'; g.fillRect(X, Y, px, px); continue; }
       const v = Math.floor(rand(x * 13 + y * 7) * 2);
@@ -650,7 +683,7 @@
   function grime(g, map, theme, px) {
     const wallAt = (x, y) => x < 0 || y < 0 || x >= map.w || y >= map.h || map.tiles[y * map.w + x] === '#';
     const hot = theme === 'volcan' || theme === 'abismo';
-    const mossy = theme === 'cripta' || theme === 'nido' || theme === 'cuevas';
+    const mossy = theme === 'cripta' || theme === 'nido' || theme === 'cuevas' || theme === 'bosque';
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
       if (wallAt(x, y)) continue;
       const X = x * px, Y = y * px, seed = x * 7.31 + y * 13.17;
@@ -703,8 +736,145 @@
     tex.anisotropy = 4;
     return tex;
   }
+  // ======================================================================
+  //  Bosque: en vez de muros, árboles, pinos y rocas (los que quedan entre la sala y la cámara, bajos: arbustos y
+  //  piedras); suelo de hierba pintado, matas de hierba en 3D y luz de luna. Los árboles se enseñan al explorar.
+  // ======================================================================
+  let tuftGeo = null;
+  function grassTuft() {
+    if (tuftGeo) return tuftGeo;
+    const pos = [];
+    for (let i = 0; i < 5; i++) {
+      const a = i / 5 * Math.PI, r = 0.07, h = 0.16 + (i % 2) * 0.06, ca = Math.cos(a) * r, sa = Math.sin(a) * r, lean = (i - 2) * 0.02;
+      pos.push(-ca, 0, -sa, ca, 0, sa, lean, h, lean * 0.5);
+    }
+    tuftGeo = new THREE.BufferGeometry();
+    tuftGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    tuftGeo.computeVertexNormals();
+    return tuftGeo;
+  }
+  function buildForestGL(map, out) {
+    const mm = M();
+    const { group } = out;
+    const isWall = (x, y) => x < 0 || y < 0 || x >= map.w || y >= map.h || map.tiles[y * map.w + x] === '#';
+    const floorNear = (x, y, r) => { for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) if (!isWall(x + dx, y + dy)) return true; return false; };
+    // ¿hay claro justo al norte? (entonces este árbol taparía la sala vista desde la cámara)
+    const roomNorth = (x, y, n) => { for (let i = 1; i <= n; i++) if (!isWall(x, y - i)) return true; return false; };
+    const lists = {};
+    const add = (name, it, tint = '') => (lists[name + '|' + tint] = lists[name + '|' + tint] || []).push(it);
+    const TREES = ['m:tree_single_A', 'm:tree_single_A', 'm:tree_single_B', 'm:tree_single_B', 'm:trees_A_small', 'm:trees_A_medium', 'm:trees_B_small', 'm:trees_B_medium'];
+    for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+      if (!isWall(x, y)) continue;
+      const near1 = floorNear(x, y, 1), near3 = near1 || floorNear(x, y, 3);
+      if (!near3) continue;
+      const tile = y * map.w + x, r = rand(x * 7.3 + y * 3.1), r2 = rand(x * 3.7 + y * 9.1), ry = r * Math.PI * 2;
+      const cx = x + 0.5 + (r2 - 0.5) * 0.35, cz = y + 0.5 + (r - 0.5) * 0.35;
+      const low = roomNorth(x, y, near1 ? 2 : 4);
+      if (low) {
+        // entre la sala y la cámara: matorral bajo y alguna piedra
+        if (near1 || r < 0.5) add(r2 < 0.75 ? 'bush' : ['m:rock_single_A', 'm:rock_single_C', 'm:rock_single_E'][Math.floor(r * 3)], { x: cx, z: cz, s: r2 < 0.75 ? 0.8 + r * 0.5 : 1.4 + r, r: ry, tile });
+        continue;
+      }
+      if (map.tiles[tile] === 'S') { add('bush', { x: cx, z: cz, s: 1.2, r: ry, tile }); continue; }
+      const k = rand(x * 1.3 + y * 5.9);
+      if (k < 0.06) add(k < 0.03 ? 'h:tree_pine_yellow_large' : 'h:tree_pine_orange_medium', { x: cx, z: cz, s: 0.34 + r * 0.08, r: ry, tile });
+      else if (k < 0.1) add(k < 0.08 ? 'h:tree_dead_large' : 'h:tree_dead_medium', { x: cx, z: cz, s: 0.3 + r * 0.06, r: ry, tile }, '#5a4a3a');
+      else if (k < 0.16) add(['m:rock_single_B', 'm:rock_single_D', 'm:rock_single_A'][Math.floor(r * 3)], { x: cx, z: cz, s: 2.2 + r * 1.4, r: ry, tile });
+      else {
+        const n = TREES[Math.floor(r2 * TREES.length)];
+        add(n, { x: cx, z: cz, s: (n.includes('single') ? 1.25 : 0.95) * (0.85 + r * 0.4), r: ry, tile }, near1 && r < 0.3 ? '#7a9a5a' : '');
+      }
+      // arbustos al pie de los árboles de la linde
+      if (near1 && r2 > 0.55) add('bush', { x: x + 0.5 + (r - 0.5) * 0.6, z: y + 0.5 + (r2 - 0.5) * 0.6, s: 0.55 + r * 0.3, r: ry, tile });
+    }
+    // arbusto propio: tres bolas de hojas
+    const bushGeo = (() => {
+      const parts = [[0, 0.16, 0, 0.2], [0.14, 0.12, 0.05, 0.15], [-0.12, 0.11, -0.06, 0.16], [0.02, 0.1, 0.15, 0.13]].map(([x, y, z, r]) => new THREE.IcosahedronGeometry(r, 0).translate(x, y, z));
+      const m = THREE.BufferGeometryUtils && THREE.BufferGeometryUtils.mergeGeometries ? THREE.BufferGeometryUtils.mergeGeometries(parts.map((g) => g.toNonIndexed()), false) : parts[0];
+      m.computeVertexNormals();
+      return m;
+    })();
+    const bushMat = new THREE.MeshStandardMaterial({ color: '#2e5226', roughness: 0.9, flatShading: true });
+    const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0), col = new THREE.Color();
+    const meshes = [];
+    for (const [key, list] of Object.entries(lists)) {
+      const [name, tint] = key.split('|');
+      let geo, material;
+      if (name === 'bush') { geo = bushGeo; material = bushMat; } else {
+        const P = mm.pieceGeo(name, true);
+        if (!P) continue;
+        geo = P.geometry; material = P.material;
+        if (tint) material = [].concat(material).map((m) => { const c = m.clone(); c.color = new THREE.Color(tint); return c; });
+        if (Array.isArray(material) && material.length === 1) material = material[0];
+      }
+      const im = new THREE.InstancedMesh(geo, material, list.length);
+      im.castShadow = true; im.receiveShadow = true; im.count = 0;
+      group.add(im);
+      meshes.push({ im, list, name });
+    }
+    out.updateWalls = (seen) => {
+      for (const W of meshes) {
+        let n = 0;
+        for (const w of W.list) {
+          if (!seen[w.tile] && !seenNear(seen, map, w.tile)) continue;
+          q.setFromAxisAngle(up, w.r); sc.setScalar(w.s); ps.set(w.x, 0, w.z);
+          m4.compose(ps, q, sc); W.im.setMatrixAt(n, m4);
+          if (W.name === 'bush') { col.setHSL(0.27 + rand(w.x * 9 + w.z) * 0.06, 0.45, 0.2 + rand(w.z * 7 + w.x) * 0.1); W.im.setColorAt(n, col); }
+          n++;
+        }
+        W.im.count = n; W.im.instanceMatrix.needsUpdate = true;
+        if (W.im.instanceColor) W.im.instanceColor.needsUpdate = true;
+      }
+    };
+    // matas de hierba en 3D sobre los claros (no tapan nada: la niebla de lo no visto va por encima)
+    const tufts = [];
+    for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+      const ch = map.tiles[y * map.w + x];
+      if (ch !== '.') continue;
+      const n = Math.floor(rand(x * 5.1 + y * 2.3) * 3.2);
+      for (let i = 0; i < n; i++) tufts.push({ x: x + rand(x + y * 9 + i) , z: y + rand(y + x * 7 + i * 3), s: 0.8 + rand(x * y + i) * 0.7, r: rand(i + x * 3 + y) * 6 });
+    }
+    if (tufts.length) {
+      const tm = new THREE.MeshStandardMaterial({ color: '#4e7a30', roughness: 0.95, side: THREE.DoubleSide });
+      const im = instanced(grassTuft(), tm, tufts, { shadow: false });
+      tufts.forEach((t, i) => { col.setHSL(0.24 + rand(t.x * 3.3) * 0.08, 0.5, 0.22 + rand(t.z * 5.1) * 0.12); im.setColorAt(i, col); });
+      group.add(im);
+    }
+    // manchas, sombra de la linde y puertas pintadas encima del suelo
+    const decal = new THREE.Mesh(new THREE.PlaneGeometry(map.w, map.h), new THREE.MeshStandardMaterial({ map: decalTexture(map, 'bosque'), transparent: true, roughness: 0.95, depthWrite: false }));
+    decal.rotation.x = -Math.PI / 2; decal.position.set(map.w / 2, 0.02, map.h / 2); decal.receiveShadow = true;
+    group.add(decal);
+    // decorado
+    out.props = [];
+    for (const p of map.props || []) {
+      const pr = mm.prop(p.k, 'bosque');
+      if (!pr || pr.wall) continue;
+      const o = pr.obj;
+      o.position.set(p.x + 0.5, 0, p.y + 0.5); o.rotation.y = rand(p.x * 3 + p.y) * Math.PI * 2;
+      o.visible = false;
+      group.add(o);
+      out.props.push({ o, tile: p.y * map.w + p.x, light: pr.light ? { x: p.x + 0.5, y: pr.light.y, z: p.y + 0.5 + (pr.light.z || 0), color: pr.light.color, intensity: pr.light.intensity, dist: pr.light.dist } : null });
+    }
+    out.gl = true;
+    return out;
+  }
+
+  // telaraña de esquina: hilos radiales y espiral, dibujados en una textura con transparencia
+  let webTex = null;
+  function webTexture() {
+    if (webTex) return webTex;
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d');
+    g.strokeStyle = 'rgba(235,235,240,.9)'; g.lineWidth = 1.2;
+    const ox = 4, oy = 4;
+    for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI / 2; g.beginPath(); g.moveTo(ox, oy); g.lineTo(ox + Math.cos(a) * 124, oy + Math.sin(a) * 124); g.stroke(); }
+    for (let r = 14; r < 124; r += 13) { g.beginPath(); for (let i = 0; i <= 6; i++) { const a = i / 6 * Math.PI / 2, rr = r + Math.sin(i * 1.7 + r) * 3; const px = ox + Math.cos(a) * rr, py = oy + Math.sin(a) * rr; if (i) g.quadraticCurveTo(ox + Math.cos(a - 0.13) * (rr - 4), oy + Math.sin(a - 0.13) * (rr - 4), px, py); else g.moveTo(px, py); } g.stroke(); }
+    webTex = new THREE.CanvasTexture(c); webTex.colorSpace = THREE.SRGBColorSpace;
+    return webTex;
+  }
   function buildDungeonGL(map, theme, out) {
     const mm = M();
+    if (theme === 'bosque') return buildForestGL(map, out);
     const { group, lights, floor } = out;
     const T = THEME[theme] || THEME.cripta;
     if (floor.material.map) floor.material.map.dispose(); // la textura pintada no hace falta: aquí hay losas
@@ -731,7 +901,9 @@
           if (isWall(x + dx, y + dy)) continue;
           near = true;
           const k = rand(x * 7.1 + y * 3.3 + dx * 5 + dy * 11);
-          const name = k < 0.1 ? 'wall_cracked' : k < 0.14 ? 'wall_broken' : 'wall';
+          // muros con variedad: agrietados, rotos y, en criptas y fortalezas, estanterías y ventanales enrejados
+          const fancy = (theme === 'cripta' || theme === 'fortaleza') && isWall(x, y - 1) && dy === 1;
+          const name = k < 0.1 ? 'wall_cracked' : k < 0.14 ? 'wall_broken' : fancy && k < 0.19 ? 'wall_shelves' : fancy && k < 0.23 ? 'wall_archedwindow_gated' : 'wall';
           (segs[name] = segs[name] || []).push({ x: x + 0.5 + dx * 0.375, z: y + 0.5 + dy * 0.375, r, tile, low: !isWall(x, y - 1) });
         }
         if (!near) for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) if (!isWall(x + dx, y + dy)) { near = true; break; }
@@ -742,10 +914,14 @@
       const name = ch === '^' ? 'floor_tile_big_spikes' : floorNames[Math.floor(rand(x * 13.7 + y * 7.1) * floorNames.length)];
       addF(name, { x: x + 0.5, z: y + 0.5, y: -0.0125, r: Math.floor(rand(x + y * 3.7) * 4) * Math.PI / 2, s: HS, sy: name === 'floor_tile_big_spikes' ? HS * 0.35 : HS });
     }
+    const col = new THREE.Color();
+    // cada losa con su tono (un poco más clara u oscura, y algo más cálida o fría): el suelo deja de verse repetido
+    const tone = (x, z, amp) => { const v = 1 - amp / 2 + rand(x * 3.1 + z * 7.7) * amp, h = (rand(x * 5.3 + z * 1.9) - 0.5) * 0.08; return col.setRGB(v * (1 + h), v, v * (1 - h)); };
     for (const [n, list] of Object.entries(floors)) {
       const P = mm.pieceGeo(n);
       if (!P) continue;
       const im = instanced(P.geometry, one(tinted(P.material, TINT[0])), list, { shadow: false });
+      list.forEach((it, i) => im.setColorAt(i, tone(it.x, it.z, 0.26)));
       group.add(im);
     }
     // manchas, alfombras, telarañas y puertas, sobre las losas
@@ -767,6 +943,32 @@
     capMesh.count = 0; capMesh.receiveShadow = true;
     group.add(capMesh);
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), sc = new THREE.Vector3(), ps = new THREE.Vector3(), up = new THREE.Vector3(0, 1, 0);
+    // Detalles que se enseñan al explorar: columnas en las esquinas de las salas y telarañas en las de arriba
+    const extras = [];
+    const gated = (geo, material, list, shadow = true) => {
+      if (!geo || !list.length) return;
+      const im = new THREE.InstancedMesh(geo, material, list.length);
+      im.castShadow = shadow; im.receiveShadow = true; im.count = 0;
+      group.add(im); extras.push({ im, list });
+    };
+    const corners = [], webs = [];
+    const webby = theme === 'cripta' || theme === 'nido' || theme === 'cuevas';
+    for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
+      if (isWall(x, y) || WATER.has(map.tiles[y * map.w + x])) continue;
+      const tile = y * map.w + x;
+      for (const [dx, dy] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+        if (!isWall(x + dx, y) || !isWall(x, y + dy)) continue;
+        const cx = x + (dx > 0 ? 1 : 0), cz = y + (dy > 0 ? 1 : 0), south = dy > 0;
+        corners.push({ x: cx, z: cz, q: new THREE.Quaternion(), sx: HS, sy: south ? VS * LOW_WALL : VS, sz: HS, tile });
+        if (webby && !south && rand(x * 4.7 + y * 2.9 + dx) < 0.45) {
+          const qq = new THREE.Quaternion().setFromEuler(new THREE.Euler(-0.35, dx > 0 ? -Math.PI / 4 : Math.PI / 4, 0, 'YXZ'));
+          webs.push({ x: cx - dx * 0.2, y: 1.0, z: cz + 0.2, q: qq, sx: 0.75, sy: 0.75, sz: 1, tile });
+        }
+      }
+    }
+    const PP = mm.pieceGeo('wall_pillar');
+    if (PP) gated(PP.geometry, one(tinted(PP.material, TINT[1])), corners);
+    if (webs.length) gated(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ map: webTexture(), transparent: true, opacity: 0.55, side: THREE.DoubleSide, depthWrite: false }), webs, false);
     // Los muros que tienen sala justo al norte (la cámara los ve por detrás) son siempre bajos, para que no tapen
     // la sala; el resto, siempre altos. Así nada aparece ni desaparece al moverse.
     out.updateWalls = (seen) => {
@@ -776,9 +978,20 @@
           if (!seen[w.tile] && !seenNear(seen, map, w.tile)) continue;
           q.setFromAxisAngle(up, w.r); sc.set(HS, w.low ? VS * LOW_WALL : VS, HS); ps.set(w.x, 0, w.z);
           m4.compose(ps, q, sc);
+          W.im.setColorAt(n, tone(w.x, w.z, 0.22));
           W.im.setMatrixAt(n++, m4);
         }
         W.im.count = n; W.im.instanceMatrix.needsUpdate = true;
+        if (W.im.instanceColor) W.im.instanceColor.needsUpdate = true;
+      }
+      for (const X of extras) {
+        let n = 0;
+        for (const it of X.list) {
+          if (!seen[it.tile] && !seenNear(seen, map, it.tile)) continue;
+          ps.set(it.x, it.y || 0, it.z); sc.set(it.sx, it.sy, it.sz);
+          m4.compose(ps, it.q, sc); X.im.setMatrixAt(n++, m4);
+        }
+        X.im.count = n; X.im.instanceMatrix.needsUpdate = true;
       }
       let n = 0;
       for (const c of caps) {
@@ -872,7 +1085,11 @@
     let obj = null;
     if ((slot === 'arma' || slot === 'mano') && window.WEAPON3D) {
       obj = WEAPON3D.build(it.base, it.tier || 0, it.rarity, { sk: it.sk, set: it.set });
-      if (obj) { obj.rotation.set(0.25, 0.5, slot === 'arma' && it.base !== 'arco' ? -0.78 : slot === 'mano' ? 0 : 0.2); grp.add(obj); }
+      if (obj) {
+        // la ballesta se construye tumbada (hacia +z): se mira desde arriba y en diagonal para ver la pala
+        if (it.base === 'ballesta') { obj.rotation.set(1.05, 0, 0); const w = new THREE.Group(); w.rotation.z = Math.PI * 0.75; w.add(obj); grp.add(w); }
+        else { obj.rotation.set(0.25, 0.5, slot === 'arma' && it.base !== 'arco' ? -0.78 : slot === 'mano' ? 0 : 0.2); grp.add(obj); }
+      }
     } else if (['casco', 'pecho', 'guantes', 'botas'].includes(slot)) {
       const gear = { [slot]: it.type, [slot + 'T']: it.tier || 0, [slot + 'S']: it.sk || 0, [slot + 'R']: it.rarity };
       const model = M().buildHero({ cls: 'guerrero', species: 'human', sex: 'm', hs: 'corto', skin: 0, hair: 0, gear });
@@ -1040,6 +1257,7 @@
     mist: { n: 260, color: '#b8c8b0', size: 0.9, fall: 0.05, wind: 0.3, sway: 0.2, alpha: 0.10 },
     motes: { n: 220, color: '#e8d8b0', size: 0.05, fall: 0.05, wind: 0.05, sway: 0.25, alpha: 0.5 },
     embers: { n: 260, color: '#ff8a3a', size: 0.06, fall: -0.6, wind: 0.2, sway: 0.5, glow: true },
+    fireflies: { n: 180, color: '#d8ff7a', size: 0.06, fall: 0.02, wind: 0.05, sway: 0.7, glow: true },
   };
   function weather(scene) {
     const MAX = 1400;

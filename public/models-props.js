@@ -183,7 +183,7 @@
   function prop(k, theme) {
     if (GL.ready) { const p = propGL(k, theme); if (p) return p; }
     const g = new THREE.Group();
-    const stoneC = { cripta: '#6a6c76', cuevas: '#6e5c48', fortaleza: '#6a605a', nido: '#4a5a40', volcan: '#4a3a3a', abismo: '#4a2c2c' }[theme] || '#6a6c76';
+    const stoneC = { cripta: '#6a6c76', cuevas: '#6e5c48', fortaleza: '#6a605a', nido: '#4a5a40', volcan: '#4a3a3a', abismo: '#4a2c2c', bosque: '#6a6e62' }[theme] || '#6a6c76';
     const stone = mat(stoneC), stoneD = mat(shade(stoneC, -0.3));
     let light = null, wall = false, block = true;
     switch (k) {
@@ -211,6 +211,37 @@
       case 'rubble': for (let i = 0; i < 4; i++) mesh(geo('rock', () => new THREE.DodecahedronGeometry(0.08)), stoneD, (i - 1.5) * 0.12, 0.05, (i % 2) * 0.12, g); block = false; break;
       case 'candles': for (const [x, z] of [[-0.1, 0], [0.1, 0.08], [0, -0.1]]) candle(g, x, 0, z); light = { color: '#ffc070', intensity: 0.7, dist: 2.5, y: 0.3 }; block = false; break;
       case 'lavarock': mesh(geo('rock', () => new THREE.DodecahedronGeometry(0.08)), mat('#2a1a1a'), 0, 0.05, 0, g); mesh(sph(0.04, 5, 4), mat('#ff5a1a', { emissive: '#ff5a1a', ei: 2 }), 0.06, 0.05, 0, g); light = { color: '#ff5a1a', intensity: 0.5, dist: 1.6, y: 0.2 }; block = false; break;
+      // ---- bosque ----
+      case 'stump': {
+        const bark = mat('#4a3420'), ring = mat('#a8845a');
+        mesh(cyl(0.2, 0.26, 0.32, 9), bark, 0, 0.16, 0, g); mesh(cyl(0.19, 0.19, 0.02, 9), ring, 0, 0.33, 0, g);
+        for (let i = 0; i < 3; i++) { const a = i * 2.1; const rt = mesh(cyl(0.04, 0.07, 0.3, 5), bark, Math.cos(a) * 0.24, 0.04, Math.sin(a) * 0.24, g); rt.rotation.set(Math.sin(a) * 1.2, 0, -Math.cos(a) * 1.2); }
+        mesh(halfSph(0.06), mat('#c84a2a'), 0.12, 0.33, 0.05, g); mesh(cyl(0.012, 0.015, 0.05, 4), mat('#e8e0d0'), 0.12, 0.31, 0.05, g);
+        break;
+      }
+      case 'rockb': mesh(geo('boulder', () => new THREE.DodecahedronGeometry(0.34, 0)), stone, 0, 0.26, 0, g).scale.set(1.2, 0.85, 1); mesh(geo('boulder2', () => new THREE.DodecahedronGeometry(0.18, 0)), stoneD, 0.28, 0.12, 0.12, g); mesh(halfSph(0.16), mat('#3a5a2a'), -0.05, 0.48, 0, g).scale.set(1.4, 0.4, 1.2); break;
+      case 'bush': for (const [x, y, z, r] of [[0, 0.2, 0, 0.26], [0.18, 0.16, 0.06, 0.2], [-0.16, 0.15, -0.08, 0.21], [0.03, 0.14, 0.2, 0.17]]) mesh(geo('ico' + r, () => new THREE.IcosahedronGeometry(r, 0)), mat(r > 0.22 ? '#2e5226' : '#3a6230'), x, y, z, g); for (let i = 0; i < 4; i++) mesh(sph(0.025, 5, 4), mat('#b02a3a'), Math.cos(i * 1.7) * 0.2, 0.22 + (i % 2) * 0.08, Math.sin(i * 1.7) * 0.2, g); break;
+      case 'log': {
+        const bark = mat('#4a3420'), cut = mat('#a8845a');
+        const l = mesh(cyl(0.13, 0.15, 0.95, 9), bark, 0, 0.14, 0, g); l.rotation.z = Math.PI / 2;
+        for (const sx of [-1, 1]) { const c = mesh(cyl(0.13, 0.13, 0.01, 9), cut, sx * 0.48, 0.14, 0, g); c.rotation.z = Math.PI / 2; }
+        mesh(halfSph(0.14), mat('#3a6230'), 0.1, 0.24, 0, g).scale.set(2.2, 0.35, 1);
+        for (const [x, z] of [[-0.2, 0.1], [-0.25, 0.12], [0.3, -0.1]]) { mesh(cyl(0.01, 0.012, 0.06, 4), mat('#e8e0d0'), x, 0.3, z, g); mesh(halfSph(0.035), mat('#d8a040'), x, 0.33, z, g); }
+        break;
+      }
+      case 'lantern': {
+        const iron = mat('#2a2a2e', { metal: 0.6, rough: 0.4 });
+        mesh(cyl(0.03, 0.04, 1.2, 6), mat('#4a3420'), 0, 0.6, 0, g);
+        mesh(box(0.3, 0.03, 0.03), mat('#4a3420'), 0.12, 1.15, 0, g);
+        mesh(cyl(0.004, 0.004, 0.1, 3), iron, 0.24, 1.09, 0, g);
+        mesh(box(0.1, 0.13, 0.1), mat('#ffd27a', { emissive: '#ffb84a', ei: 2.2 }), 0.24, 0.97, 0, g);
+        mesh(cone(0.08, 0.06, 4), iron, 0.24, 1.065, 0, g).rotation.y = Math.PI / 4;
+        mesh(box(0.11, 0.015, 0.11), iron, 0.24, 0.9, 0, g);
+        light = { color: '#ffcf7a', intensity: 1.6, dist: 5.5, y: 1.0 };
+        break;
+      }
+      case 'flowers': for (let i = 0; i < 7; i++) { const a = i * 0.9, r = 0.05 + (i % 3) * 0.07, h = 0.1 + (i % 2) * 0.06; mesh(cyl(0.006, 0.006, h, 3), mat('#3a6a2a'), Math.cos(a) * r, h / 2, Math.sin(a) * r, g); mesh(sph(0.028, 5, 4), mat(['#f0e8f0', '#f0d84a', '#c8a0f0', '#f07a8a'][i % 4]), Math.cos(a) * r, h, Math.sin(a) * r, g); } block = false; break;
+      case 'fern': for (let i = 0; i < 6; i++) { const f = mesh(cone(0.05, 0.36, 4), mat(i % 2 ? '#3a6a2a' : '#4a7a32'), 0, 0.1, 0, g); f.rotation.set(0.9, i * 1.05, 0); f.position.set(Math.sin(i * 1.05) * 0.1, 0.08, Math.cos(i * 1.05) * 0.1); f.scale.z = 0.25; } block = false; break;
       case 'blood': case 'web': case 'rug': case 'puddle': case 'crack': return null; // se pintan en la textura del suelo
       case 'torch': wall = true; mesh(cyl(0.025, 0.02, 0.28, 5), mat('#4a2e1a'), 0, 0.95, 0.12, g).rotation.x = -0.4; flame(g, 0, 1.08, 0.18, 1.4); light = { color: '#ff9a40', intensity: 1.8, dist: 5.5, y: 1.15, z: 0.35 }; block = false; break;
       case 'banner': wall = true; { const col = theme === 'cripta' ? '#2a2a4a' : theme === 'nido' ? '#2a4a2a' : '#6a1414'; mesh(box(0.4, 0.8, 0.02), mat(col), 0, 1.0, 0.06, g); mesh(box(0.44, 0.04, 0.04), mat('#c8a040', { metal: 0.6 }), 0, 1.4, 0.06, g); mesh(box(0.08, 0.08, 0.025), mat('#c8a040', { metal: 0.6 }), 0, 1.05, 0.075, g); } block = false; break;
@@ -238,6 +269,15 @@
     const put = (name, s, x = 0, y = 0, z = 0, ry = 0) => { const m = piece(name, s); if (!m) return null; m.position.set(x, y, z); m.rotation.y = ry; g.add(m); return m; };
     switch (k) {
       case 'pillar': if (!put('pillar_decorated', 0.36)) return null; break;
+      case 'ribcage': if (!put('h:ribcage', 0.36, 0, 0, 0, Math.random() * 6)) return null; block = false; break;
+      case 'skullcandle': if (!put('h:skull_candle', 0.4)) return null; flame(g, 0, 0.3, 0, 0.7); light = { color: '#ffb050', intensity: 0.7, dist: 2.4, y: 0.4 }; block = false; break;
+      case 'coins': put('coin_stack_small', 0.4, -0.08, 0, 0.05); put('coin_stack_medium', 0.36, 0.1, 0, -0.06, 1); block = false; break;
+      case 'sack': if (!put('m:sack', 0.9)) return null; break;
+      case 'keg': if (!put('keg_decorated', 0.34)) return null; break;
+      case 'weapons': if (!put('sword_shield', 0.32, 0, 0, 0, Math.random() * 6)) return null; block = false; break;
+      case 'barrels': if (!put('barrel_small_stack', 0.34)) return null; break;
+      case 'rockb': if (!put(['m:rock_single_B', 'm:rock_single_D'][Math.random() < 0.5 ? 0 : 1], 2.6)) return null; break;
+      case 'tent': if (theme !== 'bosque' || !put('m:tent', 0.7)) return null; break;
       case 'sarcophagus': if (!put('h:coffin_decorated', 0.32)) return null; break;
       case 'coffin': if (!put('h:coffin', 0.28)) return null; break;
       case 'tomb': if (!put('h:gravestone', 0.42)) return null; break;

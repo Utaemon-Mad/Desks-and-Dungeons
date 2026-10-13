@@ -7,6 +7,13 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 12, date: 'Octubre', title: 'El Bosque umbrío', items: [
+      '🌲 Mazmorra nueva: el Bosque umbrío. Claros unidos por senderos entre árboles, pinos y robles otoñales, hierba que se mueve con la luz de la luna, luciérnagas, farolillos y hogueras. Lobos, arañas, bandidos, fuegos fatuos y retoños corruptos… y al fondo, Raízmadre, el Ent Corrupto.',
+      '🏰 Mazmorras con más detalle: cada losa y cada piedra con su tono, columnas en las esquinas, estanterías y ventanales enrejados en criptas y fortalezas, telarañas en los rincones y mucho más por el suelo (costillares, calaveras con vela, monedas, sacos, barricas, armas tiradas).',
+      '🪖 Los cascos ya tapan bien la cabeza: el pelo se recoge debajo y los adornos (coronas, alas, cuernos) se ajustan al tamaño de la cabeza.',
+      '🏴‍☠️ El parche en el ojo lleva una cinta fina que rodea la cabeza (antes parecía una tabla atravesada).',
+      '🏹 Ballestas nuevas: culata con empuñadura, pala curva, cuerda, virote con plumas, estribo y herrajes; apuntan hacia delante al disparar.',
+    ] },
     { v: 11, date: 'Octubre', title: 'El camino del samurái', items: [
       '⚔️ Katanas: arma a dos manos, más rápida que el mandoble y que aprovecha la Destreza. Doce modelos, de la Uchigatana a la Muramasa y la Hoja del dragón dormido. Guerreros y pícaros la prefieren.',
       '🏯 Armaduras samurái en cuero y placas: dō lacado con sus lamas atadas, sode (hombreras de placas), kusazuri (faldón), kabuto con cubrenuca y kuwagata, menpō, kote, suneate y haidate, tabi y sandalias waraji. Y para los ligeros, hachimaki y jingasa.',

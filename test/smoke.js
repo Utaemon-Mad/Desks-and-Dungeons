@@ -147,6 +147,10 @@ function rulesTests() {
     assert.ok(g.spawns.some((s) => s.boss && s.k === RULES.THEMES[theme].boss), 'tiene su jefe');
     assert.strictEqual(g.tiles.length, g.w * g.h);
   }
+  // bosque: claros sin puertas ni antorchas de muro, alumbrados con farolillos y hogueras
+  const fo = GEN.generate({ theme: 'bosque', level: 3, seed: 'b' });
+  assert.ok(!fo.tiles.includes('+') && !fo.props.some((p) => p.k === 'torch') && fo.props.some((p) => p.k === 'lantern'), 'bosque sin puertas, con farolillos');
+  assert.ok(RULES.THEMES.bosque.mobs.includes('retono') && RULES.MONSTERS['ent-corrupto'].boss, 'enemigos del bosque');
 }
 
 // ---------- Progresión: forja, tablón, mascotas, pesca ----------
