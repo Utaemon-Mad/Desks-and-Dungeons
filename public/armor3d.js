@@ -180,6 +180,37 @@
     const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
     return g;
   });
+  // visera de pico de perro (bacinete de pico): de las cejas a debajo de la barbilla y de oreja a oreja, por fuera del
+  // bacinete, con un hocico cónico a la altura de la nariz y la boca. a: alrededor (0 = la cara), ph: desde arriba.
+  const VISOR = { a: 1.5, top: 0.47, bot: 0.9, side: 0.79 };
+  const visorBot = (a) => Math.PI * (VISOR.side + (VISOR.bot - VISOR.side) * Math.pow(Math.cos(a / VISOR.a * Math.PI / 2), 1.5));
+  function visorPt(a, ph, lift = 1) {
+    // hocico: cono que sale de la cara a la altura de la nariz y se afila hacia delante, un poco hacia abajo
+    const d = Math.hypot(a / 0.62, (ph - Math.PI * 0.63) / (Math.PI * 0.19));
+    const k = Math.max(0, 1 - d), r = (1.07 + 1.05 * k * k * (3 - 2 * k) * (0.55 + 0.45 * k)) * lift;
+    return [Math.sin(ph) * Math.sin(a) * r, Math.cos(ph) * r, Math.sin(ph) * Math.cos(a) * r * 1.08];
+  }
+  const visorGeo = () => G('visor', () => {
+    const THREE = T(), N = 40, M = 24, pos = [], idx = [];
+    for (let i = 0; i <= N; i++) for (let j = 0; j <= M; j++) { const a = -VISOR.a + 2 * VISOR.a * i / N, ph = Math.PI * VISOR.top + (visorBot(a) - Math.PI * VISOR.top) * j / M; pos.push(...visorPt(a, ph)); }
+    for (let i = 0; i < N; i++) for (let j = 0; j < M; j++) { const A = i * (M + 1) + j, B = (i + 1) * (M + 1) + j; idx.push(A, A + 1, B, B, A + 1, B + 1); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); g.setIndex(idx); g.computeVertexNormals();
+    return g;
+  });
+  const visorLine = (key, f, lift, r, n = 24) => G('vl' + key, () => {
+    const THREE = T(), pts = [];
+    for (let i = 0; i <= n; i++) { const [a, ph] = f(i / n); pts.push(new THREE.Vector3(...visorPt(a, ph, lift))); }
+    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), n * 2, r, 6, false);
+  });
+  // borde de la visera: arriba, lado, abajo y el otro lado
+  const visorEdge = () => G('visorEdge', () => {
+    const THREE = T(), pts = [], n = 20, top = Math.PI * VISOR.top;
+    for (let i = 0; i <= n; i++) pts.push(visorPt(-VISOR.a + 2 * VISOR.a * i / n, top, 1.005));
+    for (let i = 1; i <= n; i++) pts.push(visorPt(VISOR.a, top + (visorBot(VISOR.a) - top) * i / n, 1.005));
+    for (let i = 1; i <= n; i++) { const a = VISOR.a - 2 * VISOR.a * i / n; pts.push(visorPt(a, visorBot(a), 1.005)); }
+    for (let i = 1; i < n; i++) pts.push(visorPt(-VISOR.a, visorBot(-VISOR.a) - (visorBot(-VISOR.a) - top) * i / n, 1.005));
+    return new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map((p) => new THREE.Vector3(...p)), true), pts.length * 2, 0.026, 6, true);
+  });
   // perfil plano extruido (nasal)
   const extrude2 = (key, pts, depth) => G('x' + key, () => {
     const THREE = T(), sh = new THREE.Shape();
@@ -492,9 +523,16 @@
         if (p === 'basinet') { shell('basinet', metal); rim('basinet', edge, 0.03); rivets('basinet', edge, 22, 0.975, 1.03, 0, Math.PI * 2, 0.006); }
         // visera de pico de perro (bacinete de pico): hocico con rendijas y agujeros para respirar
         if (p === 'hounskull') {
-          const c = at('basinet', 0, 1.08, 1.0);
-          put('head', twoSided(metal), cone(18), 0, c[1] + 0.005, c[2] + 0.05, Math.PI / 2 + 0.15, 0, 0, R * 0.5, R * 0.85, R * 0.46);
-          for (const sx of [-1, 1]) { put('head', black, box(), sx * 0.04, c[1] + 0.045, c[2] + 0.04, 0.5, sx * 0.3, 0, 0.05, 0.008, 0.014); for (let i = 0; i < 3; i++) rivet(black, [sx * (0.03 + i * 0.012), c[1] - 0.05, c[2] + 0.08 + i * 0.015], 0.004); rivet(trim, at('basinet', sx * 1.5, 0.98, 1.05), 0.012); }
+          // visera entera (de las cejas a la barbilla) con el pico saliendo de ella; gira en dos pivotes a los lados
+          const vp = (a, ph, lift = 1) => { const v = visorPt(a, ph, lift); return [v[0] * HS, y0 + v[1] * HS, z0 + v[2] * HS]; };
+          put('head', twoSided(metal), visorGeo(), 0, y0, z0, 0, 0, 0, HS);
+          put('head', edge, visorEdge(), 0, y0, z0, 0, 0, 0, HS);
+          put('head', edge, visorLine('ridge', (q) => [0, Math.PI * (0.5 + q * 0.36)], 1.012, 0.022), 0, y0, z0, 0, 0, 0, HS);
+          for (const sx of [-1, 1]) {
+            put('head', black, visorLine('slit' + sx, (q) => [sx * (0.1 + q * 0.7), Math.PI * (0.545 - q * 0.015)], 1.012, 0.03), 0, y0, z0, 0, 0, 0, HS);
+            for (let i = 0; i < 3; i++) for (let j = 0; j < 2; j++) rivet(black, vp(sx * (0.14 + j * 0.1), Math.PI * (0.66 + i * 0.045), 1.008), 0.0045);
+            put('head', trim, cyl(1, 1, 1, 16), ...vp(sx * 1.5, Math.PI * 0.56, 1.03), 0, 0, Math.PI / 2, 0.016, 0.008, 0.016);
+          }
         }
         // ---- celada: casquete redondo con cola larga por detrás, rendija de la vista y cresta ----
         if (p === 'sallet') {
