@@ -19,7 +19,9 @@
     view: { s: 3, dpr: 1 }, cam: { x: 0, y: 0 }, you: null, youAt: 0, hover: null, mouse: null, showMap: true, log: [],
     keys: new Set(), sentDir: '0,0', boss: null, statics: null, auras: [], lastHurt: 0,
     dying: new Map(), herbs: [], hitstop: 0, joyDir: null, fps: { n: 0, t: 0, v: 0 },
+    camRot: 0, camYaw: 0, camQ: 0, camPan: { x: 0, z: 0 }, // giro (pasos de 90°) y desplazamiento de la cámara en combate
   };
+  const UP = new THREE.Vector3(0, 1, 0);
   window.__dGame = game;
 
   function resizeGame() {
@@ -271,7 +273,7 @@
     game.map = m.dungeon;
     game.props = m.dungeon.props || [];
     game.ents.clear(); game.floaters = []; game.fx = []; game.projs = []; game.teles = []; game.particles = []; game.auras = [];
-    game.log = []; game.statics = null; game.boss = null; game.bossSeen = 0; game.heardLoot = new Set(); game.camInit = false; game.keys.clear(); game.sentDir = '0,0';
+    game.log = []; game.statics = null; game.boss = null; game.bossSeen = 0; game.heardLoot = new Set(); game.camInit = false; game.camRot = game.camYaw = game.camQ = 0; game.camPan = { x: 0, z: 0 }; game.keys.clear(); game.sentDir = '0,0';
     game.seen = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.vis = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.openDoors = new Set(m.dungeon.doors || []);
@@ -365,7 +367,7 @@
   function sendDir() {
     let dx = 0, dy = 0;
     for (const k of game.keys) { const d = KEYDIR[k]; if (d) { dx += d[0]; dy += d[1]; } }
-    dx = Math.sign(dx); dy = Math.sign(dy);
+    [dx, dy] = VIEW3D.screenToTile(Math.sign(dx), Math.sign(dy), game.camQ);
     const key = dx + ',' + dy;
     if (key === game.sentDir) return;
     game.sentDir = key;
@@ -449,7 +451,7 @@
   }
   cv.addEventListener('contextmenu', (e) => e.preventDefault());
   cv.addEventListener('pointermove', (e) => {
-    if (!game.active) return;
+    if (!game.active || (camDrag && camDrag.moved)) return;
     game.hover = screenToTile(e.clientX, e.clientY); game.mouse = { x: e.clientX, y: e.clientY }; game.mouseOnMap = true;
     const en = stage && entUnder(e.clientX, e.clientY, ['enemy']);
     game.hoverEnemy = en ? en.id : null;
@@ -467,13 +469,21 @@
   });
   cv.addEventListener('pointerleave', () => { game.mouseOnMap = false; });
   cv.addEventListener('pointerdown', (e) => {
-    if (!game.active || e.button === 2) return;
-    if (e.button === 1 || e.altKey) {
+    if (!game.active) return;
+    if (e.button === 1 || (e.altKey && e.button === 0)) {
       e.preventDefault();
       const t = screenToTile(e.clientX, e.clientY);
       if (t.x >= 0) DD.net.send({ t: 'dping', x: t.x, y: t.y, k: e.shiftKey ? 'danger' : 'here' });
       return;
     }
+    // en combate, arrastrar (o el botón derecho) mueve la cámara; un clic sin arrastrar hace lo de siempre al soltar
+    if (game.enc && (e.button === 0 || e.button === 2)) {
+      if (camDrag) { camDrag = null; return; } // un segundo dedo: es un pellizco (zoom)
+      camDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, btn: e.button, moved: e.button === 2 };
+      try { cv.setPointerCapture(e.pointerId); } catch { /* nada */ }
+      return;
+    }
+    if (e.button === 2) return;
     game.hover = screenToTile(e.clientX, e.clientY);
     const r = clickAt(e.clientX, e.clientY, false);
     // mantener pulsado sobre el suelo: el héroe sigue al ratón
@@ -483,6 +493,39 @@
     }
   });
   window.addEventListener('pointerup', () => { clearInterval(holding); holding = null; });
+  // ---------- Cámara libre en combate ----------
+  let camDrag = null;
+  function panBy(x0, y0, x1, y1) {
+    const a = stage && stage.pick(x0, y0), b = stage && stage.pick(x1, y1);
+    if (!a || !b) return;
+    const P = game.camPan;
+    P.x -= b.x - a.x; P.z -= b.z - a.z;
+    const d = Math.hypot(P.x, P.z), MAX = 16;
+    if (d > MAX) { P.x *= MAX / d; P.z *= MAX / d; }
+    game.camHome = false;
+  }
+  cv.addEventListener('pointermove', (e) => {
+    if (!camDrag || e.pointerId !== camDrag.id) return;
+    const lx = camDrag.lx !== undefined ? camDrag.lx : camDrag.x, ly = camDrag.ly !== undefined ? camDrag.ly : camDrag.y;
+    if (!camDrag.moved && Math.hypot(e.clientX - camDrag.x, e.clientY - camDrag.y) > 8) camDrag.moved = true;
+    if (!camDrag.moved) return;
+    panBy(lx, ly, e.clientX, e.clientY);
+    camDrag.lx = e.clientX; camDrag.ly = e.clientY;
+    cv.dataset.cur = 'grab';
+  });
+  cv.addEventListener('pointerup', (e) => {
+    if (!camDrag || e.pointerId !== camDrag.id) return;
+    const d = camDrag; camDrag = null;
+    if (cv.dataset.cur === 'grab') cv.dataset.cur = '';
+    if (!d.moved && d.btn === 0 && game.active) { game.hover = screenToTile(e.clientX, e.clientY); clickAt(e.clientX, e.clientY, false); }
+  });
+  cv.addEventListener('pointercancel', () => { camDrag = null; });
+  // girar de 90 en 90 (dir: +1 / -1) y volver a centrar en el héroe (si ya lo está, quita también el giro)
+  function camRotate(dir) { if (!game.enc) return; game.camRot += dir; game.camQ = ((game.camRot % 4) + 4) % 4; }
+  function camCenter() {
+    if (((!game.camPan.x && !game.camPan.z) || game.camHome) && game.enc) { game.camRot = Math.round(game.camRot / 4) * 4; game.camQ = 0; }
+    game.camHome = true;
+  }
   cv.addEventListener('pointermove', (e) => { game.mouse0 = { x: e.clientX, y: e.clientY }; if (holding) game.mouse = game.mouse0; });
   cv.addEventListener('mousedown', (e) => { if (e.button === 1) e.preventDefault(); });
 
@@ -518,9 +561,41 @@
   let fxp = null, dustp = null, wx = null, hoverRing = null;     // chispas (aditivas), polvo/humo y clima
   const herbObjs = new Map(), corpses = [];
 
+  // Lo alto que queda entre la cámara isométrica (al sureste) y el héroe se vuelve medio transparente
+  const occBox = new THREE.Box3();
+  function fadeOccluders(hx, hz, dt) {
+    for (const p of built.props || []) {
+      if (!p.o.visible && !p.fade) continue;
+      if (p.h === undefined) p.h = occBox.setFromObject(p.o).isEmpty() ? 0 : occBox.max.y;
+      if (p.h < 0.9) continue;
+      // d: cuánto más cerca de la cámara está que el héroe; s: separación a lo ancho de la pantalla
+      const ox = p.o.position.x - hx, oz = p.o.position.z - hz;
+      const [qx, qz] = VIEW3D.QUAD[game.camQ];
+      const d = (ox * qx + oz * qz) * Math.SQRT1_2, s = (ox * qz - oz * qx) * Math.SQRT1_2;
+      const want = d > 0.1 && d < p.h * 1.41 + 0.3 && Math.abs(s) < 1 ? 1 : 0;
+      const f = p.fade || 0;
+      if (f === want) continue;
+      p.fade = want > f ? Math.min(1, f + dt * 5) : Math.max(0, f - dt * 3);
+      if (!p.fadeMats) {
+        p.fadeMats = [];
+        p.o.traverse((c) => {
+          if (!c.isMesh) return;
+          c.material = Array.isArray(c.material) ? c.material.map((m) => m.clone()) : c.material.clone();
+          for (const m of [].concat(c.material)) { m.userData.own = true; p.fadeMats.push({ m, op: m.opacity, tr: m.transparent, dw: m.depthWrite }); }
+        });
+      }
+      for (const F of p.fadeMats) {
+        F.m.opacity = F.op * (1 - 0.72 * p.fade);
+        const t = p.fade > 0.01 || F.tr;
+        if (F.m.transparent !== t) { F.m.transparent = t; F.m.needsUpdate = true; }
+        F.m.depthWrite = p.fade > 0.01 ? false : F.dw;
+      }
+    }
+  }
+
   function ensureStage() {
     if (stage) return;
-    stage = VIEW3D.makeStage({ offset: [0, 9.5, 7.2], ambient: 0.3, sky: '#5a6aa0', ground: '#140c0a', lights: 10, sun: 0.0001 });
+    stage = VIEW3D.makeStage({ offset: VIEW3D.ISO.toArray().map((v) => v * 11.9), ambient: 0.3, sky: '#5a6aa0', ground: '#140c0a', lights: 10, sun: 0.0001 });
     stage.sun.castShadow = false;
     fxp = VIEW3D.particles(stage.scene, 1400, true);
     dustp = VIEW3D.particles(stage.scene, 800, false);
@@ -876,6 +951,7 @@
   function doRoll() {
     let dx = 0, dy = 0;
     for (const k of game.keys) { const d = KEYDIR[k]; if (d) { dx += d[0]; dy += d[1]; } }
+    [dx, dy] = VIEW3D.screenToTile(Math.sign(dx), Math.sign(dy), game.camQ);
     if (!dx && !dy && game.joyDir) [dx, dy] = game.joyDir;
     DD.net.send({ t: 'droll', dx: Math.sign(dx), dy: Math.sign(dy) });
   }
@@ -935,21 +1011,33 @@
     if (!game.camInit) { game.cam = { x: tx, y: tz }; game.camInit = !!me; }
     game.cam.x += (tx - game.cam.x) * Math.min(1, dt * 6); game.cam.y += (tz - game.cam.y) * Math.min(1, dt * 6);
     const zoom = (innerWidth <= 820 ? 1.18 : 1) * (game.zoom || 1) * (DD.camZoom || 1);
-    stage.offset.set(0, 9.5 * zoom, 7.2 * zoom);
+    // vista isométrica: la cámara mira desde el sureste, girada 45° (VIEW3D.ISO). En combate se puede girar de 90 en 90
+    // y arrastrar; al acabar vuelve sola a su sitio
+    if (!game.enc && game.camRot % 4) { game.camRot = Math.round(game.camRot / 4) * 4; game.camQ = 0; }
+    if ((!game.enc || game.camHome) && (game.camPan.x || game.camPan.z)) {
+      const kp = Math.min(1, dt * 5);
+      game.camPan.x -= game.camPan.x * kp; game.camPan.z -= game.camPan.z * kp;
+      if (Math.abs(game.camPan.x) + Math.abs(game.camPan.z) < 0.02) { game.camPan.x = game.camPan.z = 0; game.camHome = false; }
+    }
+    game.camYaw += (game.camRot * Math.PI / 2 - game.camYaw) * Math.min(1, dt * 7);
+    stage.offset.copy(VIEW3D.ISO).applyAxisAngle(UP, game.camYaw).multiplyScalar(11.9 * zoom);
     let shake = 0;
     if (game.shake && game.shake > now) shake = Math.min(1, (game.shake - now) / 260) * 0.16;
-    stage.lookAt(game.cam.x + (Math.random() - 0.5) * shake, game.cam.y + 0.6 + (Math.random() - 0.5) * shake);
+    stage.lookAt(game.cam.x + game.camPan.x + (Math.random() - 0.5) * shake, game.cam.y + game.camPan.z + (Math.random() - 0.5) * shake, 0.5);
 
     // lo explorado: muros, decorado y niebla
     const sc = game.seen.reduce((a, b) => a + b, 0);
-    const heroKey = me ? me.x + ',' + me.y : '';
+    const heroKey = (me ? me.x + ',' + me.y : '') + '|' + game.camQ;
     if (sc !== seenCount || heroKey !== game.wallKey) {
       seenCount = sc; game.wallKey = heroKey;
+      built.rot = game.camQ;
       if (built.updateWalls) built.updateWalls(game.seen, me ? me.x + 0.5 : undefined, me ? me.y + 0.5 : undefined);
-      for (const p of built.props || []) p.o.visible = !!game.seen[p.tile];
+      // lo colgado en un muro que con este giro es bajo no se ve (su luz sí)
+      for (const p of built.props || []) p.o.visible = !!game.seen[p.tile] && !(p.lm & (1 << game.camQ));
       fogDirty = true;
     }
     if (fogDirty) { fog.update(game.seen, game.vis); fogDirty = false; }
+    if (me) fadeOccluders(me.rx + 0.5, me.ry + 0.5, dt);
 
     // personajes
     const live = new Set();
@@ -1260,7 +1348,7 @@
 
   // Lo que comparten los archivos de public/dungeon/ (se cargan después de este);
   // las variables que cambian de valor se leen como D.nombre
-  const D = DD.dg = { $, WATER_T, entAt, g, game, herbUnder, models, monName, onEvent, serverNow, viewEl, who,
+  const D = DD.dg = { $, WATER_T, camCenter, camRotate, entAt, g, game, herbUnder, models, monName, onEvent, serverNow, viewEl, who,
     get stage() { return stage; }, get seenCount() { return seenCount; } };
 
   // ======================================================================

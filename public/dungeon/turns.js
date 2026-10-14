@@ -17,15 +17,28 @@
     '<div class="dt-btns"><button class="btn" type="button" id="dt-end" title="Terminar el turno (F)">⏭ TERMINAR TURNO</button>' +
     '<button class="btn alt" type="button" id="dt-dodge" title="Acción: hasta tu próximo turno es más fácil esquivar (Espacio)">🛡️ Defenderse</button>' +
     '<button class="btn alt hidden" type="button" id="dt-revive" title="Acción: reanima al compañero caído que tienes al lado">💚 Reanimar</button></div>' +
-    '<p class="dt-hint" id="dt-hint"></p>';
+    '<p class="dt-hint" id="dt-hint"></p>' +
+    '<div class="dt-cam"><button class="btn alt" type="button" id="dt-camL" title="Girar la cámara a la izquierda (,)">⟲</button>' +
+    '<button class="btn alt" type="button" id="dt-camC" title="Volver a tu héroe (H); otra vez, quita el giro">🎯</button>' +
+    '<button class="btn alt" type="button" id="dt-camR" title="Girar la cámara a la derecha (.)">⟳</button>' +
+    '<small>Arrastra la vista para mirar alrededor</small></div>';
   const tban = document.createElement('div'); tban.id = 'dtbanner'; tban.className = 'hidden';
   view.appendChild(strip); view.appendChild(panel); view.appendChild(tban);
   $('#dt-end').onclick = () => DD.net.send({ t: 'dend' });
   $('#dt-dodge').onclick = () => DD.net.send({ t: 'droll', dx: 0, dy: 0 });
   $('#dt-revive').onclick = () => { const a = downedNear(); if (a) DD.net.send({ t: 'drevive', id: a.id }); };
+  // cámara libre: girar de 90 en 90 y volver al héroe (arrastrar la vista va en dungeon.js)
+  $('#dt-camL').onclick = () => D.camRotate(-1);
+  $('#dt-camR').onclick = () => D.camRotate(1);
+  $('#dt-camC').onclick = () => D.camCenter();
   window.addEventListener('keydown', (e) => {
     if (!game.active || !game.enc || DD.scene !== 'dungeon' || (document.activeElement && document.activeElement.tagName === 'INPUT')) return;
-    if (e.key.toLowerCase() === 'f' && myTurn()) { e.preventDefault(); DD.net.send({ t: 'dend' }); }
+    if (document.querySelector('.overlay:not(.hidden)')) return;
+    const k = e.key.toLowerCase();
+    if (k === 'f' && myTurn()) { e.preventDefault(); DD.net.send({ t: 'dend' }); }
+    else if (k === ',') D.camRotate(-1);
+    else if (k === '.') D.camRotate(1);
+    else if (k === 'h') D.camCenter();
   });
 
   const myTurn = () => !!(game.enc && game.enc.active && game.enc.active.k === 'p' && game.enc.active.id === DD.myId);
@@ -85,7 +98,7 @@
     $('#dt-dodge').classList.toggle('hidden', !mine || !tb || tb.action <= 0);
     $('#dt-revive').classList.toggle('hidden', !mine || !tb || tb.action <= 0 || !downedNear());
     $('#dt-hint').textContent = mine
-      ? 'Clic en el suelo para andar (casillas iluminadas), clic en un enemigo para atacar, 1-8 habilidades (acción), Q/E pociones (adicional). F termina el turno.'
+      ? 'Clic en el suelo para andar (casillas iluminadas), clic en un enemigo para atacar, 1-8 habilidades (acción), Q/E pociones (adicional). F termina el turno. Arrastra para mover la cámara; «,» y «.» la giran.'
       : act && act.k === 'p' ? 'Espera tu turno: puedes mirar el mapa y hablar por el chat.' : 'Los monstruos mueven ficha…';
     game.turnEnd = E.left !== undefined ? performance.now() + E.left : 0;
     game.turnMs = E.turnMs || 30000;

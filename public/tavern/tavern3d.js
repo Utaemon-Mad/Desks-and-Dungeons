@@ -306,7 +306,7 @@
 
   function ensureTavern3D() {
     if (T3.stage) return;
-    T3.stage = VIEW3D.makeStage({ offset: [8.2, 10.5, 8.2], fov: 36, ambient: 0.36, sky: '#6a5a8a', ground: '#2a1408', lights: 12 });
+    T3.stage = VIEW3D.makeStage({ offset: VIEW3D.ISO.toArray().map((v) => v * 15.7), fov: 36, ambient: 0.36, sky: '#6a5a8a', ground: '#2a1408', lights: 12 });
     // la taberna: cálida, con brillo en velas y antorchas y un ligero efecto de maqueta
     T3.stage.grade = { gain: [1.08, 1.0, 0.88], lift: [0.008, 0.004, 0.012], saturation: 1.1, contrast: 1.14, vignette: 0.55, bloom: 0.85, bloomRadius: 0.55, bloomThreshold: 0.78, tilt: 0.8, focus: 0.5 };
     T3.stage.scene.background = new THREE.Color('#070406');
@@ -398,7 +398,7 @@
     // cámara: la sala entera a la vista (en móvil, más cerca y siguiendo al héroe)
     const mobile = innerWidth <= 820;
     const zoom = (mobile ? 1.15 : Math.max(1.05, Math.min(1.45, (1280 / innerWidth) * 1.3 * Math.max(1, 780 / innerHeight)))) * DD.camZoom;
-    st.offset.set(8.2 * zoom, 10.5 * zoom, 8.2 * zoom);
+    st.offset.copy(VIEW3D.ISO).multiplyScalar(15.7 * zoom);
     // con la cámara cerca (móvil o zoom), sigue al héroe; si no, se ve la sala entera
     const follow = (mobile || DD.camZoom < 0.9) && me && !me.where;
     let fx = follow ? me.px + 0.5 : 7.4, fz = follow ? me.py + 0.5 : 6.4;
@@ -607,9 +607,9 @@
     const me = users.get(C.myId);
     if (!me || me.path.length) return;
     const dirs = { ArrowUp: [0, -1], w: [0, -1], ArrowDown: [0, 1], s: [0, 1], ArrowLeft: [-1, 0], a: [-1, 0], ArrowRight: [1, 0], d: [1, 0] };
-    const d = dirs[e.key];
-    if (!d) return;
+    if (!dirs[e.key]) return;
     e.preventDefault();
+    const d = VIEW3D.screenToTile(...dirs[e.key]); // la cámara isométrica: arriba es el noroeste
     const x = me.tx + d[0], y = me.ty + d[1];
     if (!MAP.isStandable(x, y)) return;
     if (MAP.isSeat(x, y) && [...users.values()].some((u) => u.id !== C.myId && !u.where && u.tx === x && u.ty === y)) return;

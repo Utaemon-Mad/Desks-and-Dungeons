@@ -220,9 +220,15 @@
   function drawMinimap() {
     const map = game.map;
     const big = map.kind === 'world' && game.bigMap;
-    const k = big ? Math.min((innerWidth - 80) / map.w, (innerHeight - 200) / map.h) : innerWidth <= 820 ? 1 : map.kind === 'world' ? 1.4 : 3.2;
+    const k = big ? Math.min((innerWidth - 80) / map.w, (innerHeight - 200) / map.h) : (innerWidth <= 820 ? 1 : map.kind === 'world' ? 1.4 : 3.2) * 0.8;
     const mw = map.w * k, mh = map.h * k;
-    const x0 = big ? (innerWidth - mw) / 2 : innerWidth - mw - 14, y0 = big ? 90 : innerWidth <= 820 ? 110 : 14;
+    let x0 = big ? (innerWidth - mw) / 2 : innerWidth - mw - 14, y0 = big ? 90 : innerWidth <= 820 ? 110 : 14;
+    // el minimapa pequeño va girado 45°, como la cámara isométrica (arriba es el noroeste); el mapa grande, con el norte arriba
+    if (!big) {
+      const S = (mw + mh) / Math.SQRT2;
+      g.save(); g.translate(innerWidth - S / 2 - 14, y0 + S / 2); g.rotate(Math.PI / 4 + game.camYaw); // y con el giro de la cámara en combate
+      x0 = -mw / 2; y0 = -mh / 2;
+    }
     const seenC = D.seenCount;
     if (!game.miniImg || game.miniSeen !== seenC) {
       const c = game.miniImg || document.createElement('canvas');
@@ -259,6 +265,7 @@
       g.strokeStyle = p.k === 'danger' ? '#ff5a3c' : '#ffd75a'; g.lineWidth = 2;
       g.beginPath(); g.arc(x0 + (p.x + 0.5) * k, y0 + (p.y + 0.5) * k, 3 + ph * 7, 0, Math.PI * 2); g.stroke();
     }
+    if (!big) g.restore();
   }
 
 
@@ -277,11 +284,8 @@
     if (d > max) { dx = dx / d * max; dy = dy / d * max; }
     knob.style.transform = `translate(${dx}px, ${dy}px)`;
     if (d < 12) return sendDirJoy(0, 0);
-    // 8 direcciones (la cámara mira al norte, así que arriba es norte)
-    const a = Math.atan2(dy, dx);
-    const oct = Math.round(a / (Math.PI / 4));
-    const DIRS8 = { 0: [1, 0], 1: [1, 1], 2: [0, 1], 3: [-1, 1], 4: [-1, 0], '-4': [-1, 0], '-3': [-1, -1], '-2': [0, -1], '-1': [1, -1] };
-    const [sx, sy] = DIRS8[oct];
+    // 8 direcciones, giradas con la cámara isométrica (arriba en la pantalla es el noroeste del mapa)
+    const [sx, sy] = VIEW3D.screenToTile(dx, dy, game.camQ);
     sendDirJoy(sx, sy);
   }
   function sendDirJoy(dx, dy) {
