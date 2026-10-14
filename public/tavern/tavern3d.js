@@ -360,7 +360,7 @@
       const top = st.project(u.px + 0.5, seat ? 1.15 : 1.35, u.py + 0.5);
       u._screen = { x: top.x, y: top.y };
     }
-    for (const [id, m] of T3.models) if (!live.has(id) && !id.startsWith('npc:')) { dropModel(m.obj); T3.models.delete(id); }
+    for (const [id, m] of T3.models) if (!live.has(id) && !id.startsWith('npc:') && !id.startsWith('life:')) { dropModel(m.obj); T3.models.delete(id); }
     const bk = charModel('npc:barkeep', bartenderLook);
     bk.obj.position.set(MAP.BARKEEP.x + 0.5, 0, MAP.BARKEEP.y + 0.5);
     bk.obj.rotation.y = -Math.PI / 2;
