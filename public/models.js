@@ -494,13 +494,49 @@
     root.add(m);
     const hR = nodes.handslotr || nodes['handslot.r'], hL = nodes.handslotl || nodes['handslot.l']; // el cargador quita los puntos de los nombres
     const P = { gl: true, root, model: m, armR: hR, handR: hR, handL: hL, head: nodes.head, headMesh };
+    // El escudo va por fuera del antebrazo: se aparta de la mano lo justo para que el brazo (con brazal o guantelete)
+    // quede detrás de la cara, y el asa se alarga hasta la mano. Todo en el espacio de la mano (handslot).
+    const fitShield = (w, hand) => {
+      root.updateMatrixWorld(true);
+      let lower = null, wrist = null, armR = 0.05;
+      m.traverse((c) => {
+        if (c.isBone && /^lowerarm\.?l$/.test(c.name)) lower = c;
+        if (c.isBone && /^wrist\.?l$/.test(c.name)) wrist = c;
+        if (c.isSkinnedMesh && /_ArmLeft$/.test(c.name)) { const bx = new THREE.Box3().setFromObject(c, true); armR = (bx.max.z - bx.min.z) / 2; }
+      });
+      if (!lower || !wrist) return;
+      const inv = hand.matrixWorld.clone().invert(), hs = new THREE.Vector3();
+      hand.matrixWorld.decompose(new THREE.Vector3(), new THREE.Quaternion(), hs);
+      const a = wrist.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv), ab = lower.getWorldPosition(new THREE.Vector3()).applyMatrix4(inv).sub(a), L2 = ab.lengthSq();
+      const rA = (armR * 1.45) / hs.x; // con margen para brazales y guanteletes
+      // lo alto del escudo va a lo largo del antebrazo (girado en attach); los escudos largos se centran en el antebrazo
+      const sb = new THREE.Box3().setFromObject(w), tall = (sb.max.x - sb.min.x) / hs.x > 0.5 / s;
+      w.position.addScaledVector(ab, tall ? 0.45 : 0.1);
+      w.updateMatrixWorld(true);
+      let need = 0, grip = null;
+      const v = new THREE.Vector3(), q = new THREE.Vector3();
+      w.traverse((c) => {
+        if (!c.isMesh) return;
+        if (c.userData.grip) { grip = c; return; }
+        const P = c.geometry.attributes.position;
+        for (let i = 0; i < P.count; i += 2) {
+          v.fromBufferAttribute(P, i).applyMatrix4(c.matrixWorld).applyMatrix4(inv);
+          const t = Math.max(-0.2, Math.min(1.15, v.clone().sub(a).dot(ab) / L2));
+          q.copy(a).addScaledVector(ab, t);
+          if (Math.abs(v.y - q.y) < rA) need = Math.max(need, rA - (v.z - q.z));
+        }
+      });
+      if (need <= 0) return;
+      w.position.z += need;
+      if (grip) { const ws = w.scale.z, len = need / ws + 0.01; grip.position.z = -0.02 - len / 2 + 0.01; grip.scale.z = len / 0.04; }
+    };
     // armas del equipo en las manos
     const attach = (hand, propName, base, rarity, tier, sk) => {
       let w = null;
       // armas hechas a mano por tipo y nivel (weapons3d.js); si no está, las de KayKit o las de siempre
       if (base && globalThis.WEAPON3D) {
         w = globalThis.WEAPON3D.build(base, tier || 0, rarity, { sk, set: o.set, setColor: o.capeColor });
-        if (w) { w.scale.setScalar(1 / s); w.rotation.set(0, base === 'ballesta' ? Math.PI / 2 : 0, base === 'arco' ? Math.PI / 2 : 0); if (hand) hand.add(w); return w; }
+        if (w) { w.scale.setScalar(1 / s); w.rotation.set(0, base === 'ballesta' ? Math.PI / 2 : 0, base === 'arco' ? Math.PI / 2 : base === 'escudo' ? -Math.PI / 2 : 0); if (hand) hand.add(w); if (base === 'escudo' && hand) fitShield(w, hand); return w; }
       }
       if (propName && GL.props[propName]) {
         w = GL.props[propName].clone(true);
@@ -709,7 +745,7 @@
       const src = P.headMesh.geometry, pos = src.attributes.position, uv = src.attributes.uv;
       if (!uv) return;
       const inR = (u, v, r) => u >= r[0] && u < r[2] && v >= r[1] && v < r[3];
-      const hair = (i) => inR(uv.getX(i), uv.getY(i), HAIR_RECT) || (headModel === 'Rogue_Hooded' && inR(uv.getX(i), uv.getY(i), HOOD_RECT));
+      const hair = (i) => inR(uv.getX(i), uv.getY(i), HAIR_RECT) || ((headModel === 'Rogue_Hooded' || headModel === 'Mage') && inR(uv.getX(i), uv.getY(i), HOOD_RECT)); // en la coleta, la goma que la ata
       const skull = new THREE.Box3(), v = new THREE.Vector3();
       for (let i = 0; i < pos.count; i++) if (!hair(i)) skull.expandByPoint(v.fromBufferAttribute(pos, i));
       if (skull.isEmpty()) return;
@@ -719,8 +755,19 @@
       for (let i = 0; i < p2.count; i++) {
         if (!hair(i)) continue;
         v.fromBufferAttribute(p2, i).sub(c);
-        const d = Math.hypot(v.x / r.x, v.y / r.y, v.z / r.z);
-        if (d > 1) { v.divideScalar(d).add(c); p2.setXYZ(i, v.x, v.y, v.z); }
+        // en unidades de la cabeza (1 = el borde del cráneo)
+        let x = v.x / r.x, y = v.y / r.y, z = v.z / r.z;
+        const d = Math.hypot(x, y, z);
+        if (d > 0.97) { x *= 0.97 / d; y *= 0.97 / d; z *= 0.97 / d; }
+        // lo que cuelga por debajo del borde del casco (melenas, coletas, flequillo) sube hasta quedar dentro: por
+        // detrás y por los lados, por encima de la nuca; por delante, por encima de las cejas
+        const yMin = z > 0.3 ? 0.18 : z > -0.1 ? -0.05 : -0.22;
+        if (y < yMin) {
+          y = yMin;
+          const hz = Math.hypot(x, z), lim = Math.sqrt(Math.max(0, 0.9 * 0.9 - y * y));
+          if (hz > lim) { x *= lim / hz; z *= lim / hz; }
+        }
+        p2.setXYZ(i, c.x + x * r.x, c.y + y * r.y, c.z + z * r.z);
       }
       g.computeBoundingBox(); g.computeBoundingSphere();
       tucked.set(headModel, g);

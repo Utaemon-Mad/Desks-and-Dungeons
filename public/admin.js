@@ -7,6 +7,13 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 14, date: 'Octubre', title: 'Yelmos, escudos y adornos', items: [
+      '⛑️ Cascos de verdad: ya no son cacerolas. Yelmos nasales con bandas remachadas, carrilleras, bacinetes apuntados que bajan hasta la mandíbula (el de pico con su hocico y respiraderos), celadas con cola y rendija, armets con visera de pico, cresta y gola, grandes yelmos de tapa plana con cruz de refuerzo, y gorros de cuero en gajos cosidos.',
+      '🛡️ Seis escudos por nivel, cada uno con su forma: rodelas, broqueles, adargas, tarjas, escudos de cometa, de guerra y de cruzado, rodelas de acero grabadas, tarjas de justa, escudos de torre y de torreón (con almenas y puerta) y paveses. Cara curvada, tablas de madera, cuero o piedra, pintura heráldica y bordes y remaches de metal.',
+      '✨ Armaduras más adornadas: remaches y filos dorados en las de placas, emblemas en las mejores, costuras, lazadas y hebillas en las de cuero, cuellos y faldones dorados en las de malla, bordados y gemas en las de tela; y lo mismo en hombreras, guantes y botas.',
+      '🪞 El acero refleja la luz: armaduras y armas brillan como metal de verdad.',
+      '🧷 Los cascos tapan toda la cabeza: melenas, coletas y flequillos se recogen dentro. El escudo va por fuera del antebrazo (ya no lo atraviesa) y los escudos largos, a lo largo del brazo.',
+    ] },
     { v: 13, date: 'Octubre', title: 'Vista isométrica', items: [
       '📐 Todo el juego en vista isométrica: la taberna, las mazmorras y el mundo se ven desde una esquina, girados 45° y sin perspectiva, como en los clásicos.',
       '🎮 Las teclas y el joystick siguen la pantalla: arriba es arriba aunque en el mapa sea el noroeste. El minimapa también va girado.',

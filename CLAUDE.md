@@ -30,7 +30,7 @@ public/admin.js         novedades, mensaje del día, instalar como app y envío 
 public/portada.html     portada de presentación (/portada); guia.pdf es la guía para imprimir
 public/rules/engine.js  reglas: stats, razas, clases, habilidades, objetos estilo Diablo 2, afijos, botín, monstruos
 public/rules/progress.js forja, misiones, logros, descenso semanal
-public/rules/items-data.js tabla de nombre y aspecto de las 192 armaduras y 156 armas/escudos (4 variantes por nivel)
+public/rules/items-data.js tabla de nombre y aspecto de las armaduras y armas/escudos (4 variantes por nivel; 5 en cuero y placas, 6 en escudos)
 public/rules/monsters-data.js tablas de monstruos y temas de mazmorra
 public/rules/talents-data.js árbol de talentos de cada clase
 public/map.js           taberna, servidores, aspecto de los héroes y sus rasgos (cleanLook, FEATURES)
@@ -106,7 +106,9 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 ## Decisiones
 - Objetos estilo Diablo 2: niveles normal/excepcional/élite, calidades (inferior…único, conjunto), prefijos y sufijos.
 - Para añadir armaduras o armas basta una fila en `items-data.js` (nombre, género, aspecto); la variante se guarda en `it.sk` y no cambia las estadísticas. Cuero y placas tienen una quinta variante samurái (piezas `doBands`, `sode`, `kusazuri`, `kabuto`, `kuwagata`, `menpo`, `kote`, `suneate`, `haidate`, `tabi`, `waraji`, `hachimaki`, `jingasa` en armor3d.js). La katana es un arma más en `WEAPONS` (engine.js) con su modelo en weapons3d.js.
-- Cascos: las piezas están medidas para una cabeza de referencia (`RREF`) y se escalan con `zoom` a la cabeza real; con casco que tapa, `tuckHair` (models.js) mete el pelo dentro de la forma del cráneo.
+- Cascos: las piezas están medidas para una cabeza de referencia (`RREF`) y se escalan con `zoom` a la cabeza real; con casco que tapa, `tuckHair` (models.js) mete el pelo dentro de la forma del cráneo y sube lo que cuelga por debajo del borde (nuca, lados, flequillo). Los yelmos son casquetes con forma (`HELM` en armor3d.js: perfil ojival o redondo, hasta dónde bajan por delante, los lados y la nuca, cola, pico de la visera, tapa plana); `helmPt` da un punto de la superficie, `helmLine` tubos por ella (bordes, rendijas, crestas) y `helmPatch` trozos (carrilleras).
+- Escudos: una forma por variante (`SHIELD_FORMS`/`SHIELDS` en weapons3d.js, o `f` en el aspecto de items-data.js), seis por nivel; la cara se parte y se curva (`shieldGeo`), el borde es un tubo (`shieldRim`) y la textura (tablas, cuero, piedra, heráldica) sale de `shieldFace`. En la mano, `fitShield` (models.js) lo gira con lo alto a lo largo del antebrazo y lo aparta lo justo para que el brazo quede detrás (el asa, `userData.grip`, se alarga hasta la mano).
+- Metal: `VIEW3D.metalEnv` es un cubo pintado que hace de reflejo sólo en los materiales de metal (armor3d.js y weapons3d.js); el acero oscuro pierde algo de metalidad para no verse negro. Los adornos de las armaduras (remaches, filos, costuras, emblemas) van al final de cada parte en `build` (armor3d.js) según el tipo y el nivel (`gear.pechoT`…).
 - armor3d.js mide cuerpo y cabeza con la malla ya deformada (`setFromObject(…, true)`), así las piezas se ajustan a las proporciones de `humanize`; `tube` pone mangas, brazales y quijotes de un hueso al siguiente.
 - Stats: Fuerza, Destreza, Vigor, Inteligencia, Carisma, Suerte; máximo natural 20; nivel máximo 50.
 - Sólo humanos (las razas se quitaron: `raceId` siempre da 'human' y `migrateProfile` pasa a humanos a los de antes, con los puntos devueltos) y 7 clases. Aspecto: sexo, peinado (`HAIR_LIST`, cada uno es la cabeza de un modelo KayKit), piel (`HUMAN_SKINS`), pelo y rasgos en `look.feat` (`FEATURES` en map.js: complexión, altura, barba, cejas, marcas, pintura, pendientes); en 3D, `faceFeatures` (models.js) los pega al hueso de la cabeza.

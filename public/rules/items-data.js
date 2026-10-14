@@ -150,7 +150,7 @@
           ["Bacinete", "m", {cloth: "#8c919a", metal: "#a9aeb7", trim: 0, parts: ["basinet", "aventail"]}],
           ["Celada", "f", {cloth: "#8c919a", metal: "#a9aeb7", trim: 0, parts: ["sallet"]}],
           ["Celada de arquero", "f", {cloth: "#8c919a", metal: "#a9aeb7", parts: ["sallet", "plume"]}],
-          ["Bacinete de pico", "m", {cloth: "#8c919a", metal: "#4a4e58", parts: ["basinet", "aventail", "plume"]}],
+          ["Bacinete de pico", "m", {cloth: "#8c919a", metal: "#4a4e58", parts: ["basinet", "hounskull", "aventail", "plume"]}],
         ],
         [
           ["Armet", "m", {cloth: "#8c919a", metal: "#a9aeb7", trim: "#d9a93a", parts: ["armet", "plume"]}],
@@ -422,9 +422,9 @@
       [["Varita pulida", "f", {}], ["Varita de escarcha", "f", {"m": 1, metal: "#c8e8f8", trim: "#7ad0ff", "gem": "#7ad0ff", "glow": "#7ad0ff"}], ["Varita del alba", "f", {metal: "#f4f0dc", trim: "#ffd27a", "gem": "#fff2a0", "glow": "#fff2a0"}], ["Varita del vacío", "f", {metal: "#2a1a3a", trim: "#8a5aff", "gem": "#8a5aff", "glow": "#8a5aff"}]],
     ],
     escudo: [
-      [["Escudo redondo", "m", {}], ["Rodela", "f", {metal: "#eef2f8", trim: "#2a2a30", "gem": "#2a2a30"}], ["Escudo de cuero", "m", {metal: "#c8925a", trim: "#a8743a"}], ["Broquel", "m", {"m": 1, metal: "#3a3a42", trim: "#5a5a62", "gem": "#5a5a62"}]],
-      [["Escudo de guerra", "m", {}], ["Escudo de cometa", "m", {"m": 0, trim: "#9aa0a8", "gem": "#2aa84a"}], ["Escudo rúnico", "m", {trim: "#4a7aff", "gem": "#4a7aff", "glow": "#4a7aff"}], ["Escudo del cruzado", "m", {"m": 2, metal: "#e2e6ee", trim: "#dcae3c", "gem": "#d8102a", "glow": "#ffd27a"}]],
-      [["Escudo de torre", "m", {}], ["Égida de cristal", "f", {"m": 1, metal: "#c8e8f8", trim: "#7ad0ff", "gem": "#7ad0ff", "glow": "#7ad0ff"}], ["Escudo del alba", "m", {metal: "#f4f0dc", trim: "#ffd27a", "gem": "#fff2a0", "glow": "#fff2a0"}], ["Escudo del vacío", "m", {metal: "#2a1a3a", trim: "#8a5aff", "gem": "#8a5aff", "glow": "#8a5aff"}]],
+      [["Escudo redondo", "m", {}], ["Rodela", "f", {metal: "#eef2f8", trim: "#2a2a30", "gem": "#2a2a30"}], ["Escudo de cuero", "m", {metal: "#c8925a", trim: "#a8743a"}], ["Broquel", "m", {"m": 1, metal: "#3a3a42", trim: "#5a5a62", "gem": "#5a5a62"}], ["Adarga", "f", {f: "adarga", trim: "#d9a93a"}], ["Tarja", "f", {f: "tarja", trim: "#c8a050"}]],
+      [["Escudo de guerra", "m", {}], ["Escudo de cometa", "m", {"m": 0, trim: "#9aa0a8", "gem": "#2aa84a"}], ["Escudo rúnico", "m", {trim: "#4a7aff", "gem": "#4a7aff", "glow": "#4a7aff"}], ["Escudo del cruzado", "m", {"m": 2, metal: "#e2e6ee", trim: "#dcae3c", "gem": "#d8102a", "glow": "#ffd27a"}], ["Rodela de acero", "f", {f: "rodelaAcero", metal: "#d8dde6", trim: "#dcae3c"}], ["Tarja de justa", "f", {f: "justa", trim: "#dcae3c"}]],
+      [["Escudo de torre", "m", {}], ["Égida de cristal", "f", {"m": 1, metal: "#c8e8f8", trim: "#7ad0ff", "gem": "#7ad0ff", "glow": "#7ad0ff"}], ["Escudo del alba", "m", {metal: "#f4f0dc", trim: "#ffd27a", "gem": "#fff2a0", "glow": "#fff2a0"}], ["Escudo del vacío", "m", {metal: "#2a1a3a", trim: "#8a5aff", "gem": "#8a5aff", "glow": "#8a5aff"}], ["Escudo de torreón", "m", {f: "torreon", trim: "#dcae3c", "gem": "#d8102a"}], ["Pavés", "m", {f: "paves", trim: "#dcae3c"}]],
     ],
     orbe: [
       [["Orbe de águila", "m", {}], ["Orbe de cristal", "m", {metal: "#eef2f8", trim: "#2a2a30", "gem": "#2a2a30"}], ["Esfera ocular", "f", {metal: "#c8925a", trim: "#a8743a"}], ["Orbe nublado", "m", {"m": 1, metal: "#3a3a42", trim: "#5a5a62", "gem": "#5a5a62"}]],

@@ -333,6 +333,37 @@
     return stage;
   }
 
+  // Reflejo de ambiente para el metal (armaduras y armas): una sala cálida y oscura con ventanas de luz, pintada en las seis
+  // caras de un cubo (vale para cualquier renderizador: three la pasa por PMREM él solo). Sólo la usan los materiales de
+  // metal, no la escena, así el acero brilla sin aclarar las mazmorras.
+  let metalEnvTex = null;
+  function metalEnv() {
+    if (metalEnvTex) return metalEnvTex;
+    const S = 64, faces = [];
+    const dirs = [(u, v) => [1, -v, -u], (u, v) => [-1, -v, u], (u, v) => [u, 1, v], (u, v) => [u, -1, -v], (u, v) => [u, -v, 1], (u, v) => [-u, -v, -1]];
+    const wins = [[0.6, 0.35, 0.72, 0.14], [-0.75, 0.25, -0.6, 0.12], [0.1, 0.95, 0.05, 0.3]].map(([x, y, z, r]) => { const l = Math.hypot(x, y, z); return [x / l, y / l, z / l, r]; });
+    for (const f of dirs) {
+      const c = document.createElement('canvas'); c.width = c.height = S;
+      const g = c.getContext('2d'), img = g.createImageData(S, S);
+      for (let py = 0; py < S; py++) for (let px = 0; px < S; px++) {
+        const [x, y, z] = f((px + 0.5) / S * 2 - 1, (py + 0.5) / S * 2 - 1), l = Math.hypot(x, y, z), dy = y / l;
+        // suelo oscuro, paredes pardas, techo algo más claro
+        let r = dy < 0 ? 18 + 50 * (1 + dy) : 68 + 70 * dy, gg = r * 0.8, b = r * 0.66;
+        for (const [wx, wy, wz, wr] of wins) {
+          const d = (x * wx + y * wy + z * wz) / l, k = Math.max(0, (d - (1 - wr)) / wr);
+          if (k > 0) { const e = Math.min(1, k * 2.2); r += (255 - r) * e; gg += (232 - gg) * e; b += (196 - b) * e; }
+        }
+        const i = (py * S + px) * 4; img.data[i] = r; img.data[i + 1] = gg; img.data[i + 2] = b; img.data[i + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+      faces.push(c);
+    }
+    metalEnvTex = new THREE.CubeTexture(faces);
+    metalEnvTex.colorSpace = THREE.SRGBColorSpace;
+    metalEnvTex.needsUpdate = true;
+    return metalEnvTex;
+  }
+
   function show(on) { canvas.classList.toggle('hidden', !on); }
 
   // Neblina baja que se arrastra por el suelo (ruido animado); color y densidad por tema
@@ -1466,5 +1497,5 @@
     const a = oct * Math.PI / 4;
     return [Math.round(Math.cos(a)) || 0, Math.round(Math.sin(a)) || 0];
   }
-  root.VIEW3D = { ISO, QUAD, screenToTile, touch, setBrightness, info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
+  root.VIEW3D = { ISO, QUAD, metalEnv, screenToTile, touch, setBrightness, info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
 })(this);
