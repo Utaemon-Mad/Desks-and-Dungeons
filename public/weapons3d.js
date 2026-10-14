@@ -398,7 +398,7 @@
         // remaches por dentro del borde
         if (S.rivets) { const P = S.pts(), n = S.rivets, inset = S.inset || 0.88; for (let k = 0; k < n; k++) { const [x, y] = P[Math.floor(k / n * P.length)]; add(g, sph(0.007, 8, 6), S.goldRim ? trim : steelL, x * inset, y * inset, front(x * inset, y * inset) + 0.002); } }
         S.deco(g, { add, front, steel: steelL, trim, gem, glow, glowC, leather, wood, mat, sph, box, cyl, cone, torus, oct, extrude, faceM });
-        add(g, box(0.04, 0.1, 0.04), leather, 0, 0, -0.04);
+        add(g, box(0.04, 0.1, 0.04), leather, 0, 0, -0.04).userData.grip = true; // el asa (models.js la alarga hasta la mano)
         break;
       }
       case 'orbe': {

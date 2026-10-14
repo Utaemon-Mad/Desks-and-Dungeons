@@ -12,6 +12,7 @@
       '🛡️ Seis escudos por nivel, cada uno con su forma: rodelas, broqueles, adargas, tarjas, escudos de cometa, de guerra y de cruzado, rodelas de acero grabadas, tarjas de justa, escudos de torre y de torreón (con almenas y puerta) y paveses. Cara curvada, tablas de madera, cuero o piedra, pintura heráldica y bordes y remaches de metal.',
       '✨ Armaduras más adornadas: remaches y filos dorados en las de placas, emblemas en las mejores, costuras, lazadas y hebillas en las de cuero, cuellos y faldones dorados en las de malla, bordados y gemas en las de tela; y lo mismo en hombreras, guantes y botas.',
       '🪞 El acero refleja la luz: armaduras y armas brillan como metal de verdad.',
+      '🧷 Los cascos tapan toda la cabeza: melenas, coletas y flequillos se recogen dentro. El escudo va por fuera del antebrazo (ya no lo atraviesa) y los escudos largos, a lo largo del brazo.',
     ] },
     { v: 13, date: 'Octubre', title: 'Vista isométrica', items: [
       '📐 Todo el juego en vista isométrica: la taberna, las mazmorras y el mundo se ven desde una esquina, girados 45° y sin perspectiva, como en los clásicos.',
