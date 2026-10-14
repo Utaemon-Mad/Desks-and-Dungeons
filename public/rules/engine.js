@@ -1083,6 +1083,7 @@
 
   // Temas de las mazmorras aleatorias
   const THEMES = MONSTERDATA.THEMES;
+  const BOSS_LINES = MONSTERDATA.BOSS_LINES || {}, LORE = MONSTERDATA.LORE || {};
 
   // ======================================================================
   //  Mascotas (desde nivel 5) y monturas (desde nivel 12)
@@ -1172,7 +1173,7 @@
   const RULES = {
     MAX_LEVEL, BAG_SIZE, RULES_VERSION, STAT_BASE, STAT_MAX, POINTS_START, STATS, STAT_IDS, EXTRA, ELEMENTS, RACES, RACE_IDS, SEXES, CLASSES, CLASS_IDS, LEGACY_CLASS, ARMOR_TYPES, ARMOR_SKINS, WEAPON_SKINS,
     ABILITIES, ABILITY_BY_ID, XP_TABLE, SLOTS, SLOT_IDS, TIERS, WEAPONS, FISTS, OFFHANDS, ARMOR_REQ, JEWELS,
-    RARITIES, RARITY_ORDER, LEGACY_RARITY, AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES,
+    RARITIES, RARITY_ORDER, LEGACY_RARITY, AFFIXES, SETS, CONSUMABLES, BUFFS, SHOPS, MONSTERS, LEGACY_MONSTER, THEMES, BOSS_LINES, LORE,
     statName, fmtStat, classId, raceId, levelFromXp, pointsTotal, pointsSpent, pointsFree, baseStats, statRoom, newChar, cleanChar,
     TALENTS, TALENT_BY_ID, talentPoints, talentSpent, canTalent, cleanTalents, talentBonus, LEGENDARY, LEGENDARY_COLOR, itemColor, rollRarity, rollDropRarity, makeItem, itemValue, rollLoot, starterItems, canEquip, typeLine, describe, describeRich, baseInfo, speedName, allowedBases, affixPool, affixTier, rollAffixValue,
     migrateItem, migrateProfile, adj,

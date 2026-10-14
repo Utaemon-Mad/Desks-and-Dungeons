@@ -85,7 +85,72 @@
     bosque:    { name: 'Bosque umbrío', icon: '🌲', mobs: ['wolf', 'wolf', 'retono', 'retono', 'giant-spider', 'bandit', 'bandit-archer', 'fuego-fatuo', 'dire-wolf', 'brown-bear', 'owlbear'], boss: 'ent-corrupto', names: ['Bosque', 'Arboleda', 'Espesura', 'Floresta'], of: ['de Raízmadre', 'de los Susurros', 'del Musgo Negro', 'de las Luciérnagas'] },
     abismo:    { name: 'Abismo infernal', icon: '😈', mobs: ['diablillo', 'diablillo', 'diablillo', 'can-infernal', 'can-infernal', 'gargola', 'brujo-infernal', 'demonio', 'zombie'], boss: 'azaroth', names: ['Abismo', 'Sima', 'Fosa', 'Puerta'], of: ['de Azaroth', 'del Fuego Negro', 'de los Condenados', 'del Averno'] },
   };
-  const MONSTERDATA = { MONSTERS, LEGACY_MONSTER, THEMES };
+  // Lo que dicen los jefes al aparecer (intro) y al enfurecerse a media vida (rage)
+  const BOSS_LINES = {
+    'rufo': { intro: '«¿Más bolsas de oro con patas? Muchachos, ¡a cobrar el peaje!»', rage: '«¡Basta de juegos! ¡Que no salga nadie vivo de aquí!»' },
+    'huargo-alfa': { intro: 'Un aullido hiela la sangre: la manada entera responde desde las sombras.', rage: 'El Alfa enseña los colmillos y llama a toda su manada.' },
+    'bruja-pantano': { intro: '«Ah, carne fresca para mi caldero… y huesos para mis ahogados.»', rage: '«¡Levantaos, hijos del cieno! ¡Arrastradlos al fondo!»' },
+    'rey-escorpion': { intro: 'La arena tiembla. Una cola de aguijón asoma, goteando veneno.', rage: 'El Rey Escorpión chasquea las pinzas y la arena se llena de crías.' },
+    'gigante-escarcha': { intro: '«Pequeñas cosas calientes… os dejaré congeladas para el invierno.»', rage: 'El aire se vuelve hielo: el Gigante ruge y golpea el suelo.' },
+    'rey-goblin': { intro: '«¡Grubnak manda! ¡Todo lo brillante es de Grubnak!»', rage: '«¡Grubnak enfadado! ¡A ellos, inútiles, a ellos!»' },
+    'gorthak': { intro: '«Gorthak ha roto cien escudos. El tuyo será el ciento uno.»', rage: '«¡SANGRE Y HIERRO! ¡La Mano Roja no retrocede!»' },
+    'lich': { intro: '«He esperado mil años en este silencio. Unos minutos más no importan… para mí.»', rage: '«Vuestras almas alimentarán mi filacteria. ¡Levantaos, mis siervos!»' },
+    'reina-arana': { intro: 'De las vigas cuelgan capullos que aún se mueven. Arakhna desciende por su hilo.', rage: 'La Reina chilla y de la seda brotan cientos de patas.' },
+    'coloso-runas': { intro: 'Las runas del Coloso se encienden una a una. Algo muy viejo despierta.', rage: 'Las runas arden al rojo: el Coloso ya no se contiene.' },
+    'nyxara': { intro: '«Habéis venido a mi sombra. Ninguna luz os seguirá dentro.»', rage: '«¡Que la noche os trague a todos!»' },
+    'rey-espectral': { intro: 'Una corona sin cabeza flota en el frío. El Rey Espectral reclama su trono.', rage: '«¡De rodillas ante vuestro rey!»' },
+    'ent-corrupto': { intro: '«Este bosque era mío antes que vuestros abuelos… y lo será después de vuestros nietos.»', rage: 'Raízmadre cruje y el suelo se abre: los retoños brotan a sus pies.' },
+    'behemot': { intro: 'Los árboles se apartan. El Behemot del Bosque Viejo os ha olido.', rage: 'El Behemot se alza sobre sus patas traseras y brama.' },
+    'azaroth': { intro: '«Mortales en mi abismo. Qué ofrenda tan… inesperada.»', rage: '«¡Ardéis ya y aún no lo sabéis! ¡Venid, mis diablillos!»' },
+    'young-red-dragon': { intro: '«Oro, ascuas y huesos. Mi tesoro crece cada día. Hoy, con vosotros.»', rage: 'Ignaroth abre las alas y el calor se vuelve insoportable.' },
+  };
+  // Historia de cada tipo de mazmorra: notas y murales que se encuentran por las salas (en orden) y lo que se cuenta al
+  // vencer al jefe. Las notas van en el decorado (prop 'nota' en server/gen.js) y se leen al pisarlas.
+  const LORE = {
+    cuevas: { title: 'El tesoro de los Dientes Rotos', notes: [
+      'Diario del minero Tobías: «Abrimos una veta nueva y salieron ellos. Pequeños, verdes y con demasiados dientes. Nos quitaron los picos y las linternas.»',
+      'Mural pintado con barro: un goblin enorme con corona de cucharas, sobre un montón de cosas brillantes. Los demás goblins, de rodillas.',
+      'Nota arrugada: «Si alguien encuentra esto, mi hermano Bartolo sigue vivo en las celdas del fondo. Grubnak lo usa para pulir su corona.»',
+      'Lista de botín garabateada: «3 ollas, 1 campana, 14 botones, la dentadura de oro del alcalde. TODO PARA GRUBNAK.»',
+    ], end: 'Entre los trastos de Grubnak aparece una dentadura de oro y una celda abierta: Bartolo se ha ido corriendo hacia la taberna. Alfonso le pondrá una jarra a vuestra cuenta.' },
+    cripta: { title: 'El Último Rezo', notes: [
+      'Lápida agrietada: «Aquí yace el hermano Aldric, que guardó la puerta para que nadie bajara. Que nadie baje.»',
+      'Mural desconchado: un mago con túnica negra sostiene una gema verde sobre una fila de tumbas abiertas.',
+      'Página de un libro de rezos, con la letra cada vez más torcida: «Malakar prometió que volveríamos a ver a los nuestros. Mintió. Los vemos, pero ya no son ellos.»',
+      'Inscripción en la piedra: «La filacteria duerme junto a su dueño. Rompe una y el otro caerá.»',
+    ], end: 'La gema verde de Malakar se apaga con un último suspiro. En las criptas, por fin, hay silencio. El hermano Aldric puede descansar.' },
+    fortaleza: { title: 'La Mano Roja', notes: [
+      'Orden de guerra con una mano roja estampada: «Toda aldea que no pague, arde. Firmado: Gorthak.»',
+      'Mural de sangre seca: la Mano Roja sobre un mapa. Tres aldeas tachadas. La cuarta es Brumaverde.',
+      'Carta de un prisionero: «Les he oído contar los días. Cuando llegue la luna llena marcharán sobre el valle.»',
+      'Tablón de entrenamiento lleno de muescas: «Gorthak: 100 escudos rotos. Siguiente: el tuyo.»',
+    ], end: 'El estandarte de la Mano Roja cae al barro. Sin Gorthak, los orcos se dispersan por las colinas y Brumaverde dormirá tranquila esta luna.' },
+    nido: { title: 'La Seda Negra', notes: [
+      'Mochila de un cazador, envuelta en seda: «El bosque se ha quedado sin pájaros. Algo grande teje entre los árboles.»',
+      'Mural rascado en la corteza: una araña con corona y, debajo, cientos de huevos.',
+      'Nota del cazador: «Los capullos se mueven. Hay gente dentro. Voy a por ayuda… si encuentro el camino de vuelta.»',
+      'Marcas en un árbol: «Por aquí NO. Por aquí tampoco.»',
+    ], end: 'Arakhna se encoge y su seda se deshace. De los capullos salen, aturdidos, varios cazadores. Uno de ellos jura invitaros a la próxima ronda.' },
+    volcan: { title: 'La Llama Eterna', notes: [
+      'Tablilla de los kobolds: «Gran Ignaroth duerme sobre el oro. Nosotros le traemos más oro. Así no nos come.»',
+      'Mural ennegrecido por el fuego: un dragón rojo enroscado alrededor de una corona y una ciudad en llamas.',
+      'Diario de un cultista: «El dragón nos prometió escamas de fuego para todos. Ya van tres hermanos que ha usado de cena.»',
+      'Inscripción en el altar: «La Llama Eterna no se apaga con agua, sino con valor.»',
+    ], end: 'Ignaroth cae sobre su montaña de oro y las ascuas se apagan por fin. Los kobolds, sin dueño, salen huyendo con lo que pueden cargar.' },
+    bosque: { title: 'Los Susurros del Musgo Negro', notes: [
+      'Hacha clavada en un tronco: «Talamos un roble viejo y desde entonces el bosque susurra. Los árboles se mueven de noche.»',
+      'Mural tallado en la corteza: un árbol con ojos y raíces que agarran a un leñador.',
+      'Diario de una druida: «Raízmadre era la guardiana de este bosque. Algo la ha corrompido: el musgo negro le sale del corazón.»',
+      'Nota clavada con una flecha: «Las luciérnagas huyen del musgo. Síguelas y llegarás a ella.»',
+    ], end: 'El musgo negro se deshace en ceniza y Raízmadre suspira. Por primera vez en años, el bosque calla y deja dormir a los que viven en él.' },
+    abismo: { title: 'La Puerta del Averno', notes: [
+      'Pergamino chamuscado: «El círculo funcionó. La puerta está abierta. Que los dioses nos perdonen.»',
+      'Mural pintado con ceniza: Azaroth con cuernos de fuego y, a sus pies, el círculo de los invocadores.',
+      'Confesión de un brujo: «Pedimos poder y Azaroth nos lo dio. Ahora no podemos dormir sin oír sus risas.»',
+      'Grabado en el suelo: «Lo que se abre desde dentro sólo se cierra desde dentro.»',
+    ], end: 'Con Azaroth vencido, la puerta del Averno se cierra con un trueno. El calor desaparece y el abismo vuelve a ser sólo una cueva oscura.' },
+  };
+  const MONSTERDATA = { MONSTERS, LEGACY_MONSTER, THEMES, BOSS_LINES, LORE };
   if (typeof module !== 'undefined' && module.exports) module.exports = MONSTERDATA;
   else root.MONSTERDATA = MONSTERDATA;
 })(this);

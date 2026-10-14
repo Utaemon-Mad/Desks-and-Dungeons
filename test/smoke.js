@@ -297,6 +297,29 @@ async function instanceTests() {
   linst.hurtPlayer(lp, 5, { raw: true, magic: true }); // mágico: sin bloqueo con escudo (que lo haría al azar)
   assert.ok(lp.shield > 0, 'la égida se levanta al bajar del 30%');
 
+  // Tirada de d20 que se enseña por turnos: cuadra con el resultado (fallo bajo la CA, impacto encima, crítico = 20)
+  linst.enc = { fake: true };
+  for (let i = 0; i < 200; i++) {
+    const chance = 30 + (i % 70), hit = i % 3 !== 0, crit = hit && i % 7 === 0;
+    const r = linst.showRoll(chance, hit, crit, 13);
+    assert.ok(r.f >= 1 && r.f <= 20 && r.ca === 13, 'cara entre 1 y 20');
+    assert.ok(crit ? r.f === 20 : hit ? r.f + r.b >= r.ca : r.f + r.b < r.ca, 'la tirada cuadra con el golpe');
+  }
+  linst.enc = null;
+  assert.strictEqual(linst.showRoll(80, true, false, 12), undefined, 'en tiempo real no hay dado');
+  // Jefe: a media vida se enfurece una vez (más daño y más rápido) y lo avisa
+  const binst = new Instance({ ...def, id: 'jefe', spawns: [{ k: 'rufo', x: 6, y: 2, boss: true }], chests: [] }, { ...hooks, send: () => {}, kill: () => {} });
+  const bu = { id: 'u4', name: 'B', look: {}, profile: { ...profile } };
+  binst.join(bu);
+  const bp = binst.players.get('u4'), jefe = [...binst.enemies.values()].find((e) => e.m.boss);
+  assert.ok(jefe, 'hay jefe');
+  const atk0 = jefe.m.atk, dmg0 = jefe.m.dmg[1];
+  binst.damageEnemy(bp, jefe, jefe.hp * 0.6 / (1 - RULES.reduction(jefe.m.armor, bp.d.level)), { noCrit: true, kind: 'melee' });
+  assert.ok(jefe.phase2 && jefe.m.atk < atk0 && jefe.m.dmg[1] > dmg0, 'el jefe entra en su segunda fase');
+  assert.ok(binst.events.some((e) => e.e === 'phase' && e.id === jefe.id), 'avisa de la furia');
+  assert.ok(RULES.BOSS_LINES.rufo && RULES.BOSS_LINES.rufo.intro && RULES.BOSS_LINES.rufo.rage, 'el jefe tiene sus frases');
+  for (const [th, T] of Object.entries(RULES.THEMES)) { const M = RULES.MONSTERS[T.boss]; assert.ok(RULES.BOSS_LINES[T.boss], 'frases de ' + th); assert.ok(M && M.boss, 'jefe de ' + th); assert.ok(RULES.LORE[th] && RULES.LORE[th].notes.length >= 3 && RULES.LORE[th].end, 'historia de ' + th); }
+
   // En grupo: botín para cada uno, reanimar al caído y resumen al acabar
   {
     const gi = new Instance({ ...def, id: 'grp', spawns: [{ k: 'goblin-minion', x: 9, y: 2 }], chests: [] }, { ...hooks, send: () => {}, kill: () => {} });

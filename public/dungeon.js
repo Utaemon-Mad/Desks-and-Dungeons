@@ -129,6 +129,7 @@
       case 'hit': {
         const t = game.ents.get(ev.t);
         const by = game.ents.get(ev.by);
+        if (ev.roll && D.dice) D.dice(ev, t, by, now); // por turnos: el d20 rueda hasta el objetivo
         if (t) {
           if (ev.miss) float(t.x, t.y, 'Fallo', '#9aa0aa');
           else if (ev.dodge) float(t.x, t.y, 'Esquiva', '#9ad8ff');
@@ -160,6 +161,7 @@
         else if (t && t.kind === 'hero' && ev.t !== me && ev.dmg && !ev.miss && !ev.dodge) DD.sfx('hit', { vol: 0.35 });
         break;
       }
+      case 'phase': if (D.bossPhase) D.bossPhase(ev, now); break;
       case 'swing': { const e = game.ents.get(ev.id), t = game.ents.get(ev.t); if (e && t) { e.lunge = now; e.lungeDx = Math.sign(t.x - e.x); e.lungeDy = Math.sign(t.y - e.y); } break; }
       case 'cast': {
         const by = game.ents.get(ev.by);
@@ -273,7 +275,7 @@
     game.map = m.dungeon;
     game.props = m.dungeon.props || [];
     game.ents.clear(); game.floaters = []; game.fx = []; game.projs = []; game.teles = []; game.particles = []; game.auras = [];
-    game.log = []; game.statics = null; game.boss = null; game.bossSeen = 0; game.heardLoot = new Set(); game.camInit = false; game.camRot = game.camYaw = game.camQ = 0; game.camPan = { x: 0, z: 0 }; game.keys.clear(); game.sentDir = '0,0';
+    game.log = []; game.statics = null; game.boss = null; game.bossSeen = 0; game.introDone = new Set(); game.raging = new Set(); game.bossIntro = null; game.heardLoot = new Set(); game.camInit = false; game.camRot = game.camYaw = game.camQ = 0; game.camPan = { x: 0, z: 0 }; game.keys.clear(); game.sentDir = '0,0';
     game.seen = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.vis = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.openDoors = new Set(m.dungeon.doors || []);
@@ -609,6 +611,7 @@
 
   function clearScene() {
     if (built) { drop(built.group, true); built = null; }
+    if (D.clearDice) D.clearDice();
     for (const d of doorObjs) drop(d.obj, true);
     doorObjs.length = 0;
     if (fog) { drop(fog.mesh, true); fog = null; }
@@ -1007,10 +1010,12 @@
     const me = game.ents.get(DD.myId);
     const dark = map.kind === 'dungeon';
     // cámara que sigue al héroe
-    const tx = me ? me.rx + 0.5 : map.w / 2, tz = me ? me.ry + 0.5 : map.h / 2;
+    // durante la entrada de un jefe, la cámara va a él
+    const bc = D.bossCam ? D.bossCam(now) : null;
+    const tx = bc ? bc.x : me ? me.rx + 0.5 : map.w / 2, tz = bc ? bc.z : me ? me.ry + 0.5 : map.h / 2;
     if (!game.camInit) { game.cam = { x: tx, y: tz }; game.camInit = !!me; }
     game.cam.x += (tx - game.cam.x) * Math.min(1, dt * 6); game.cam.y += (tz - game.cam.y) * Math.min(1, dt * 6);
-    const zoom = (innerWidth <= 820 ? 1.18 : 1) * (game.zoom || 1) * (DD.camZoom || 1);
+    const zoom = (innerWidth <= 820 ? 1.18 : 1) * (DD.camZoom || 1) * (D.zoomPunch ? D.zoomPunch(now) : 1) * (bc ? bc.zoom : 1);
     // vista isométrica: la cámara mira desde el sureste, girada 45° (VIEW3D.ISO). En combate se puede girar de 90 en 90
     // y arrastrar; al acabar vuelve sola a su sitio
     if (!game.enc && game.camRot % 4) { game.camRot = Math.round(game.camRot / 4) * 4; game.camQ = 0; }
@@ -1333,6 +1338,8 @@
     g.fillStyle = vg; g.fillRect(0, 0, innerWidth, innerHeight);
     if (game.you && game.you.hp / game.you.maxHp < 0.3) { g.fillStyle = `rgba(150,0,0,${0.08 + Math.sin(now / 200) * 0.05})`; g.fillRect(0, 0, innerWidth, innerHeight); }
     if (D.drawTurns) D.drawTurns(now);
+    if (D.updateDice) D.updateDice(now);
+    if (D.updateBoss) D.updateBoss(now);
     D.drawOverlay(now);
     D.drawPings(now);
     if (game.showMap) D.drawMinimap();
@@ -1348,7 +1355,7 @@
 
   // Lo que comparten los archivos de public/dungeon/ (se cargan después de este);
   // las variables que cambian de valor se leen como D.nombre
-  const D = DD.dg = { $, WATER_T, camCenter, camRotate, entAt, g, game, herbUnder, models, monName, onEvent, serverNow, viewEl, who,
+  const D = DD.dg = { $, WATER_T, camCenter, camRotate, entAt, spark, ring, puff, g, game, herbUnder, models, monName, onEvent, serverNow, viewEl, who,
     get stage() { return stage; }, get seenCount() { return seenCount; } };
 
   // ======================================================================
