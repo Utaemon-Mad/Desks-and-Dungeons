@@ -7,6 +7,18 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 16, date: 'Octubre', title: 'Ocho mazmorras nuevas, misiones y un HUD de leyenda', items: [
+      '❤️ HUD nuevo al estilo Diablo: orbes de vida (rojo) y energía (azul) abajo, con el líquido que se mueve y late cuando te queda poca vida, y la barra de experiencia en el panel de piedra.',
+      '⏸️ Menú de pausa (☰ o Esc): tu héroe gira despacio sobre un círculo de runas y al lado tienes todas las opciones. Si juegas solo, la mazmorra se para de verdad; en grupo sigue corriendo.',
+      '🗺️ Ocho mazmorras nuevas: Catedral profanada (vidrieras, bancos y alfombra hasta el altar), Tumba del faraón (jeroglíficos, urnas, chacales y sarcófagos de oro), Cavernas profundas, Camino del bosque, Calles de la ciudad bajo la lluvia, Campo de batalla lleno de caídos, Ciudad en llamas y el Infierno, con ríos de lava. Cada una con sus monstruos, su jefe y su historia.',
+      '🗝️ Misiones dentro de las mazmorras: un portón cierra la sala del jefe. Para abrirlo, encontrad las tres llaves, accionad las tres palancas (cada una despierta una emboscada) o aguantad las oleadas en la sala del portón mientras se abre. Al abrirlo, experiencia para todos.',
+    ] },
+    { v: 15, date: 'Octubre', title: 'Dados, jefes, historias y una taberna viva', items: [
+      '🎲 En el combate por turnos cada ataque tira un d20 de verdad: vuela por la sala, rueda y enseña la tirada, el bonificador y la CA a batir. Con un 20 natural, crítico con cámara lenta y destello; con un 1, pifia.',
+      '👑 Los jefes entran a lo grande: franjas de cine, la cámara va hacia ellos y su cartel con nombre y frase. A media vida montan en cólera (segunda fase): pegan más fuerte y más rápido, y algunos llaman refuerzos.',
+      '📜 Las mazmorras cuentan una historia: notas, diarios y murales repartidos por las salas, de la entrada al jefe. Al acercarte los lees, y al derrotar al jefe ves cómo acaba (y cuántas partes encontraste).',
+      '🍺 La taberna está viva: Lirio el Bardo toca el laúd junto a la chimenea, los parroquianos brindan, cuentan rumores y discuten, y la chimenea crepita. Pincha a Brom el Herrero para echarle un pulso (Espacio cuando la aguja esté en la zona verde): toda la taberna se entera de quién gana.',
+    ] },
     { v: 14, date: 'Octubre', title: 'Yelmos, escudos y adornos', items: [
       '⛑️ Cascos de verdad: ya no son cacerolas. Yelmos nasales con bandas remachadas, carrilleras, bacinetes apuntados que bajan hasta la mandíbula (el de pico con su hocico y respiraderos), celadas con cola y rendija, armets con visera de pico, cresta y gola, grandes yelmos de tapa plana con cruz de refuerzo, y gorros de cuero en gajos cosidos.',
       '🛡️ Seis escudos por nivel, cada uno con su forma: rodelas, broqueles, adargas, tarjas, escudos de cometa, de guerra y de cruzado, rodelas de acero grabadas, tarjas de justa, escudos de torre y de torreón (con almenas y puerta) y paveses. Cara curvada, tablas de madera, cuero o piedra, pintura heráldica y bordes y remaches de metal.',

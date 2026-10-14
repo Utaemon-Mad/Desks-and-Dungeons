@@ -100,6 +100,8 @@ class Instance {
       this.groups.push(group);
       this.spawnGroup(group, now);
     }
+    this.quest = null; this.gateSet = null;
+    this.questInit(); // portón de la sala del jefe y su objetivo (server/quests.js)
   }
 
   get size() { return this.players.size; }
@@ -138,7 +140,7 @@ class Instance {
       if (e2 >= dy) { err += dy; x0 += sx; }
       if (e2 <= dx) { err += dx; y0 += sy; }
       if (x0 === b.x && y0 === b.y) break;
-      if (OPAQUE.has(this.tile(x0, y0))) return false;
+      if (OPAQUE.has(this.tile(x0, y0)) || (this.gateSet && this.gateSet.has(y0 * this.w + x0))) return false;
     }
     return true;
   }
@@ -205,6 +207,7 @@ class Instance {
 
   // ---------- Héroes ----------
   join(user, at) {
+    if (this.setPaused) this.setPaused(false); // llega alguien: se acabó la pausa
     const d = this.hooks.derive(user);
     const c = user.combat || (user.combat = { hp: d.hp, en: d.en, cds: {} });
     c.hp = Math.min(c.hp, d.hp); c.en = Math.min(c.en, d.en);
@@ -227,6 +230,7 @@ class Instance {
   }
 
   leave(userId) {
+    if (this.setPaused) this.setPaused(false);
     this.pets.delete(userId);
     this.enemies.delete('pv:' + userId);
     if (!this.players.delete(userId)) return;
@@ -553,7 +557,7 @@ class Instance {
     const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p || !Number.isInteger(x) || !Number.isInteger(y)) return;
     if (this.enc && !this.myTurn(p)) return;
-    p.kdir = null; p.target = null; p.pending = null; p.talkTo = null; p.fishing = null; p.gatherTo = null;
+    p.kdir = null; p.target = null; p.pending = null; p.talkTo = null; p.fishing = null; p.gatherTo = null; p.useTarget = null;
     p.goal = { x, y };
     p.path = this.path(p, p.goal, (a, b) => this.freeForPlayer(a, b));
     // por turnos: hasta donde llegue el movimiento que le queda
@@ -654,6 +658,7 @@ class Instance {
       }
     }
     if (this.kind === 'arena') this.syncProxies(now);
+    if (this.quest) this.questTick(now);
     for (const p of [...this.players.values()]) this.tickPlayer(p, now, dt);
     this.tickDoors();
     const pl = [...this.players.values()];
@@ -844,6 +849,7 @@ class Instance {
       if (cave) { this.players.delete(p.user.id); this.event({ e: 'leave', id: p.user.id }); return this.hooks.portal(p.user, cave, { x: p.x, y: p.y + 1 }); }
     }
     for (const l of [...this.loot.values()]) if (l.x === p.x && l.y === p.y) this.pickUp(p, l);
+    if (this.quest) this.questOnEnter(p);
     for (const h of this.herbs.values()) if (h.x === p.x && h.y === p.y && h.readyAt <= this.clock()) this.takeHerb(p, h);
     // en el Descenso el portal lleva al piso siguiente al pisarlo; en las mazmorras normales
     // se sale con el botón «Salir ya» o al acabar la cuenta atrás (así nadie sale sin querer)
@@ -961,14 +967,30 @@ class Instance {
   weaponRoll(p) { return roll(p.d.dmg) * (1 + this.buffSum(p, 'dmgPct') / 100); }
   spellRoll(p) { return roll(p.d.spell) * (1 + this.buffSum(p, 'dmgPct') / 100); }
 
+  // Tirada de d20 que se enseña en el combate por turnos. Cuadra con lo que ya ha decidido el porcentaje (fallo: por
+  // debajo de la CA; impacto: por encima; crítico: 20 natural), así se ve el dado sin cambiar el equilibrio.
+  // La CA tiene números de D&D (11 en adelante, más en jefes y élites; la de los héroes, por su armadura) y el
+  // bonificador del atacante es lo que hace falta para que la tirada necesaria cuadre con el porcentaje.
+  showRoll(chance, hit, crit, ca) {
+    if (!this.enc) return undefined;
+    const need = Math.max(2, Math.min(20, 21 - Math.round(chance / 5)));
+    let f;
+    if (crit) f = 20;
+    else if (hit) f = need >= 20 ? 20 : need + Math.floor(rnd() * (20 - need));
+    else f = 1 + Math.floor(rnd() * (need - 1));
+    return { f, b: ca - need, ca };
+  }
+  foeCA(e) { const m = e.m || {}; return 11 + Math.floor((m.level || 1) / 5) + (m.boss ? 3 : e.elite ? 1 : 0); }
+  heroCA(p) { return 10 + Math.max(0, Math.min(10, Math.round((p.d.armor || 0) / 30))); }
+
   weaponAttack(p, t, now) {
     const d = p.d;
     p.dir = dirName(t.x - p.x, t.y - p.y);
     p.nextAttack = now + d.atkMs / (1 + this.buffSum(p, 'haste') / 100);
     const chance = Math.max(55, Math.min(99, 90 + d.hit - 4 * Math.max(0, t.m.level - d.level)));
     const kind = d.weapon.kind;
-    if (rnd() * 100 >= chance) { this.event({ e: 'hit', by: p.user.id, t: t.id, miss: true, kind }); return; }
-    this.damageEnemy(p, t, this.weaponRoll(p), { kind, magic: kind === 'magic', undead: (d.undead || 0) / 100, elem: this.elemRoll(p) });
+    if (rnd() * 100 >= chance) { this.event({ e: 'hit', by: p.user.id, t: t.id, miss: true, kind, roll: this.showRoll(chance, false, false, this.foeCA(t)) }); return; }
+    this.damageEnemy(p, t, this.weaponRoll(p), { kind, magic: kind === 'magic', undead: (d.undead || 0) / 100, elem: this.elemRoll(p), roll: { chance, ca: this.foeCA(t) } });
     // legendario «Trueno»: cada cuarto golpe cae un rayo que salta a dos enemigos más
     if (d.leg && d.leg.trueno && (p.legHits = (p.legHits || 0) + 1) % 4 === 0) {
       const dmg = this.weaponRoll(p) * 1.5;
@@ -1030,11 +1052,12 @@ class Instance {
     }
     dmg = Math.max(1, Math.round(dmg));
     e.hp -= dmg;
+    if (e.m.boss && !e.phase2 && e.hp > 0 && e.hp < e.maxHp * 0.5) this.bossPhase(e);
     e.hitters.add(p.user.id);
     this.stat(p, 'dmg', dmg + Math.min(0, e.hp)); // sin contar el daño de más al rematar
     e.aggro = e.aggro || p.user.id;
     this.wakePack(e, p.user.id);
-    this.event({ e: 'hit', by: p.user.id, t: e.id, dmg, crit, kind: o.kind || 'ability', fx: o.fx || null, name: o.name || null });
+    this.event({ e: 'hit', by: p.user.id, t: e.id, dmg, crit, kind: o.kind || 'ability', fx: o.fx || null, name: o.name || null, roll: o.roll ? this.showRoll(o.roll.chance, true, crit, o.roll.ca) : undefined });
     const ls = p.d.lifesteal / 100 + (o.leech || 0);
     if (ls > 0) this.heal(p, Math.max(1, Math.round(dmg * ls)), o.leech ? o.name : 'Robo de vida');
     // legendario «Rebote»: lo que va a distancia salta a otro enemigo cercano
@@ -1243,6 +1266,7 @@ class Instance {
 
   killEnemy(p, e) {
     this.enemies.delete(e.id);
+    if (this.quest) this.questOnKill(e);
     if (this.enc) setImmediate(() => { if (this.enc) this.encCheckEnd(); });
     this.stat(p, 'kills', 1);
     if (e.group) { e.group.alive.delete(e.id); if (!e.group.alive.size) e.group.respawnAt = this.clock() + RESPAWN_MS; }
@@ -1315,7 +1339,10 @@ class Instance {
     p.lastHurt = now;
     if (p.downed) return;
     if (p.iframeUntil > now && o.kind !== 'corrupt') { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true }); return; }
-    if (o.canDodge && rnd() * 100 < p.d.dodge + (p.dodging ? 40 : 0)) { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true }); return; }
+    // por turnos, el golpe del monstruo también enseña su d20 contra la CA del héroe (la esquiva)
+    const foe = this.enc && o.canDodge && o.by ? this.enemies.get(o.by) : null, dc = p.d.dodge + (p.dodging ? 40 : 0);
+    const fb = this.heroCA(p);
+    if (o.canDodge && rnd() * 100 < dc) { this.event({ e: 'hit', by: o.by || null, t: p.user.id, dodge: true, roll: foe ? this.showRoll(100 - dc, false, false, fb) : undefined }); return; }
     if (this.enc && o.by) dmg *= this.turnHurtMult(this.enemies.get(o.by), o); // por turnos pega más cada vez
     if (o.raw) { /* ya viene reducido (duelos) */ } else if (o.magic) dmg *= 1 - p.d.magicRes / 100;
     else if (o.level) dmg *= 1 - RULES.reduction(p.d.armor, o.level);
@@ -1332,7 +1359,7 @@ class Instance {
       this.event({ e: 'leg', id: p.user.id, name: '🛡️ Égida' });
     }
     p.fishing = null;
-    this.event({ e: 'hit', by: o.by || null, t: p.user.id, dmg, crit: o.crit || undefined, block: blocked || undefined, name: o.name || null, kind: o.kind || 'melee' });
+    this.event({ e: 'hit', by: o.by || null, t: p.user.id, dmg, crit: o.crit || undefined, block: blocked || undefined, name: o.name || null, kind: o.kind || 'melee', roll: foe ? this.showRoll(100 - dc, true, !!o.crit, fb) : undefined });
     // desafío «sed de sangre»: el enemigo se cura con lo que hiere
     if (this.mod === 'vampiros' && o.by) { const e = this.enemies.get(o.by); if (e) { const h = Math.round(dmg * 0.3); e.hp = Math.min(e.maxHp, e.hp + h); this.event({ e: 'eheal', id: e.id, by: e.id, amount: h }); } }
     this.privDirty(p);
@@ -1519,6 +1546,17 @@ class Instance {
   }
 
   // Ataques especiales de los jefes: avisan en el suelo y golpean al rato
+  // Segunda fase del jefe (a media vida, una vez): pega más fuerte y más rápido, usa su especial enseguida y llama a
+  // sus esbirros. El navegador lo cuenta con su frase de furia, temblor y un aura roja.
+  bossPhase(e) {
+    e.phase2 = true;
+    const m = e.m, now = this.clock();
+    m.dmg = m.dmg.map((v) => v * 1.25); m.atk = Math.round(m.atk * 0.82); m.ms = Math.round(m.ms * 0.88);
+    e.nextSpecial = now;
+    if (m.summons && m.specials.includes('summon')) this.summon(e, m.summons, 2 + Math.floor(this.players.size / 2), now);
+    this.event({ e: 'phase', id: e.id, k: e.k, x: e.x, y: e.y });
+  }
+
   bossSpecial(e, target, now) {
     const m = e.m;
     const enraged = e.hp < e.maxHp * 0.35;
@@ -1613,6 +1651,7 @@ class Instance {
       chests: [...this.chests.values()],
       loot: [...this.loot.values()].filter((l) => near(l) && (!l.owner || (viewer && l.owner === viewer.user.id))).map((l) => ({ id: l.id, x: l.x, y: l.y, gold: l.gold ? 1 : undefined, cons: l.cons, mat: l.mat, r: l.item ? l.item.rarity : undefined, slot: l.item ? l.item.slot : undefined, name: l.item ? l.item.name : undefined, it: l.item || undefined })),
       enc: this.encView(),
+      quest: this.questView(),
       portal: this.portal,
       portalLeft: this.portalEnd ? Math.max(0, this.portalEnd - now) : undefined,
       start: this.start,
@@ -1640,5 +1679,6 @@ class Instance {
 }
 
 require('./turns.js')(Instance, { rnd, cheb, roll, dirName, AGGRO, LEASH });
+require('./quests.js')(Instance, { rnd, cheb });
 
 module.exports = { Instance };

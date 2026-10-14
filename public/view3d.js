@@ -423,6 +423,8 @@
   //  Mazmorras y mundo abierto
   // ======================================================================
   const WALL_H = 1.3;
+  // Temas que dibuja otro archivo (places.js): PLACES[tema] = { tile, after, build, tint, floors, fancy, webby, mossy, grade }
+  const PLACES = {};
   const THEME = {
     cripta: { floor: ['#4a4c56', '#40424c'], seam: '#2a2b32', wall: '#565862', top: '#141418', fog: '#06060a', liquid: '#1a3a4a', sky: '#5a6aa0', amb: 0.16, ground: '#0c1018', mist: '#8a9ac8', mistA: 0.32 },
     cuevas: { floor: ['#5a4a38', '#4e4030'], seam: '#3a2e22', wall: '#5e4c3a', top: '#16110c', fog: '#080604', liquid: '#1e3a5a', sky: '#8a7a5a', amb: 0.15, ground: '#140e08', mist: '#a89878', mistA: 0.22 },
@@ -492,6 +494,8 @@
         continue;
       }
       if (theme === 'bosque') { forestTile(g, map, x, y, X, Y, px); if (x === map.w - 1 && y === map.h - 1) forestBlobs(g, map, px); continue; }
+      const PL = PLACES[theme];
+      if (PL && PL.tile) { PL.tile(g, map, x, y, X, Y, px); if (x === map.w - 1 && y === map.h - 1 && PL.after) PL.after(g, map, px); continue; }
       if (ch === '#') { g.fillStyle = T.top; g.fillRect(X, Y, px, px); continue; }
       if (ch === '~' || ch === '%') { g.fillStyle = ch === '%' ? '#3a1408' : '#0e1a22'; g.fillRect(X, Y, px, px); continue; }
       const v = Math.floor(rand(x * 13 + y * 7) * 2);
@@ -583,7 +587,8 @@
       const lava = instanced(quad, liquidMaterial('lava', { color: '#ff5a10', emissive: '#ff3a00', emissiveIntensity: 1.3, roughness: 0.6 }), liquids.lava, { shadow: false });
       lava.userData.lava = true;
       group.add(lava);
-      liquids.lava.forEach((l, i) => { if (i % 6 === 0) lights.push({ x: l.x, y: 0.6, z: l.z, color: '#ff5a1a', intensity: 1.2, dist: 4 }); });
+      const every = liquids.lava.length > 60 ? 14 : 6; // mucha lava: menos luces (si no, todo se quema)
+      liquids.lava.forEach((l, i) => { if (i % every === 0) lights.push({ x: l.x, y: 0.6, z: l.z, color: '#ff5a1a', intensity: 1.2, dist: 4 }); });
     }
     const out = { group, lights, floor };
     if (!world && mm.GL && mm.GL.ready && mm.pieceGeo('wall')) return buildDungeonGL(map, theme, out);
@@ -753,8 +758,9 @@
   // Suciedad del suelo: sombra junto a los muros, grietas, musgo, manchas y piedrecitas (todo al azar con semilla)
   function grime(g, map, theme, px) {
     const wallAt = (x, y) => x < 0 || y < 0 || x >= map.w || y >= map.h || map.tiles[y * map.w + x] === '#';
-    const hot = theme === 'volcan' || theme === 'abismo';
-    const mossy = theme === 'cripta' || theme === 'nido' || theme === 'cuevas' || theme === 'bosque';
+    const RT = (root.RULES && RULES.THEMES[theme]) || {};
+    const hot = !!RT.hot;
+    const mossy = theme === 'cripta' || theme === 'nido' || theme === 'cuevas' || theme === 'bosque' || !!(PLACES[theme] && PLACES[theme].mossy);
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
       if (wallAt(x, y)) continue;
       const X = x * px, Y = y * px, seed = x * 7.31 + y * 13.17;
@@ -800,6 +806,7 @@
       if (p.k === 'blood') { g.fillStyle = 'rgba(90,10,10,.75)'; g.beginPath(); g.ellipse(X + px / 2, Y + px / 2, px * 0.32, px * 0.22, rand(p.x) * 3, 0, 7); g.fill(); }
       if (p.k === 'rug') { g.fillStyle = '#6a1a1a'; g.fillRect(X + 2, Y + 4, px - 4, px - 8); g.strokeStyle = '#c8a040'; g.lineWidth = 2; g.strokeRect(X + 4, Y + 6, px - 8, px - 12); }
       if (p.k === 'puddle') { g.fillStyle = 'rgba(30,50,70,.7)'; g.beginPath(); g.ellipse(X + px / 2, Y + px / 2, px * 0.35, px * 0.22, 0, 0, 7); g.fill(); }
+      if (PLACES.paint) PLACES.paint(g, p, X, Y, px, map);
       if (p.k === 'web') { g.strokeStyle = 'rgba(220,220,230,.5)'; g.lineWidth = 1; for (let i = 0; i < 6; i++) { g.beginPath(); g.moveTo(X + px / 2, Y + px / 2); g.lineTo(X + px / 2 + Math.cos(i) * px / 2, Y + px / 2 + Math.sin(i) * px / 2); g.stroke(); } for (const r of [5, 10, 14]) { g.beginPath(); g.arc(X + px / 2, Y + px / 2, r, 0, 7); g.stroke(); } }
     }
     const tex = new THREE.CanvasTexture(c);
@@ -948,6 +955,8 @@
   function buildDungeonGL(map, theme, out) {
     const mm = M();
     if (theme === 'bosque') return buildForestGL(map, out);
+    if (PLACES[theme] && PLACES[theme].build) return PLACES[theme].build(map, out);
+    const PL = PLACES[theme] || {};
     const { group, lights, floor } = out;
     const T = THEME[theme] || THEME.cripta;
     if (floor.material.map) floor.material.map.dispose(); // la textura pintada no hace falta: aquí hay losas
@@ -956,9 +965,9 @@
     floor.position.y = -0.03;
     const HS = 0.25, VS = GL_WALL_H / 4;
     const many = (a, n, b) => Array(n).fill(a).concat(b ? [b] : []);
-    const floorNames = theme === 'cuevas' || theme === 'nido' ? many('floor_dirt_large', 9, 'floor_dirt_large_rocky') : theme === 'volcan' || theme === 'abismo' ? many('floor_tile_large', 7, 'floor_tile_large_rocks') : many('floor_tile_large', 1);
+    const floorNames = PL.floors ? PL.floors : theme === 'cuevas' || theme === 'nido' ? many('floor_dirt_large', 9, 'floor_dirt_large_rocky') : theme === 'volcan' || theme === 'abismo' ? many('floor_tile_large', 7, 'floor_tile_large_rocks') : many('floor_tile_large', 1);
     // las piezas KayKit son claras: se oscurecen y tiñen según el tema
-    const TINT = { cripta: ['#727a8c', '#8e95a6'], cuevas: ['#8e785c', '#9c8a72'], fortaleza: ['#8a7c70', '#9a8e84'], nido: ['#6e7c5e', '#86947a'], volcan: ['#7a5e58', '#8a7470'], abismo: ['#7a4a46', '#8a5650'] }[theme] || ['#80808a', '#90909a'];
+    const TINT = { cripta: ['#727a8c', '#8e95a6'], cuevas: ['#8e785c', '#9c8a72'], fortaleza: ['#8a7c70', '#9a8e84'], nido: ['#6e7c5e', '#86947a'], volcan: ['#7a5e58', '#8a7470'], abismo: ['#7a4a46', '#8a5650'] }[theme] || PL.tint || ['#80808a', '#90909a'];
     const tinted = (mat, hex) => [].concat(mat).map((m) => { const c = m.clone(); c.color = new THREE.Color(hex); return c; });
     const one = (a) => (a.length === 1 ? a[0] : a);
     const floors = {};
@@ -976,8 +985,8 @@
           near = true;
           const k = rand(x * 7.1 + y * 3.3 + dx * 5 + dy * 11);
           // muros con variedad: agrietados, rotos y, en criptas y fortalezas, estanterías y ventanales enrejados
-          const fancy = (theme === 'cripta' || theme === 'fortaleza') && !low && dy === 1;
-          const name = k < 0.1 ? 'wall_cracked' : k < 0.14 ? 'wall_broken' : fancy && k < 0.19 ? 'wall_shelves' : fancy && k < 0.23 ? 'wall_archedwindow_gated' : 'wall';
+          const fancy = (theme === 'cripta' || theme === 'fortaleza' || PL.fancy) && !low && dy === 1;
+          const name = PL.fancy === 'windows' && fancy && k > 0.55 ? 'wall_archedwindow_gated' : k < 0.1 ? 'wall_cracked' : k < 0.14 ? 'wall_broken' : fancy && k < 0.19 && PL.fancy !== 'windows' ? 'wall_shelves' : fancy && k < 0.23 ? 'wall_archedwindow_gated' : 'wall';
           (segs[name] = segs[name] || []).push({ x: x + 0.5 + dx * 0.375, z: y + 0.5 + dy * 0.375, r, tile, lm });
         }
         if (!near) for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) if (!isWall(x + dx, y + dy)) { near = true; break; }
@@ -1026,7 +1035,7 @@
       group.add(im); extras.push({ im, list });
     };
     const corners = [], webs = [];
-    const webby = theme === 'cripta' || theme === 'nido' || theme === 'cuevas';
+    const webby = theme === 'cripta' || theme === 'nido' || theme === 'cuevas' || !!PL.webby;
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
       if (isWall(x, y) || WATER.has(map.tiles[y * map.w + x])) continue;
       const tile = y * map.w + x;
@@ -1234,13 +1243,6 @@
     if (snapCache.has(key)) return snapCache.get(key);
     ensureSnap();
     snapR.setPixelRatio(1);
-      snapR = legacy(new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }));
-      snapR.outputColorSpace = THREE.SRGBColorSpace;
-      snapR.toneMapping = THREE.ACESFilmicToneMapping;
-      snapScene = new THREE.Scene();
-      snapScene.add(new THREE.HemisphereLight('#c8c0d8', '#3a2a1a', 0.55));
-      const key1 = new THREE.DirectionalLight('#ffe0c0', 1.05); key1.position.set(1.5, 2.5, 3); snapScene.add(key1);
-      const rim = new THREE.DirectionalLight('#8aa0ff', 0.8); rim.position.set(-2, 1.5, -2); snapScene.add(rim);
     snapR.setSize(w, h, false);
     const model = M().buildHero(look);
     model.rotation.y = rot !== undefined ? rot : mode === 'bust' ? 0.35 : 0.55;
@@ -1260,6 +1262,77 @@
     return c;
   }
 
+
+  // ======================================================================
+  //  Héroe que gira despacio sobre un círculo de luz (menú de pausa).
+  //  Un solo renderizador que se reutiliza: show(host, look) lo mete en host, hide() lo para.
+  // ======================================================================
+  let tt = null;
+  function ttInit() {
+    const r = legacy(new THREE.WebGLRenderer({ antialias: true, alpha: true }));
+    r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.15;
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight('#b8a8c8', '#2a1a10', 0.45));
+    const key = new THREE.SpotLight('#ffdcb0', 2.6, 14, 0.55, 0.7, 1); key.position.set(1.2, 4.2, 2.6); key.target.position.set(0, 0.7, 0); scene.add(key, key.target);
+    const rim = new THREE.DirectionalLight('#7a90ff', 1.0); rim.position.set(-2.2, 2.2, -2.6); scene.add(rim);
+    const fire = new THREE.PointLight('#ff7a30', 1.6, 5, 1.6); fire.position.set(1.5, 0.5, 1.1); scene.add(fire);
+    // el suelo: un círculo de luz que se pierde en lo oscuro, con unas runas
+    const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d');
+    const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    gr.addColorStop(0, 'rgba(255,214,160,.7)'); gr.addColorStop(0.45, 'rgba(170,110,60,.32)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    g.strokeStyle = 'rgba(255,200,120,.45)'; g.lineWidth = 2; g.beginPath(); g.arc(128, 128, 92, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = 1; g.beginPath(); g.arc(128, 128, 80, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = 'rgba(255,210,140,.5)'; g.font = '14px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const runes = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊ';
+    for (let i = 0; i < runes.length; i++) { const a = i / runes.length * Math.PI * 2; g.save(); g.translate(128 + Math.cos(a) * 86, 128 + Math.sin(a) * 86); g.rotate(a + Math.PI / 2); g.fillText(runes[i], 0, 0); g.restore(); }
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+    floor.rotation.x = -Math.PI / 2; scene.add(floor);
+    // ascuas que suben
+    const N = 40, pos = new Float32Array(N * 3), seeds = [];
+    for (let i = 0; i < N; i++) seeds.push({ a: Math.random() * Math.PI * 2, r: 0.5 + Math.random() * 0.9, v: 0.15 + Math.random() * 0.3, o: Math.random() * 3 });
+    const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const embers = new THREE.Points(pg, new THREE.PointsMaterial({ color: '#ffa050', size: 0.035, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+    scene.add(embers);
+    const cam = new THREE.PerspectiveCamera(24, 1, 0.05, 30);
+    tt = { r, scene, cam, fire, floor, embers, seeds, model: null, key: '', raf: 0, rot: 0.5, last: 0, host: null };
+  }
+  function ttFrame(now) {
+    if (!tt || !tt.host) return;
+    tt.raf = requestAnimationFrame(ttFrame);
+    const w = tt.host.clientWidth, h = tt.host.clientHeight;
+    if (!w || !h) return;
+    if (tt.w !== w || tt.h !== h) { tt.w = w; tt.h = h; tt.r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); tt.r.setSize(w, h, false); tt.cam.aspect = w / h; }
+    const dt = Math.min(0.1, (now - (tt.last || now)) / 1000); tt.last = now;
+    tt.rot += dt * 0.45;
+    const m = tt.model;
+    if (m) { m.rotation.y = tt.rot; M().animate(m, { t: now }); }
+    const sc = m ? m.scale.x : 1;
+    // encuadre: el héroe entero, algo más arriba del centro si la vista es alta
+    const tall = h / w > 1.2;
+    tt.cam.position.set(0, 1.15 * sc, tall ? 5.2 : 5.4); tt.cam.lookAt(0, 0.45 * sc, 0); tt.cam.updateProjectionMatrix();
+    tt.fire.intensity = 1.4 + Math.sin(now / 90) * 0.25 + Math.sin(now / 37) * 0.15;
+    const p = tt.embers.geometry.attributes.position;
+    tt.seeds.forEach((s, i) => { const y = ((now / 1000) * s.v + s.o) % 2.2; p.setXYZ(i, Math.cos(s.a + y) * s.r, y, Math.sin(s.a + y) * s.r); });
+    p.needsUpdate = true;
+    tt.r.render(tt.scene, tt.cam);
+  }
+  const turntable = {
+    show(host, look) {
+      if (!tt) ttInit();
+      const key = JSON.stringify(look) + (M().GL ? M().GL.version : 0);
+      if (key !== tt.key) {
+        if (tt.model) tt.scene.remove(tt.model);
+        tt.model = M().buildHero(look); tt.key = key;
+        tt.scene.add(tt.model);
+      }
+      if (tt.r.domElement.parentNode !== host) host.appendChild(tt.r.domElement);
+      tt.host = host; tt.w = 0; tt.last = 0;
+      cancelAnimationFrame(tt.raf); tt.raf = requestAnimationFrame(ttFrame);
+    },
+    hide() { if (!tt) return; tt.host = null; cancelAnimationFrame(tt.raf); },
+  };
 
   // ======================================================================
   //  Partículas (puntos suaves en la GPU): chispas, polvo, magia, ascuas…
@@ -1497,5 +1570,5 @@
     const a = oct * Math.PI / 4;
     return [Math.round(Math.cos(a)) || 0, Math.round(Math.sin(a)) || 0];
   }
-  root.VIEW3D = { ISO, QUAD, metalEnv, screenToTile, touch, setBrightness, info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
+  root.VIEW3D = { ISO, QUAD, metalEnv, screenToTile, touch, setBrightness, info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, turntable, PLACES, _: { rand, camMask, seenNear, instanced, QUAD, LOW_WALL, WATER, decalTexture, grassTuft, buildForestGL, forestTile, forestBlobs }, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
 })(this);

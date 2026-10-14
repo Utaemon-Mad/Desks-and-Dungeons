@@ -169,7 +169,7 @@ module.exports = function (ctx) {
     const week = PROG.weekKey();
     const level = Math.max(levelOf(user), PROG.RAID.minLevel) + PROG.RAID.bonusLevel;
     // el mapa sale de la semana: el mismo para todos
-    const d = GEN.generate({ theme: PROG.raidTheme(week), level, seed: 'asalto-' + week });
+    const d = GEN.generate({ theme: PROG.raidTheme(week), level, seed: 'asalto-' + week, quest: false });
     d.id = 'raid' + crypto.randomBytes(3).toString('hex');
     const M = PROG.WEEKLY_MODS[PROG.raidMod(week)];
     d.name = `Asalto semanal · ${d.name}`;

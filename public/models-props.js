@@ -247,6 +247,27 @@
       case 'banner': wall = true; { const col = theme === 'cripta' ? '#2a2a4a' : theme === 'nido' ? '#2a4a2a' : '#6a1414'; mesh(box(0.4, 0.8, 0.02), mat(col), 0, 1.0, 0.06, g); mesh(box(0.44, 0.04, 0.04), mat('#c8a040', { metal: 0.6 }), 0, 1.4, 0.06, g); mesh(box(0.08, 0.08, 0.025), mat('#c8a040', { metal: 0.6 }), 0, 1.05, 0.075, g); } block = false; break;
       case 'chains': wall = true; for (const x of [-0.12, 0.12]) for (let i = 0; i < 5; i++) mesh(geo('link', () => new THREE.TorusGeometry(0.03, 0.008, 3, 6)), mat('#5a5a62', { metal: 0.7 }), x, 1.3 - i * 0.07, 0.05, g).rotation.y = i % 2 ? Math.PI / 2 : 0; block = false; break;
       case 'shield': wall = true; { const s = offhand('escudo', null, null, g); s.position.set(0, 1.0, 0.05); } block = false; break;
+      // nota de la historia: pergamino abierto en el suelo, con su vela y un brillo para que se vea
+      case 'note': {
+        block = false;
+        const paper = mat('#e8d8b0'), ink = mat('#3a2410');
+        const sheet = mesh(box(0.24, 0.006, 0.18), paper, 0, 0.012, 0, g); sheet.rotation.y = 0.4;
+        for (const sx of [-1, 1]) { const r = mesh(cyl(0.022, 0.022, 0.2, 8), paper, sx * 0.12 * Math.cos(0.4), 0.025, -sx * 0.12 * Math.sin(0.4), g); r.rotation.set(Math.PI / 2, 0, 0); r.rotation.order = 'YXZ'; r.rotation.y = 0.4; }
+        for (let i = 0; i < 4; i++) { const l = mesh(box(0.15, 0.002, 0.008), ink, 0, 0.016, -0.05 + i * 0.03, g); l.rotation.y = 0.4; }
+        mesh(cyl(0.02, 0.022, 0.08, 6), mat('#eee0c0'), 0.16, 0.04, 0.1, g); flame(g, 0.16, 0.1, 0.1, 0.6);
+        const halo = mesh(sph(0.2, 10, 8), mat('#ffe0a0', { emissive: '#ffd27a', ei: 1.2 }), 0, 0.05, 0, g); halo.material = halo.material.clone(); halo.material.transparent = true; halo.material.opacity = 0.18; halo.material.depthWrite = false; halo.scale.y = 0.25; halo.castShadow = false;
+        light = { color: '#ffe0a0', intensity: 0.6, dist: 1.8, y: 0.3 };
+        break;
+      }
+      // mural de la historia: fresco enmarcado en el muro, pintado según el tema
+      case 'mural': {
+        wall = true; block = false;
+        const fresco = new THREE.MeshStandardMaterial({ map: muralTexture(theme), roughness: 0.92 });
+        mesh(box(0.86, 0.62, 0.02), fresco, 0, 1.05, 0.04, g);
+        const fr = mat('#5a3a22');
+        for (const [x, y, w, h] of [[0, 1.37, 0.92, 0.04], [0, 0.73, 0.92, 0.04], [-0.45, 1.05, 0.04, 0.66], [0.45, 1.05, 0.04, 0.66]]) mesh(box(w, h, 0.04), fr, x, y, 0.05, g);
+        break;
+      }
       // muro agrietado de una sala secreta: grietas por las que se filtra una luz dorada
       case 'secret': {
         wall = true; block = false;
@@ -263,6 +284,60 @@
 
   // Decorado de las mazmorras con piezas KayKit (lo que no tiene equivalente sigue siendo low poly propio)
   const BANNER_BY_THEME = { cripta: 'banner_patternB_white', cuevas: 'banner_patternA_brown', fortaleza: 'banner_patternA_red', nido: 'banner_patternA_green', volcan: 'banner_patternA_red', abismo: 'banner_patternA_red' };
+  // Fresco de los murales: fondo de cal gastada y una escena sencilla de cada tema (la de su historia)
+  const muralTex = {};
+  const MURALS = {}; // escenas de otros temas: MODELS.MURALS[tema] = (g, ink) => …
+  function muralTexture(theme) {
+    if (muralTex[theme]) return muralTex[theme];
+    const c = document.createElement('canvas'); c.width = 256; c.height = 184;
+    const g = c.getContext('2d');
+    const bg = g.createLinearGradient(0, 0, 0, 184); bg.addColorStop(0, '#c8b490'); bg.addColorStop(1, '#a8916a');
+    g.fillStyle = bg; g.fillRect(0, 0, 256, 184);
+    for (let i = 0; i < 500; i++) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '60,40,20' : '255,240,210'},0.08)`; g.fillRect(Math.random() * 256, Math.random() * 184, 2 + Math.random() * 5, 1 + Math.random() * 3); }
+    const ink = (col) => { g.fillStyle = col; g.strokeStyle = col; };
+    g.lineWidth = 5; g.lineCap = 'round';
+    if (MURALS[theme]) MURALS[theme](g, ink); // los temas de places.js pintan su escena
+    else if (theme === 'cuevas') { // goblin con corona sobre su montón de tesoro, y otros de rodillas
+      ink('#c8a030'); g.beginPath(); g.moveTo(70, 160); g.lineTo(128, 120); g.lineTo(186, 160); g.fill();
+      ink('#3a5a2a'); g.beginPath(); g.arc(128, 82, 22, 0, Math.PI * 2); g.fill(); g.fillRect(112, 100, 32, 30);
+      ink('#e8c040'); g.beginPath(); g.moveTo(108, 62); g.lineTo(114, 46); g.lineTo(122, 58); g.lineTo(128, 42); g.lineTo(134, 58); g.lineTo(142, 46); g.lineTo(148, 62); g.fill();
+      ink('#3a5a2a'); for (const x of [40, 216]) { g.beginPath(); g.arc(x, 140, 12, 0, Math.PI * 2); g.fill(); g.fillRect(x - 10, 150, 20, 14); }
+    } else if (theme === 'cripta') { // mago negro con la gema verde sobre tumbas abiertas
+      ink('#6a6a72'); for (const x of [40, 90, 166, 216]) { g.fillRect(x - 14, 140, 28, 30); g.beginPath(); g.arc(x, 140, 14, Math.PI, 0); g.fill(); }
+      ink('#1a1418'); g.beginPath(); g.moveTo(128, 40); g.lineTo(100, 150); g.lineTo(156, 150); g.fill(); g.beginPath(); g.arc(128, 48, 13, 0, Math.PI * 2); g.fill();
+      ink('#3aff6a'); g.beginPath(); g.arc(128, 26, 9, 0, Math.PI * 2); g.fill();
+    } else if (theme === 'fortaleza') { // mano roja sobre un mapa con aldeas tachadas
+      ink('#d8c8a0'); g.fillRect(40, 30, 176, 124);
+      ink('#5a3a20'); for (const [x, y] of [[70, 60], [110, 120], [170, 70], [190, 130]]) { g.strokeRect(x - 8, y - 8, 16, 16); }
+      ink('#8a1a1a'); for (const [x, y] of [[70, 60], [110, 120], [170, 70]]) { g.beginPath(); g.moveTo(x - 12, y - 12); g.lineTo(x + 12, y + 12); g.moveTo(x + 12, y - 12); g.lineTo(x - 12, y + 12); g.stroke(); }
+      ink('#b01a1a'); g.beginPath(); g.ellipse(128, 100, 26, 30, 0, 0, Math.PI * 2); g.fill(); for (let i = 0; i < 4; i++) g.fillRect(106 + i * 13, 50, 9, 40); g.fillRect(88, 92, 24, 9);
+    } else if (theme === 'nido') { // reina araña con corona y huevos
+      ink('#2a1a2a'); g.beginPath(); g.ellipse(128, 90, 30, 24, 0, 0, Math.PI * 2); g.fill(); g.beginPath(); g.arc(128, 60, 14, 0, Math.PI * 2); g.fill();
+      g.lineWidth = 4; for (const sx of [-1, 1]) for (let i = 0; i < 4; i++) { g.beginPath(); g.moveTo(128 + sx * 20, 80 + i * 8); g.lineTo(128 + sx * 60, 60 + i * 18); g.lineTo(128 + sx * 78, 90 + i * 20); g.stroke(); }
+      ink('#e8c040'); g.beginPath(); g.moveTo(116, 48); g.lineTo(120, 36); g.lineTo(128, 44); g.lineTo(136, 36); g.lineTo(140, 48); g.fill();
+      ink('#e8e0c8'); for (let i = 0; i < 9; i++) { g.beginPath(); g.ellipse(50 + i * 20, 160, 8, 10, 0, 0, Math.PI * 2); g.fill(); }
+    } else if (theme === 'volcan') { // dragón rojo enroscado sobre su oro, ciudad en llamas
+      ink('#ff7a2a'); for (let i = 0; i < 6; i++) { g.beginPath(); g.moveTo(20 + i * 40, 170); g.lineTo(34 + i * 40, 120 - (i % 2) * 20); g.lineTo(48 + i * 40, 170); g.fill(); }
+      ink('#e8c040'); g.beginPath(); g.ellipse(128, 160, 70, 18, 0, 0, Math.PI * 2); g.fill();
+      ink('#9a1a14'); g.beginPath(); g.ellipse(128, 120, 50, 26, 0, 0, Math.PI * 2); g.fill(); g.beginPath(); g.moveTo(160, 110); g.quadraticCurveTo(200, 60, 180, 40); g.lineTo(196, 36); g.lineTo(190, 56); g.fill();
+      g.beginPath(); g.moveTo(110, 100); g.lineTo(70, 40); g.lineTo(130, 90); g.fill(); g.beginPath(); g.moveTo(140, 100); g.lineTo(150, 30); g.lineTo(160, 95); g.fill();
+    } else if (theme === 'bosque') { // árbol con ojos agarrando a un leñador
+      ink('#4a3220'); g.fillRect(112, 60, 32, 110); for (const sx of [-1, 1]) { g.beginPath(); g.moveTo(128, 90); g.quadraticCurveTo(128 + sx * 60, 70, 128 + sx * 80, 110); g.stroke(); }
+      ink('#2e5226'); g.beginPath(); g.arc(128, 50, 50, 0, Math.PI * 2); g.fill();
+      ink('#e8e040'); g.beginPath(); g.arc(116, 100, 5, 0, Math.PI * 2); g.arc(140, 100, 5, 0, Math.PI * 2); g.fill();
+      ink('#8a3a2a'); g.beginPath(); g.arc(210, 120, 9, 0, Math.PI * 2); g.fill(); g.fillRect(203, 128, 14, 22);
+    } else { // abismo: demonio con cuernos de fuego sobre el círculo de los invocadores
+      ink('#8a1a1a'); g.beginPath(); g.ellipse(128, 160, 80, 14, 0, 0, Math.PI * 2); g.stroke();
+      ink('#2a0a0a'); g.beginPath(); g.moveTo(128, 50); g.lineTo(90, 150); g.lineTo(166, 150); g.fill(); g.beginPath(); g.arc(128, 58, 18, 0, Math.PI * 2); g.fill();
+      ink('#ff6a1a'); for (const sx of [-1, 1]) { g.beginPath(); g.moveTo(128 + sx * 10, 46); g.quadraticCurveTo(128 + sx * 40, 20, 128 + sx * 30, 8); g.lineTo(128 + sx * 18, 40); g.fill(); }
+      ink('#ffd23f'); g.beginPath(); g.arc(122, 58, 3, 0, Math.PI * 2); g.arc(134, 58, 3, 0, Math.PI * 2); g.fill();
+    }
+    // grietas y desconchones
+    g.strokeStyle = 'rgba(40,24,10,0.5)'; g.lineWidth = 1.5; for (let i = 0; i < 6; i++) { g.beginPath(); let x = Math.random() * 256, y = Math.random() * 184; g.moveTo(x, y); for (let k = 0; k < 4; k++) { x += Math.random() * 30 - 15; y += Math.random() * 20; g.lineTo(x, y); } g.stroke(); }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.userData.keep = true;
+    return (muralTex[theme] = t);
+  }
+
   function propGL(k, theme) {
     const g = new THREE.Group();
     let light = null, wall = false, block = true;
@@ -318,5 +393,5 @@
     return { obj: g, light };
   }
 
-  Object.assign(MODELS, { furniture, prop, flame, candle, mug, herb, rod });
+  Object.assign(MODELS, { furniture, prop, flame, candle, mug, herb, rod, MURALS });
 })();

@@ -44,8 +44,15 @@
       <div id="log-lines"></div>
     </section>
 
+    <!-- Orbes de vida y energía (estilo Diablo) -->
+    <div id="orbs" class="hidden">
+      <div id="orb-hp" class="orb hp" title="Vida"><div class="orb-glass"><i class="orb-fill" id="orb-hp-f"><b class="orb-wave"></b></i><b class="orb-shine"></b></div><span class="orb-t" id="mh-hp-t"></span><span class="orb-l">VIDA</span></div>
+      <div id="orb-en" class="orb en" title="Energía"><div class="orb-glass"><i class="orb-fill" id="orb-en-f"><b class="orb-wave"></b></i><b class="orb-shine"></b></div><span class="orb-t" id="mh-en-t"></span><span class="orb-l">ENERGÍA</span></div>
+    </div>
+
     <!-- Barra inferior -->
     <nav id="bar">
+      <div id="xpbar" class="meter xp" title="Experiencia"><i id="mh-xp"></i></div>
       <button class="tool" data-act="heroes" title="Héroes"><span class="ico">🛡️</span><span>Héroes</span></button>
       <button class="tool" data-act="emotes" title="Gestos"><span class="ico">😄</span><span>Gestos</span></button>
       <button class="tool" data-act="dice" title="Dados: tirar un d20 o apostar con los demás"><span class="ico">🎲</span><span>Dado</span></button>
@@ -144,9 +151,8 @@
       </div>
       <div class="mh-right">
         <div class="mh-name"><b id="mh-name"></b> <span id="mh-class"></span></div>
-        <div class="meter hp"><i id="mh-hp"></i><span id="mh-hp-t"></span></div>
-        <div class="meter en"><i id="mh-en"></i><span id="mh-en-t"></span></div>
-        <div class="meter xp"><i id="mh-xp"></i></div>
+        <div class="meter hp"><i id="mh-hp"></i></div>
+        <div class="meter en"><i id="mh-en"></i></div>
         <div class="mh-foot"><span>🪙 <b id="mh-gold">0</b></span><span id="mh-buffs"></span></div>
       </div>
     </div>
@@ -453,6 +459,7 @@
   <script src="models-creatures.js"></script>
   <script src="models-props.js"></script>
   <script src="view3d.js"></script>
+  <script src="places.js"></script>
   <script src="dsprites.js"></script>
   <script src="game.js"></script>
   <script src="tavern/start.js"></script>
@@ -461,6 +468,7 @@
   <script src="tavern/ambience.js"></script>
   <script src="tavern/mesa.js"></script>
   <script src="tavern/tavern3d.js"></script>
+  <script src="tavern/life.js"></script>
   <script src="tavern/boot.js"></script>
   <script src="ui.js"></script>
   <script src="ui2.js"></script>
@@ -469,6 +477,11 @@
   <script src="dungeon/party.js"></script>
   <script src="dungeon/overlay.js"></script>
   <script src="dungeon/turns.js"></script>
+  <script src="dungeon/dice.js"></script>
+  <script src="dungeon/boss.js"></script>
+  <script src="dungeon/lore.js"></script>
+  <script src="dungeon/quest.js"></script>
+  <script src="pause.js"></script>
   <script src="polish.js"></script>
   <script src="tutorial.js"></script>
   <script src="admin.js"></script>

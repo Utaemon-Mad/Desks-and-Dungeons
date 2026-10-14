@@ -13,6 +13,14 @@ const PROPS = {
   crystal: { b: 1, light: '#c86aff' }, lavarock: { b: 0, light: '#ff5a1a' }, puddle: { b: 0 },
   ribcage: { b: 0 }, skullcandle: { b: 0, light: '#ffb050' }, coins: { b: 0 }, sack: { b: 1 }, keg: { b: 1 }, weapons: { b: 0 }, barrels: { b: 1 },
   stump: { b: 1 }, rockb: { b: 1 }, bush: { b: 1 }, log: { b: 1 }, lantern: { b: 1, light: '#ffd27a' }, flowers: { b: 0 }, fern: { b: 0 },
+  note: { b: 0, light: '#ffe0a0' }, mural: { wall: 1 },
+  // catedral, tumba, cavernas, caminos, ciudad, campo de batalla, ciudad en llamas e infierno
+  pew: { b: 1 }, carpet: { b: 0 }, candelabra: { b: 1, light: '#ffd08a' }, organ: { b: 1 }, font: { b: 1 },
+  urn: { b: 1 }, obelisk: { b: 1 }, jackal: { b: 1 }, goldsarc: { b: 1 }, sand: { b: 0 }, scarab: { b: 0 },
+  streetlamp: { b: 1, light: '#ffcf7a' }, well: { b: 1 }, cart: { b: 1 }, stall: { b: 1 }, signpost: { b: 1 },
+  corpse: { b: 0 }, swords: { b: 0 }, flagpole: { b: 1 }, stakes: { b: 1 }, crow: { b: 0 },
+  fire: { b: 1, light: '#ff7a2a' }, ash: { b: 0 }, firepit: { b: 1, light: '#ff5a1a' }, spikes: { b: 1 }, skullpile: { b: 0 },
+  vitral: { wall: 1, light: '#b08aff' }, hiero: { wall: 1 },
   torch: { wall: 1, light: '#ffa040' }, banner: { wall: 1 }, chains: { wall: 1 }, shield: { wall: 1 }, crack: { wall: 1 }, secret: { wall: 1, light: '#ffcf6a' },
 };
 
@@ -25,6 +33,14 @@ const THEME_PROPS = {
   volcan:    { block: ['pillar', 'brazier', 'statue', 'altar', 'crystal', 'stalagmite'], floor: ['lavarock', 'bones', 'rubble', 'skull', 'candles', 'skullcandle', 'coins'], wall: ['torch', 'banner', 'crack'] },
   bosque:    { block: ['stump', 'rockb', 'bush', 'bush', 'log', 'tent'], floor: ['mushrooms', 'flowers', 'flowers', 'fern', 'fern', 'bones', 'puddle', 'skull'], wall: [] },
   abismo:    { block: ['pillar', 'brazier', 'statue', 'altar', 'crystal', 'stalagmite'], floor: ['lavarock', 'bones', 'skull', 'candles', 'rubble', 'ribcage', 'skullcandle'], wall: ['torch', 'banner', 'crack'] },
+  catedral:  { block: ['candelabra', 'statue', 'font', 'organ', 'candelabra', 'coffin'], floor: ['candles', 'candles', 'rubble', 'bones', 'skull', 'blood', 'carpet'], wall: ['vitral', 'vitral', 'banner', 'crack'] },
+  tumba:     { block: ['urn', 'urn', 'jackal', 'obelisk', 'brazier', 'goldsarc'], floor: ['sand', 'sand', 'coins', 'bones', 'skull', 'scarab', 'ribcage'], wall: ['hiero', 'hiero', 'crack'] },
+  caverna:   { block: ['stalagmite', 'stalagmite', 'rockb', 'crystal', 'stalagmite'], floor: ['mushrooms', 'mushrooms', 'puddle', 'bones', 'rubble', 'skull', 'web'], wall: [] },
+  sendero:   { block: ['stump', 'rockb', 'bush', 'log', 'cart', 'signpost', 'tent'], floor: ['flowers', 'fern', 'fern', 'mushrooms', 'bones', 'puddle', 'coins'], wall: [] },
+  ciudad:    { block: ['barrel', 'crate', 'cart', 'well', 'stall', 'barrels', 'sack'], floor: ['puddle', 'puddle', 'rubble', 'blood', 'coins', 'skull'], wall: [] },
+  batalla:   { block: ['stakes', 'flagpole', 'cart', 'tent', 'rockb', 'stump'], floor: ['corpse', 'corpse', 'corpse', 'swords', 'swords', 'blood', 'blood', 'crow', 'weapons', 'skull'], wall: [] },
+  incendio:  { block: ['fire', 'cart', 'barrel', 'crate', 'well', 'stall'], floor: ['ash', 'ash', 'rubble', 'rubble', 'corpse', 'blood', 'coins'], wall: [] },
+  infierno:  { block: ['firepit', 'spikes', 'cage', 'spikes', 'stalagmite', 'altar'], floor: ['lavarock', 'lavarock', 'skullpile', 'bones', 'ribcage', 'skullcandle', 'ash'], wall: [] },
 };
 
 function generate(o) {
@@ -33,7 +49,11 @@ function generate(o) {
   const level = Math.max(1, Math.min(RULES.MAX_LEVEL + 10, o.level | 0 || 1));
   const seed = o.seed || String(Math.random());
   const rand = RULES.seeded(`dungeon:${theme}:${level}:${seed}`);
-  const forest = theme === 'bosque'; // claros unidos por senderos: sin puertas ni antorchas en los muros
+  // al aire libre (bosque, cavernas, caminos, ciudad, campo de batalla, infierno): claros de borde irregular unidos por
+  // senderos o calles, sin puertas ni antorchas en los muros (el navegador pone árboles, casas o rocas en su lugar)
+  const outStyle = T.out || null;
+  const forest = !!outStyle;
+  const hot = !!T.hot;
   const ri = (a, b) => a + Math.floor(rand() * (b - a + 1));
   const pickR = (arr) => arr[Math.floor(rand() * arr.length)];
 
@@ -51,7 +71,8 @@ function generate(o) {
     // ---------- Salas ----------
     const rooms = [];
     for (let i = 0; i < 300 && rooms.length < 12; i++) {
-      const w = ri(5, 10), h = ri(4, 7);
+      const big = theme === 'catedral' || theme === 'tumba';
+      const w = ri(big ? 6 : 5, big ? 12 : 10), h = ri(4, big ? 8 : 7);
       const x = ri(2, W - w - 2), y = ri(2, H - h - 2);
       if (rooms.some((r) => x < r.x + r.w + 2 && x + w + 2 > r.x && y < r.y + r.h + 2 && y + h + 2 > r.y)) continue;
       rooms.push({ x, y, w, h, cx: x + (w >> 1), cy: y + (h >> 1) });
@@ -60,17 +81,20 @@ function generate(o) {
     for (const r of rooms) for (let y = r.y; y < r.y + r.h; y++) for (let x = r.x; x < r.x + r.w; x++) set(x, y, '.');
 
     // ---------- Pasillos: árbol de mínima distancia y un par de ciclos ----------
+    const corr = new Set(); // casillas abiertas por los pasillos (para los caminos y las calles)
     const corridor = (a, b) => {
-      const wide = forest || rand() < 0.3;
+      const wide = forest || theme === 'catedral' || rand() < 0.3;
       let x = a.cx, y = a.cy;
       const horizFirst = rand() < 0.5;
-      const carve = (cx, cy) => { if (get(cx, cy) === '#') set(cx, cy, '.'); if (wide && get(cx + 1, cy) === '#' && cx + 1 < W - 1) set(cx + 1, cy, '.'); };
+      const carve = (cx, cy) => { if (get(cx, cy) === '#') set(cx, cy, '.'); corr.add(cy * W + cx); if (wide && get(cx + 1, cy) === '#' && cx + 1 < W - 1) { set(cx + 1, cy, '.'); corr.add(cy * W + cx + 1); } };
       const stepX = () => { while (x !== b.cx) { x += Math.sign(b.cx - x); carve(x, y); } };
       const stepY = () => { while (y !== b.cy) { y += Math.sign(b.cy - y); carve(x, y); } };
       if (horizFirst) { stepX(); stepY(); } else { stepY(); stepX(); }
     };
+    if (T.path) rooms.sort((a, b) => a.cx - b.cx); // el camino va de un lado al otro del mapa
     const linked = [rooms[0]];
     const rest = rooms.slice(1);
+    if (T.path) { for (let i = 1; i < rooms.length; i++) corridor(rooms[i - 1], rooms[i]); rest.length = 0; }
     while (rest.length) {
       let best = null;
       for (const r of rest) for (const l of linked) {
@@ -81,7 +105,7 @@ function generate(o) {
       linked.push(best.r);
       rest.splice(rest.indexOf(best.r), 1);
     }
-    for (let i = 0; i < 2; i++) corridor(pickR(rooms), pickR(rooms));
+    for (let i = 0; i < (T.path ? 1 : 2); i++) corridor(pickR(rooms), pickR(rooms));
 
     const inRoom = (x, y) => rooms.find((r) => x >= r.x && x < r.x + r.w && y >= r.y && y < r.y + r.h) || null;
     // en el bosque, los claros tienen bordes irregulares: se abren huecos sueltos alrededor de cada uno
@@ -117,20 +141,58 @@ function generate(o) {
       }
       return dist;
     };
-    const walk = (ch) => ch === '.' || ch === '+' || ch === '^';
+    const walk = (ch) => ch === '.' || ch === '+' || ch === '^' || ch === '=' || ch === 'G';
     let dist = distFrom(startPos.x, startPos.y);
     const ranked = rooms.slice(1).sort((a, b) => dist[b.cy * W + b.cx] - dist[a.cy * W + a.cx]);
     const bossRoom = ranked.slice(0, 3).sort((a, b) => b.w * b.h - a.w * a.h)[0];
     bossRoom.boss = true;
     start.start = true;
+    // ---------- Portón de la sala del jefe: en cada entrada (las casillas de fuera que llegan a la sala desde la entrada) ----------
+    const inBoss = (x, y) => x >= bossRoom.x && x < bossRoom.x + bossRoom.w && y >= bossRoom.y && y < bossRoom.y + bossRoom.h;
+    const gate = [];
+    if (o.quest !== false) {
+      const out = new Uint8Array(W * H), q = [startPos.y * W + startPos.x]; out[q[0]] = 1;
+      for (let h = 0; h < q.length; h++) {
+        const c = q[h], cx = c % W, cy = (c / W) | 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cx + dx, ny = cy + dy, n = ny * W + nx;
+          if (out[n] || !walk(get(nx, ny)) || inBoss(nx, ny)) continue;
+          out[n] = 1; q.push(n);
+        }
+      }
+      // las casillas del borde de la sala que tocan un pasillo de fuera (así el portón no corta ningún pasillo)
+      for (let y = bossRoom.y; y < bossRoom.y + bossRoom.h; y++) for (let x = bossRoom.x; x < bossRoom.x + bossRoom.w; x++) {
+        if (!walk(get(x, y))) continue;
+        if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => !inBoss(x + dx, y + dy) && out[(y + dy) * W + x + dx])) gate.push({ x, y });
+      }
+      // con el portón cerrado, todas las demás salas tienen que seguir al alcance (si no, sin portón)
+      const shut = new Set(gate.map((g) => g.y * W + g.x));
+      const seen2 = new Uint8Array(W * H), q2 = [startPos.y * W + startPos.x]; seen2[q2[0]] = 1;
+      for (let h = 0; h < q2.length; h++) {
+        const c = q2[h], cx = c % W, cy = (c / W) | 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const n = (cy + dy) * W + cx + dx;
+          if (seen2[n] || shut.has(n) || !walk(get(cx + dx, cy + dy))) continue;
+          seen2[n] = 1; q2.push(n);
+        }
+      }
+      if (gate.length > 10 || rooms.some((r) => !r.boss && !seen2[r.cy * W + r.cx])) gate.length = 0;
+      for (const g of gate) set(g.x, g.y, 'G');
+    }
 
     // ---------- Agua o lava y trampas ----------
-    const liquid = theme === 'volcan' || theme === 'abismo' ? '%' : '~';
+    const liquid = hot ? '%' : '~';
+    const pools = theme === 'ciudad' || theme === 'incendio' || theme === 'catedral' ? 0 : theme === 'infierno' ? 0.85 : hot ? 0.6 : theme === 'caverna' ? 0.45 : 0.3;
     for (const r of rooms) {
-      if (r.start || r.boss || r.w < 7 || r.h < 5 || rand() > (theme === 'volcan' || theme === 'abismo' ? 0.6 : 0.3)) continue;
-      const pw = ri(2, Math.min(4, r.w - 4)), ph = ri(1, Math.min(3, r.h - 3));
+      if (r.start || r.boss || r.w < 7 || r.h < 5 || rand() > pools) continue;
+      const pw = ri(2, Math.min(theme === 'infierno' ? 5 : 4, r.w - 4)), ph = ri(1, Math.min(3, r.h - 3));
       const px = ri(r.x + 2, r.x + r.w - pw - 2), py = ri(r.y + 1, r.y + r.h - ph - 1);
       for (let y = py; y < py + ph; y++) for (let x = px; x < px + pw; x++) set(x, y, liquid);
+    }
+    // el infierno: ríos de lava donde irían los muros (bordean las salas y los caminos sin cortarlos)
+    if (theme === 'infierno') for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+      if (get(x, y) !== '#' || rand() > 0.32) continue;
+      if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => get(x + dx, y + dy) === '.')) set(x, y, '%');
     }
     if (level >= 2) {
       for (let i = 0; i < 6 + level; i++) {
@@ -149,14 +211,21 @@ function generate(o) {
     const nearDoor = (x, y) => [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]].some(([dx, dy]) => get(x + dx, y + dy) === '+' || (!inRoom(x + dx, y + dy) && walk(get(x + dx, y + dy))));
     for (const r of rooms) {
       // pilares simétricos en salas grandes
-      if (r.w >= 8 && r.h >= 6 && (theme === 'cripta' || theme === 'fortaleza' || theme === 'volcan' || theme === 'abismo' || r.boss)) {
-        for (const [x, y] of [[r.x + 1, r.y + 1], [r.x + r.w - 2, r.y + 1], [r.x + 1, r.y + r.h - 2], [r.x + r.w - 2, r.y + r.h - 2]]) if (get(x, y) === '.' && !nearDoor(x, y)) addProp(forest ? 'rockb' : 'pillar', x, y);
+      if (r.w >= 8 && r.h >= 6 && (['cripta', 'fortaleza', 'volcan', 'abismo', 'tumba'].includes(theme) || (r.boss && outStyle !== 'city' && outStyle !== 'burning'))) {
+        for (const [x, y] of [[r.x + 1, r.y + 1], [r.x + r.w - 2, r.y + 1], [r.x + 1, r.y + r.h - 2], [r.x + r.w - 2, r.y + r.h - 2]]) if (get(x, y) === '.' && !nearDoor(x, y)) addProp(forest ? (theme === 'infierno' ? 'spikes' : 'rockb') : 'pillar', x, y);
+      }
+      // la catedral: dos filas de columnas a lo largo de la nave, bancos entre ellas y una alfombra hasta el fondo
+      if (theme === 'catedral' && r.w >= 6 && r.h >= 5) {
+        for (let x = r.x + 1; x < r.x + r.w - 1; x += 3) for (const y of [r.y + 1, r.y + r.h - 2]) if (get(x, y) === '.' && !used.has(key(x, y)) && !nearDoor(x, y)) addProp('pillar', x, y);
+        for (let y = r.y + 1; y < r.y + r.h - 1; y++) if (get(r.cx, y) === '.' && !used.has(key(r.cx, y))) addProp('carpet', r.cx, y);
+        if (!r.start) for (let y = r.y + 2; y < r.y + r.h - 2; y += 2) for (const x of [r.cx - 2, r.cx + 2]) if (get(x, y) === '.' && !used.has(key(x, y)) && !nearDoor(x, y) && rand() < 0.7) addProp('pew', x, y);
       }
       // el bosque se alumbra con farolillos y hogueras (no hay muros para las antorchas)
+      const LIGHTS = { forest: ['lantern', 'campfire'], city: ['streetlamp', 'streetlamp'], burning: ['fire', 'streetlamp'], field: ['campfire', 'brazier'], cave: ['crystal', 'mushrooms'], hell: ['firepit', 'firepit'] }[outStyle];
       if (forest) for (let i = 0, n = r.w * r.h > 40 ? 2 : 1; i < 12 && n > 0; i++) {
         const x = ri(r.x + 1, r.x + r.w - 2), y = ri(r.y + 1, r.y + r.h - 2);
         if (get(x, y) !== '.' || used.has(key(x, y)) || nearDoor(x, y)) continue;
-        addProp(r.start || rand() < 0.6 ? 'lantern' : 'campfire', x, y); n--;
+        addProp(r.start || rand() < 0.6 ? LIGHTS[0] : LIGHTS[1], x, y); n--;
       }
       const nb = r.start ? 1 : ri(1, 3);
       for (let i = 0; i < nb * 3 && props.filter((p) => inRoom(p.x, p.y) === r && PROPS[p.k].b).length < nb + 2; i++) {
@@ -173,17 +242,44 @@ function generate(o) {
         if (get(x, y) !== '.' || used.has(key(x, y))) continue;
         addProp(pickR(TP.floor), x, y);
       }
-      if (r.boss && theme !== 'nido' && theme !== 'cuevas' && !forest) { const x = r.cx, y = r.y; if (get(x, y) === '.' && !used.has(key(x, y)) && !nearDoor(x, y)) addProp('throne', x, y); }
-      if (r.boss) for (let i = 0; i < 4; i++) { const x = ri(r.x, r.x + r.w - 1), y = ri(r.y, r.y + r.h - 1); if (get(x, y) === '.' && !used.has(key(x, y))) addProp(theme === 'nido' ? 'web' : 'bones', x, y); }
+      if (r.boss && theme !== 'nido' && theme !== 'cuevas' && (!forest || theme === 'infierno')) { const x = r.cx, y = r.y; if (get(x, y) === '.' && !used.has(key(x, y)) && !nearDoor(x, y)) addProp(theme === 'tumba' ? 'goldsarc' : theme === 'catedral' ? 'altar' : 'throne', x, y); }
+      if (r.boss) for (let i = 0; i < 4; i++) { const x = ri(r.x, r.x + r.w - 1), y = ri(r.y, r.y + r.h - 1); if (get(x, y) === '.' && !used.has(key(x, y))) addProp(theme === 'nido' ? 'web' : theme === 'batalla' ? 'corpse' : 'bones', x, y); }
     }
     // En los muros con suelo debajo (la cara que se ve): antorchas, estandartes, cadenas
     for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
       if (forest || get(x, y) !== '#' || !walk(get(x, y + 1)) || get(x, y - 1) !== '#') continue;
       const r = inRoom(x, y + 1);
       // antorchas cada tres casillas en el muro de cada sala (y alguna en los pasillos); entre medias, adornos
-      if (r && (x - r.x) % 3 === 1) props.push({ k: 'torch', x, y });
+      if (r && (x - r.x) % 3 === 1) props.push({ k: theme === 'catedral' && (x - r.x) % 6 === 4 ? 'vitral' : 'torch', x, y });
       else if (r && rand() < (r.boss ? 0.3 : 0.16)) props.push({ k: pickR(TP.wall.filter((k) => k !== 'torch')), x, y });
       else if (!r && rand() < 0.14) props.push({ k: 'torch', x, y });
+    }
+
+    // ---------- Historia: notas por el suelo y murales en la pared (RULES.LORE), en orden según se aleja uno de la entrada ----------
+    const LORE = RULES.LORE && RULES.LORE[theme];
+    if (LORE) {
+      const order = rooms.filter((r) => !r.start && !r.boss).sort((a, b) => dist[a.cy * W + a.cx] - dist[b.cy * W + b.cx]);
+      const n = Math.min(LORE.notes.length, order.length), picked = new Set();
+      for (let i = 0; i < n; i++) {
+        const r = order[Math.round(n > 1 ? i * (order.length - 1) / (n - 1) : 0)];
+        if (!r || picked.has(r)) continue;
+        picked.add(r);
+        let placed = false;
+        // los murales van en el muro de arriba de la sala (el que se ve), quitando lo que hubiera colgado
+        if (/^Mural/.test(LORE.notes[i]) && !forest) {
+          for (let k = 0; k < r.w && !placed; k++) {
+            const x = r.x + ((k + Math.floor(r.w / 2)) % r.w), y = r.y - 1;
+            if (get(x, y) !== '#' || get(x, y - 1) !== '#' || !walk(get(x, y + 1))) continue;
+            for (let j = props.length - 1; j >= 0; j--) if (props[j].x === x && props[j].y === y) props.splice(j, 1);
+            props.push({ k: 'mural', x, y, n: i }); placed = true;
+          }
+        }
+        for (let t = 0; t < 30 && !placed; t++) {
+          const x = ri(r.x + 1, r.x + r.w - 2), y = ri(r.y + 1, r.y + r.h - 2);
+          if (get(x, y) !== '.' || used.has(key(x, y)) || nearDoor(x, y)) continue;
+          addProp('note', x, y); props[props.length - 1].n = i; placed = true;
+        }
+      }
     }
 
     // Lo que bloquea no puede romper la conexión: se quita si deja zonas aisladas
@@ -221,7 +317,7 @@ function generate(o) {
       for (let i = 0; i < 60; i++) {
         const x = ri(r.x, r.x + r.w - 1), y = ri(r.y, r.y + r.h - 1);
         const k = key(x, y);
-        if (!walk(get(x, y)) || get(x, y) === '^' || blocked.has(k) || avoid.has(k) || !seen[k]) continue;
+        if (!walk(get(x, y)) || get(x, y) === '^' || get(x, y) === 'G' || blocked.has(k) || avoid.has(k) || !seen[k]) continue;
         return { x, y };
       }
       return null;
@@ -294,6 +390,37 @@ function generate(o) {
       }
     }
 
+    // ---------- Objetivo para abrir el portón: tres llaves, tres palancas u oleadas en la sala de antes del jefe ----------
+    let quest = null;
+    if (gate.length) {
+      const type = o.questType || pickR(['keys', 'levers', 'waves']);
+      const order = rooms.filter((r) => !r.start && !r.boss && seen[key(r.cx, r.cy)]).sort((a, b) => dist[a.cy * W + a.cx] - dist[b.cy * W + b.cx]);
+      if (type === 'waves') {
+        // la sala grande más cercana al jefe: allí se aguanta mientras el portón se abre
+        const r = order.slice(-3).sort((a, b) => b.w * b.h - a.w * a.h)[0];
+        if (r) quest = { type, room: { x: r.x, y: r.y, w: r.w, h: r.h }, waves: 3 + (level >= 15 ? 1 : 0) };
+      } else {
+        const spots = [];
+        const avoid = new Set([...taken, ...used, ...chests.map((c) => key(c.x, c.y)), ...potions.map((c) => key(c.x, c.y))]);
+        for (const f of [0.35, 0.65, 1]) {
+          const r = order[Math.min(order.length - 1, Math.round(f * (order.length - 1)))];
+          if (!r || spots.some((s) => s.r === r)) continue;
+          for (let i = 0; i < 40; i++) {
+            const p = freeCell(r, avoid);
+            if (!p || nearDoor(p.x, p.y)) continue;
+            // las palancas tapan su casilla: sólo donde no cortan el paso
+            if (type === 'levers') { const before = reach(); blocked.add(key(p.x, p.y)); const after = reach(); if (allWalk().some((k) => before[k] && !after[k])) { blocked.delete(key(p.x, p.y)); continue; } }
+            avoid.add(key(p.x, p.y)); spots.push({ x: p.x, y: p.y, r });
+            break;
+          }
+        }
+        if (spots.length >= 2) quest = { type, spots: spots.map(({ x, y }) => ({ x, y })) };
+      }
+    }
+    // sin objetivo posible, el portón no hace falta
+    if (!quest) for (const g of gate) set(g.x, g.y, '.');
+    else quest.gate = gate;
+
     // ---------- Mercader errante: a veces espera en una sala tranquila con género de su tierra ----------
     let merchant = null;
     if (rand() < 0.3) {
@@ -302,10 +429,12 @@ function generate(o) {
       if (p && !nearDoor(p.x, p.y)) { taken.add(key(p.x, p.y)); merchant = p; }
     }
 
+    // caminos y calles: los pasillos (fuera de las salas) son de tierra pisada o adoquines
+    if (T.road) for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) if (get(x, y) === '.' && !inRoom(x, y) && corr.has(y * W + x)) set(x, y, '=');
     const name = `${pickR(T.names)} ${pickR(T.of)}`;
     return {
       kind: 'dungeon', theme, level, name, w: W, h: H, tiles: t.join(''),
-      start: startPos, boss: { x: bossRoom.cx, y: bossRoom.cy }, props, spawns, chests, potions, merchant,
+      start: startPos, boss: { x: bossRoom.cx, y: bossRoom.cy }, props, spawns, chests, potions, merchant, quest,
     };
   }
 }

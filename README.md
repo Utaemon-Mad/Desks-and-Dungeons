@@ -50,6 +50,12 @@ Una taberna en 3D low-poly (Three.js, luz de velas y sombras suaves), en plan re
 - **Efectos**: ciclo de día y noche, clima por región (lluvia y tormentas, niebla en la ciénaga, tormentas de arena, nieve, ceniza), partículas, polvo al andar, enemigos que caen al morir, voltereta para esquivar, golpes críticos con congelación de un instante y temblor de cámara. Ajustes de calidad (⚙️ Menú → Gráficos) para móviles.
 - **Ambiente**: taberna de noche con ventanas góticas, lluvia y relámpagos, iluminada por antorchas, chimenea, candelabros y lámparas; mazmorras con paletas apagadas, muros en perspectiva, decorado por tema, luces de colores, ascuas y niebla de guerra.
 - **Editor de la taberna** para el dueño de la sala, con chimeneas, candelabros, lámparas, cofres, armeros y calderos nuevos.
+- **HUD estilo Diablo y menú de pausa**: orbes de vida y energía abajo; el menú (☰ o Esc) enseña a tu héroe girando y todas las opciones, y si juegas solo para la mazmorra.
+- **Quince tipos de mazmorra**: además de las de siempre, catedral profanada, tumba del faraón, cavernas profundas, camino del bosque, calles de la ciudad de noche, campo de batalla, ciudad en llamas e infierno.
+- **Misiones en las mazmorras**: un portón cierra la sala del jefe; se abre con tres llaves, tres palancas (con emboscadas) o aguantando varias oleadas.
+- **Taberna viva**: Lirio el Bardo toca junto a la chimenea, los parroquianos (Brom, Tobías, Greta y Meli) brindan, cuentan rumores y discuten, y la chimenea crepita. Pincha a Brom para echarle un **pulso** (minijuego de ritmo; la taberna entera se entera del resultado).
+- **Combate por turnos con dados**: cada ataque tira un d20 en 3D con su bonificador y la CA; 20 natural es crítico y 1, pifia. Los jefes entran con franjas de cine y su cartel, y a media vida pasan a una **segunda fase** más fiera.
+- **Mazmorras con historia**: cada tema tiene notas, diarios y murales repartidos de la entrada al jefe, y un final que se cuenta al derrotarlo.
 - Charla con bocadillos, la Crónica, gestos, dados (`/d20`, `/dado 6`), jarras y rondas. El enlace de invitación (☰ Menú) abre directamente tu servidor (`?sala=taberna`, `putiferricida` o `brumaverde`).
 
 ## Jugar en tu ordenador

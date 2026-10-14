@@ -72,6 +72,27 @@
     'behemot':         { name: 'Behemot del Bosque Viejo', fam: 'bestia', sprite: 'bear', tint: '#2e4a1e', scale: 2.4, boss: true, world: true, hp: 950, dmg: [7, 13], armor: 9, ms: 300, atk: 1500, xp: 520, gold: [150, 260], specials: ['slam', 'charge', 'summon'], summons: 'dire-wolf', sets: 'todas' },
     'azaroth':         { name: 'Azaroth, Señor del Abismo', fam: 'demonio', sprite: 'demon', scale: 1.85, boss: true, hp: 360, dmg: [6, 11], armor: 7, ms: 330, atk: 1500, xp: 150, gold: [60, 110], specials: ['slam', 'nova', 'summon'], summons: 'diablillo', sets: ['mago', 'picaro', 'paladin'] },
     'young-red-dragon': { name: 'Ignaroth, el Dragón Rojo', fam: 'dragon', sprite: 'dragon', scale: 1.3, boss: true, hp: 400, dmg: [7, 12], armor: 8, ms: 360, atk: 1600, xp: 160, gold: [80, 140], specials: ['breath', 'slam', 'summon'], summons: 'kobold', sets: 'todas' },
+    // Mazmorras nuevas: catedral, tumba, cavernas, sendero, ciudad, campo de batalla, ciudad en llamas e infierno
+    'monje-caido':     { name: 'Monje caído', fam: 'muerto', sprite: 'ghoul', tint: '#6a6a7a', hp: 32, dmg: [3, 6], armor: 2, ms: 300, atk: 1350, xp: 12, gold: [2, 6], undead: true },
+    'inquisidor':      { name: 'Inquisidor hueco', fam: 'muerto', sprite: 'wight', tint: '#d8c890', hp: 50, dmg: [4, 8], armor: 6, ms: 340, atk: 1500, xp: 20, gold: [4, 9], undead: true, minLevel: 3 },
+    'escarabajo':      { name: 'Escarabajo de la tumba', fam: 'bestia', sprite: 'spider', tint: '#2a7a6a', scale: 0.6, hp: 12, dmg: [1, 3], armor: 3, ms: 220, atk: 1100, xp: 5, gold: [0, 2] },
+    'sacerdote-tumba': { name: 'Sacerdote del Chacal', fam: 'muerto', sprite: 'necromancer', tint: '#2a2410', hp: 34, dmg: [3, 6], armor: 2, ms: 370, atk: 2300, range: 6, proj: 'bolt', magic: true, ai: 'healer', xp: 16, gold: [4, 10], minLevel: 2 },
+    'trasgo-cueva':    { name: 'Trasgo de las cavernas', fam: 'goblin', sprite: 'goblin', tint: '#b8c0b0', hp: 18, dmg: [2, 4], armor: 2, ms: 300, atk: 1250, xp: 8, gold: [1, 4] },
+    'acechador':       { name: 'Acechador ciego', fam: 'bestia', sprite: 'ghoul', tint: '#8a9aa8', hp: 34, dmg: [3, 7], armor: 2, ms: 250, atk: 1300, xp: 14, gold: [1, 5], minLevel: 2 },
+    'guardia-corrupto': { name: 'Guardia corrupto', fam: 'humano', sprite: 'hero:guerrero', tint: '#3a3a4a', hp: 36, dmg: [3, 6], armor: 5, ms: 320, atk: 1400, xp: 14, gold: [4, 10] },
+    'licantropo':      { name: 'Licántropo', fam: 'bestia', sprite: 'wolf', tint: '#4a3a30', scale: 1.4, hp: 54, dmg: [4, 8], armor: 3, ms: 220, atk: 1250, regen: 1, xp: 22, gold: [2, 6], minLevel: 3 },
+    'engendro':        { name: 'Engendro vampírico', fam: 'demonio', sprite: 'imp', tint: '#3a1a2a', scale: 0.6, hp: 16, dmg: [2, 4], armor: 1, ms: 220, atk: 1300, xp: 7, gold: [1, 3] },
+    'soldado-caido':   { name: 'Soldado caído', fam: 'muerto', sprite: 'skeleton', tint: '#7a7a6a', hp: 28, dmg: [3, 5], armor: 5, ms: 340, atk: 1400, xp: 10, gold: [1, 5], undead: true },
+    'saqueador':       { name: 'Saqueador', fam: 'orco', sprite: 'orc', tint: '#7a6a4a', hp: 34, dmg: [3, 7], armor: 3, ms: 320, atk: 1400, xp: 14, gold: [3, 9] },
+    'condenado':       { name: 'Alma condenada', fam: 'muerto', sprite: 'zombie', tint: '#8a3a2a', hp: 40, dmg: [3, 6], armor: 2, ms: 440, atk: 1500, xp: 12, gold: [1, 5], undead: true },
+    'obispo-caido':    { name: 'Valerian, el Obispo Caído', fam: 'muerto', sprite: 'lich', tint: '#e8c870', scale: 1.5, boss: true, hp: 300, dmg: [5, 10], armor: 5, ms: 380, atk: 1900, range: 6, proj: 'necro', magic: true, xp: 130, gold: [55, 95], undead: true, specials: ['nova', 'volley', 'summon'], summons: 'monje-caido', sets: ['sacerdote', 'paladin', 'mago'] },
+    'faraon':          { name: 'Nefer-Anj, el Faraón Eterno', fam: 'muerto', sprite: 'mummy', tint: '#e8c050', scale: 1.6, boss: true, hp: 340, dmg: [6, 11], armor: 6, ms: 420, atk: 1700, xp: 135, gold: [70, 120], undead: true, specials: ['slam', 'nova', 'summon'], summons: 'escarabajo', sets: ['mago', 'picaro', 'paladin'] },
+    'trol-profundo':   { name: 'Grumgor, el Trol de las Profundidades', fam: 'orco', sprite: 'troll', tint: '#5a6a7a', scale: 1.9, boss: true, hp: 360, dmg: [6, 11], armor: 6, ms: 380, atk: 1600, regen: 3, xp: 130, gold: [50, 90], specials: ['slam', 'charge', 'summon'], summons: 'trasgo-cueva', sets: ['guerrero', 'druida', 'explorador'] },
+    'reina-caminos':   { name: 'Varga, la Reina de los Caminos', fam: 'humano', sprite: 'hero:picaro', scale: 1.35, boss: true, hp: 260, dmg: [5, 9], armor: 4, ms: 300, atk: 1300, xp: 110, gold: [60, 110], specials: ['charge', 'volley', 'summon'], summons: 'bandit', sets: ['picaro', 'explorador', 'guerrero'] },
+    'conde-sangre':    { name: 'El Conde Sangrevil', fam: 'muerto', sprite: 'necromancer', tint: '#6a0a14', scale: 1.4, boss: true, hp: 300, dmg: [5, 10], armor: 4, ms: 300, atk: 1600, range: 5, proj: 'necro', magic: true, xp: 130, gold: [70, 120], undead: true, specials: ['nova', 'charge', 'summon'], summons: 'engendro', sets: ['picaro', 'mago', 'paladin'] },
+    'caballero-muerte': { name: 'Sir Morgrim, el Caballero de la Muerte', fam: 'muerto', sprite: 'wight', tint: '#3a3a4a', scale: 1.7, boss: true, hp: 360, dmg: [6, 11], armor: 9, ms: 340, atk: 1500, xp: 140, gold: [60, 110], undead: true, specials: ['charge', 'slam', 'summon'], summons: 'soldado-caido', sets: ['guerrero', 'paladin', 'sacerdote'] },
+    'incendiario':     { name: 'Pyrax, el Incendiario', fam: 'demonio', sprite: 'demon', tint: '#d85a10', scale: 1.6, boss: true, hp: 340, dmg: [6, 11], armor: 6, ms: 330, atk: 1500, xp: 140, gold: [60, 110], specials: ['breath', 'nova', 'summon'], summons: 'diablillo', sets: ['mago', 'guerrero', 'druida'] },
+    'belial':          { name: 'Belial, Príncipe del Infierno', fam: 'demonio', sprite: 'demon', tint: '#4a0808', scale: 2.2, boss: true, hp: 440, dmg: [7, 13], armor: 8, ms: 340, atk: 1600, xp: 180, gold: [90, 160], specials: ['slam', 'nova', 'breath', 'summon'], summons: 'can-infernal', sets: 'todas' },
   };
   // Claves de versiones anteriores
   const LEGACY_MONSTER = { 'goblin-boss': 'goblin-shaman', goblin: 'goblin-warrior', shaman: 'goblin-shaman', warchief: 'orc-war-chief', ghast: 'ghoul', 'ogre-zombie': 'zombie', wraith: 'specter', 'hobgoblin-captain': 'hobgoblin-warrior' };
@@ -81,11 +102,142 @@
     cripta:    { name: 'Cripta de los no muertos', icon: '💀', mobs: ['skeleton', 'skeleton', 'skeleton-archer', 'zombie', 'zombie', 'zombie', 'zombi-hinchado', 'ghoul', 'specter', 'wight', 'mummy', 'necromancer'], boss: 'lich', names: ['Cripta', 'Catacumbas', 'Osario', 'Mausoleo'], of: ['del Liche', 'de los Olvidados', 'de la Plaga', 'del Último Rezo'] },
     fortaleza: { name: 'Fortaleza orca', icon: '🏰', mobs: ['orc', 'orc', 'orc-archer', 'orc-shaman', 'hobgoblin-warrior', 'ogre', 'troll'], boss: 'gorthak', names: ['Fortaleza', 'Bastión', 'Fuerte', 'Ciudadela'], of: ['de la Mano Roja', 'de Gorthak', 'del Cráneo Partido', 'de Hierro Negro'] },
     nido:      { name: 'Nido de bestias', icon: '🕷️', mobs: ['giant-spider', 'giant-spider', 'wolf', 'wolf', 'dire-wolf', 'brown-bear', 'owlbear'], boss: 'reina-arana', names: ['Nido', 'Cubil', 'Madriguera', 'Bosque Hueco'], of: ['de la Reina Araña', 'de las Mil Patas', 'de la Seda Negra'] },
-    volcan:    { name: 'Guarida del dragón', icon: '🐉', mobs: ['kobold', 'kobold', 'cultist', 'cultist', 'bandit', 'bandit-archer', 'ogre'], boss: 'young-red-dragon', names: ['Guarida', 'Forja', 'Caldera', 'Templo'], of: ['de Ignaroth', 'de Ceniza', 'de la Llama Eterna'] },
-    bosque:    { name: 'Bosque umbrío', icon: '🌲', mobs: ['wolf', 'wolf', 'retono', 'retono', 'giant-spider', 'bandit', 'bandit-archer', 'fuego-fatuo', 'dire-wolf', 'brown-bear', 'owlbear'], boss: 'ent-corrupto', names: ['Bosque', 'Arboleda', 'Espesura', 'Floresta'], of: ['de Raízmadre', 'de los Susurros', 'del Musgo Negro', 'de las Luciérnagas'] },
-    abismo:    { name: 'Abismo infernal', icon: '😈', mobs: ['diablillo', 'diablillo', 'diablillo', 'can-infernal', 'can-infernal', 'gargola', 'brujo-infernal', 'demonio', 'zombie'], boss: 'azaroth', names: ['Abismo', 'Sima', 'Fosa', 'Puerta'], of: ['de Azaroth', 'del Fuego Negro', 'de los Condenados', 'del Averno'] },
+    volcan:    { name: 'Guarida del dragón', icon: '🐉', hot: true, weather: 'embers', mobs: ['kobold', 'kobold', 'cultist', 'cultist', 'bandit', 'bandit-archer', 'ogre'], boss: 'young-red-dragon', names: ['Guarida', 'Forja', 'Caldera', 'Templo'], of: ['de Ignaroth', 'de Ceniza', 'de la Llama Eterna'] },
+    bosque:    { name: 'Bosque umbrío', icon: '🌲', out: 'forest', weather: 'fireflies', mobs: ['wolf', 'wolf', 'retono', 'retono', 'giant-spider', 'bandit', 'bandit-archer', 'fuego-fatuo', 'dire-wolf', 'brown-bear', 'owlbear'], boss: 'ent-corrupto', names: ['Bosque', 'Arboleda', 'Espesura', 'Floresta'], of: ['de Raízmadre', 'de los Susurros', 'del Musgo Negro', 'de las Luciérnagas'] },
+    abismo:    { name: 'Abismo infernal', icon: '😈', hot: true, weather: 'embers', mobs: ['diablillo', 'diablillo', 'diablillo', 'can-infernal', 'can-infernal', 'gargola', 'brujo-infernal', 'demonio', 'zombie'], boss: 'azaroth', names: ['Abismo', 'Sima', 'Fosa', 'Puerta'], of: ['de Azaroth', 'del Fuego Negro', 'de los Condenados', 'del Averno'] },
+    // out: al aire libre (sin techo ni puertas: lo que rodea los claros lo pone el navegador según el tema);
+    // hot: lava y brasas; road: los pasillos son caminos o calles; path: las salas van en fila (un camino largo)
+    catedral:  { name: 'Catedral profanada', icon: '⛪', mobs: ['monje-caido', 'monje-caido', 'skeleton', 'skeleton-archer', 'specter', 'gargola', 'cultist', 'inquisidor', 'necromancer'], boss: 'obispo-caido', names: ['Catedral', 'Basílica', 'Abadía', 'Capilla'], of: ['de San Aldric', 'del Obispo Caído', 'de las Vidrieras Rotas', 'del Último Coro'], weather: 'motes' },
+    tumba:     { name: 'Tumba del faraón', icon: '🏺', mobs: ['mummy', 'skeleton', 'skeleton', 'escarabajo', 'escarabajo', 'escorpion', 'sacerdote-tumba', 'specter'], boss: 'faraon', names: ['Tumba', 'Pirámide', 'Necrópolis', 'Cámara'], of: ['de Nefer-Anj', 'del Sol Negro', 'de las Mil Arenas', 'del Chacal'], weather: 'motes' },
+    caverna:   { name: 'Cavernas profundas', icon: '🦇', out: 'cave', mobs: ['trasgo-cueva', 'trasgo-cueva', 'giant-spider', 'acechador', 'kobold', 'troll', 'ogre'], boss: 'trol-profundo', names: ['Cavernas', 'Simas', 'Grutas', 'Galerías'], of: ['de Grumgor', 'del Eco', 'de los Cristales', 'sin Fondo'], weather: 'motes' },
+    sendero:   { name: 'Camino del bosque', icon: '🛤️', out: 'forest', road: true, path: true, mobs: ['bandit', 'bandit', 'bandit-archer', 'wolf', 'wolf', 'dire-wolf', 'bandit-captain', 'brown-bear'], boss: 'reina-caminos', names: ['Camino', 'Sendero', 'Vereda', 'Paso'], of: ['de los Salteadores', 'del Bosque Viejo', 'de Varga', 'de los Ahorcados'], weather: 'fireflies' },
+    ciudad:    { name: 'Calles de la ciudad', icon: '🏘️', out: 'city', road: true, mobs: ['bandit', 'bandit-archer', 'guardia-corrupto', 'cultist', 'ghoul', 'licantropo', 'engendro'], boss: 'conde-sangre', names: ['Barrio', 'Calles', 'Arrabal', 'Callejones'], of: ['de Sangrevil', 'de la Niebla', 'de los Faroles Rotos', 'del Toque de Queda'], weather: 'rain' },
+    batalla:   { name: 'Campo de batalla', icon: '⚔️', out: 'field', mobs: ['zombie', 'soldado-caido', 'soldado-caido', 'skeleton-archer', 'ghoul', 'wight', 'zombi-hinchado'], boss: 'caballero-muerte', names: ['Campo', 'Llanura', 'Vado', 'Colina'], of: ['de los Mil Caídos', 'de Sir Morgrim', 'de las Lanzas Rotas', 'del Cuervo'], weather: 'ash' },
+    incendio:  { name: 'Ciudad en llamas', icon: '🔥', out: 'burning', road: true, hot: true, mobs: ['saqueador', 'saqueador', 'orc-archer', 'cultist', 'diablillo', 'elemental-fuego', 'can-infernal'], boss: 'incendiario', names: ['Ciudad', 'Villa', 'Puerto', 'Ciudadela'], of: ['en Llamas', 'de Pyrax', 'de las Cenizas', 'del Último Alba'], weather: 'embers' },
+    infierno:  { name: 'El Infierno', icon: '👹', out: 'hell', hot: true, mobs: ['condenado', 'condenado', 'diablillo', 'can-infernal', 'gargola', 'brujo-infernal', 'demonio'], boss: 'belial', names: ['Infierno', 'Averno', 'Círculo', 'Tártaro'], of: ['de Belial', 'del Lamento', 'de Fuego y Azufre', 'de los Traidores'], weather: 'embers' },
   };
-  const MONSTERDATA = { MONSTERS, LEGACY_MONSTER, THEMES };
+  // Lo que dicen los jefes al aparecer (intro) y al enfurecerse a media vida (rage)
+  const BOSS_LINES = {
+    'rufo': { intro: '«¿Más bolsas de oro con patas? Muchachos, ¡a cobrar el peaje!»', rage: '«¡Basta de juegos! ¡Que no salga nadie vivo de aquí!»' },
+    'huargo-alfa': { intro: 'Un aullido hiela la sangre: la manada entera responde desde las sombras.', rage: 'El Alfa enseña los colmillos y llama a toda su manada.' },
+    'bruja-pantano': { intro: '«Ah, carne fresca para mi caldero… y huesos para mis ahogados.»', rage: '«¡Levantaos, hijos del cieno! ¡Arrastradlos al fondo!»' },
+    'rey-escorpion': { intro: 'La arena tiembla. Una cola de aguijón asoma, goteando veneno.', rage: 'El Rey Escorpión chasquea las pinzas y la arena se llena de crías.' },
+    'gigante-escarcha': { intro: '«Pequeñas cosas calientes… os dejaré congeladas para el invierno.»', rage: 'El aire se vuelve hielo: el Gigante ruge y golpea el suelo.' },
+    'rey-goblin': { intro: '«¡Grubnak manda! ¡Todo lo brillante es de Grubnak!»', rage: '«¡Grubnak enfadado! ¡A ellos, inútiles, a ellos!»' },
+    'gorthak': { intro: '«Gorthak ha roto cien escudos. El tuyo será el ciento uno.»', rage: '«¡SANGRE Y HIERRO! ¡La Mano Roja no retrocede!»' },
+    'lich': { intro: '«He esperado mil años en este silencio. Unos minutos más no importan… para mí.»', rage: '«Vuestras almas alimentarán mi filacteria. ¡Levantaos, mis siervos!»' },
+    'reina-arana': { intro: 'De las vigas cuelgan capullos que aún se mueven. Arakhna desciende por su hilo.', rage: 'La Reina chilla y de la seda brotan cientos de patas.' },
+    'coloso-runas': { intro: 'Las runas del Coloso se encienden una a una. Algo muy viejo despierta.', rage: 'Las runas arden al rojo: el Coloso ya no se contiene.' },
+    'nyxara': { intro: '«Habéis venido a mi sombra. Ninguna luz os seguirá dentro.»', rage: '«¡Que la noche os trague a todos!»' },
+    'rey-espectral': { intro: 'Una corona sin cabeza flota en el frío. El Rey Espectral reclama su trono.', rage: '«¡De rodillas ante vuestro rey!»' },
+    'ent-corrupto': { intro: '«Este bosque era mío antes que vuestros abuelos… y lo será después de vuestros nietos.»', rage: 'Raízmadre cruje y el suelo se abre: los retoños brotan a sus pies.' },
+    'behemot': { intro: 'Los árboles se apartan. El Behemot del Bosque Viejo os ha olido.', rage: 'El Behemot se alza sobre sus patas traseras y brama.' },
+    'azaroth': { intro: '«Mortales en mi abismo. Qué ofrenda tan… inesperada.»', rage: '«¡Ardéis ya y aún no lo sabéis! ¡Venid, mis diablillos!»' },
+    'obispo-caido': { intro: '«Arrodillaos, hijos míos. La misa de esta noche… la cantaréis gritando.»', rage: 'Las vidrieras estallan y el coro de los muertos se alza con el Obispo.' },
+    'faraon': { intro: '«¿Quién osa respirar en mi eternidad? El sol os ha olvidado aquí abajo.»', rage: '«¡Arena y escarabajos! ¡Devorad su carne hasta el hueso!»' },
+    'trol-profundo': { intro: 'Algo enorme se despega de la pared de roca. Huele a moho, a sangre… y a hambre.', rage: 'Grumgor arranca una estalactita y ruge hasta hacer temblar la caverna.' },
+    'reina-caminos': { intro: '«Peaje, viajeros. Vuestro oro… o vuestras botas, que el cuello ya lo tengo cogido.»', rage: '«¡Silbad, muchachos! ¡Que no salgan del bosque!»' },
+    'conde-sangre': { intro: '«Bienvenidos a mi ciudad. Aquí nadie sale de noche… y siempre es de noche.»', rage: 'El Conde se deshace en una nube de murciélagos que chillan a vuestro alrededor.' },
+    'caballero-muerte': { intro: '«Mi ejército cayó en este campo. Yo no. Yo nunca caigo.»', rage: '«¡En pie, soldados! ¡La batalla no ha terminado!»' },
+    'incendiario': { intro: '«¿No es precioso? Una ciudad entera ardiendo… y aún queda leña.»', rage: 'Pyrax se convierte en una columna de fuego y las casas arden más alto.' },
+    'belial': { intro: '«Muchos han bajado hasta aquí buscando gloria. Ahora alimentan mis hogueras.»', rage: '«¡Arrodillaos ante el Príncipe del Infierno!»' },
+    'young-red-dragon': { intro: '«Oro, ascuas y huesos. Mi tesoro crece cada día. Hoy, con vosotros.»', rage: 'Ignaroth abre las alas y el calor se vuelve insoportable.' },
+  };
+  // Historia de cada tipo de mazmorra: notas y murales que se encuentran por las salas (en orden) y lo que se cuenta al
+  // vencer al jefe. Las notas van en el decorado (prop 'nota' en server/gen.js) y se leen al pisarlas.
+  const LORE = {
+    cuevas: { title: 'El tesoro de los Dientes Rotos', notes: [
+      'Diario del minero Tobías: «Abrimos una veta nueva y salieron ellos. Pequeños, verdes y con demasiados dientes. Nos quitaron los picos y las linternas.»',
+      'Mural pintado con barro: un goblin enorme con corona de cucharas, sobre un montón de cosas brillantes. Los demás goblins, de rodillas.',
+      'Nota arrugada: «Si alguien encuentra esto, mi hermano Bartolo sigue vivo en las celdas del fondo. Grubnak lo usa para pulir su corona.»',
+      'Lista de botín garabateada: «3 ollas, 1 campana, 14 botones, la dentadura de oro del alcalde. TODO PARA GRUBNAK.»',
+    ], end: 'Entre los trastos de Grubnak aparece una dentadura de oro y una celda abierta: Bartolo se ha ido corriendo hacia la taberna. Alfonso le pondrá una jarra a vuestra cuenta.' },
+    cripta: { title: 'El Último Rezo', notes: [
+      'Lápida agrietada: «Aquí yace el hermano Aldric, que guardó la puerta para que nadie bajara. Que nadie baje.»',
+      'Mural desconchado: un mago con túnica negra sostiene una gema verde sobre una fila de tumbas abiertas.',
+      'Página de un libro de rezos, con la letra cada vez más torcida: «Malakar prometió que volveríamos a ver a los nuestros. Mintió. Los vemos, pero ya no son ellos.»',
+      'Inscripción en la piedra: «La filacteria duerme junto a su dueño. Rompe una y el otro caerá.»',
+    ], end: 'La gema verde de Malakar se apaga con un último suspiro. En las criptas, por fin, hay silencio. El hermano Aldric puede descansar.' },
+    fortaleza: { title: 'La Mano Roja', notes: [
+      'Orden de guerra con una mano roja estampada: «Toda aldea que no pague, arde. Firmado: Gorthak.»',
+      'Mural de sangre seca: la Mano Roja sobre un mapa. Tres aldeas tachadas. La cuarta es Brumaverde.',
+      'Carta de un prisionero: «Les he oído contar los días. Cuando llegue la luna llena marcharán sobre el valle.»',
+      'Tablón de entrenamiento lleno de muescas: «Gorthak: 100 escudos rotos. Siguiente: el tuyo.»',
+    ], end: 'El estandarte de la Mano Roja cae al barro. Sin Gorthak, los orcos se dispersan por las colinas y Brumaverde dormirá tranquila esta luna.' },
+    nido: { title: 'La Seda Negra', notes: [
+      'Mochila de un cazador, envuelta en seda: «El bosque se ha quedado sin pájaros. Algo grande teje entre los árboles.»',
+      'Mural rascado en la corteza: una araña con corona y, debajo, cientos de huevos.',
+      'Nota del cazador: «Los capullos se mueven. Hay gente dentro. Voy a por ayuda… si encuentro el camino de vuelta.»',
+      'Marcas en un árbol: «Por aquí NO. Por aquí tampoco.»',
+    ], end: 'Arakhna se encoge y su seda se deshace. De los capullos salen, aturdidos, varios cazadores. Uno de ellos jura invitaros a la próxima ronda.' },
+    volcan: { title: 'La Llama Eterna', notes: [
+      'Tablilla de los kobolds: «Gran Ignaroth duerme sobre el oro. Nosotros le traemos más oro. Así no nos come.»',
+      'Mural ennegrecido por el fuego: un dragón rojo enroscado alrededor de una corona y una ciudad en llamas.',
+      'Diario de un cultista: «El dragón nos prometió escamas de fuego para todos. Ya van tres hermanos que ha usado de cena.»',
+      'Inscripción en el altar: «La Llama Eterna no se apaga con agua, sino con valor.»',
+    ], end: 'Ignaroth cae sobre su montaña de oro y las ascuas se apagan por fin. Los kobolds, sin dueño, salen huyendo con lo que pueden cargar.' },
+    bosque: { title: 'Los Susurros del Musgo Negro', notes: [
+      'Hacha clavada en un tronco: «Talamos un roble viejo y desde entonces el bosque susurra. Los árboles se mueven de noche.»',
+      'Mural tallado en la corteza: un árbol con ojos y raíces que agarran a un leñador.',
+      'Diario de una druida: «Raízmadre era la guardiana de este bosque. Algo la ha corrompido: el musgo negro le sale del corazón.»',
+      'Nota clavada con una flecha: «Las luciérnagas huyen del musgo. Síguelas y llegarás a ella.»',
+    ], end: 'El musgo negro se deshace en ceniza y Raízmadre suspira. Por primera vez en años, el bosque calla y deja dormir a los que viven en él.' },
+    abismo: { title: 'La Puerta del Averno', notes: [
+      'Pergamino chamuscado: «El círculo funcionó. La puerta está abierta. Que los dioses nos perdonen.»',
+      'Mural pintado con ceniza: Azaroth con cuernos de fuego y, a sus pies, el círculo de los invocadores.',
+      'Confesión de un brujo: «Pedimos poder y Azaroth nos lo dio. Ahora no podemos dormir sin oír sus risas.»',
+      'Grabado en el suelo: «Lo que se abre desde dentro sólo se cierra desde dentro.»',
+    ], end: 'Con Azaroth vencido, la puerta del Averno se cierra con un trueno. El calor desaparece y el abismo vuelve a ser sólo una cueva oscura.' },
+    catedral: { title: 'El Último Coro', notes: [
+      'Hoja de un cantoral, manchada de cera: «El obispo Valerian dice que el coro debe cantar toda la noche. Que si paramos, Él nos oirá callar.»',
+      'Mural de la nave: un obispo con mitra dorada bendice a los fieles… pero todas las caras de los fieles son calaveras.',
+      'Confesión sin terminar: «Padre, he visto al obispo hablar con la vidriera rota. La vidriera le contestaba.»',
+      'Inscripción en el altar, rascada con un cuchillo: «AQUÍ NO HAY DIOS. SÓLO VALERIAN.»',
+    ], end: 'Valerian cae ante el altar y la mitra rueda por el suelo. Por las vidrieras rotas entra la primera luz del alba, y el coro de los muertos, por fin, se calla.' },
+    tumba: { title: 'El Sol Negro de Nefer-Anj', notes: [
+      'Papiro quebradizo: «El faraón ordenó que lo enterraran con todo su pueblo, para que nadie más viera el sol después de él.»',
+      'Mural de jeroglíficos: un faraón con cabeza de chacal sostiene un sol negro sobre una fila de esclavos de rodillas.',
+      'Diario de un saqueador: «Los escarabajos salen de las paredes cuando tocas el oro. Pedro tocó el oro.»',
+      'Tablilla de arcilla: «Quien despierte al Eterno, eterno será a su servicio.»',
+    ], end: 'Las vendas de Nefer-Anj se deshacen en polvo dorado. El sol negro pintado en el techo se agrieta y, por primera vez en tres mil años, un rayo de luz llega hasta la cámara.' },
+    caverna: { title: 'El hambre de Grumgor', notes: [
+      'Cuaderno de un espeleólogo: «Bajamos siguiendo los cristales. Brillan más cuanto más hondo… y cuanto más cerca está algo que respira.»',
+      'Marcas de garra en la roca, profundas como un brazo, y debajo, con tiza: «NO SIGAS».',
+      'Nota de un trasgo, con dibujos torpes: un trol enorme comiendo, y muchos trasgos pequeños llevándole cosas.',
+      'Última página del cuaderno: «Los trasgos no lo adoran. Le tienen miedo. Le dan de comer para que no se los coma a ellos.»',
+    ], end: 'Grumgor se desploma y la caverna entera retumba. Los trasgos huyen chillando hacia la oscuridad: por primera vez, nadie les obliga a cazar para un amo.' },
+    sendero: { title: 'El peaje de Varga', notes: [
+      'Cartel de madera torcido: «Viajero: el camino es seguro. Firmado, el alcalde.» Alguien ha tachado «seguro» y ha escrito «de Varga».',
+      'Carta de una comerciante: «Nos pararon en el puente. Nos quitaron las mulas, la carga y las botas. A Joaquín también las orejas.»',
+      'Lista de peajes clavada en un árbol: «Bolsa de oro, un ojo. Sin oro, los dos ojos. Paladines, el doble.»',
+      'Pañuelo bordado, junto a una hoguera apagada: «Para Varga, de su madre. Vuelve a casa.»',
+    ], end: 'Varga cae y su banda se dispersa entre los árboles. El camino del bosque vuelve a ser de los viajeros, y en la taberna alguien brinda por las orejas de Joaquín.' },
+    ciudad: { title: 'La noche eterna de Sangrevil', notes: [
+      'Bando del ayuntamiento, empapado: «Toque de queda al anochecer. Cerrad puertas y ventanas. No abráis a nadie que no veáis en un espejo.»',
+      'Pintada en un muro con letras rojas: «EL CONDE NO DUERME. EL CONDE NO MUERE. EL CONDE TIENE SED.»',
+      'Diario de una tabernera: «Cada noche faltan más vecinos. Cada mañana hay más perros enormes por las calles.»',
+      'Carta sellada con lacre negro: «Querido Conde: la ciudad es vuestra. Sólo os pido que respetéis a mi familia. Firmado, el Alcalde.»',
+    ], end: 'El Conde Sangrevil se deshace en ceniza bajo vuestras armas. Las nubes se abren, sale la luna, y en las ventanas, una a una, se van encendiendo velas.' },
+    batalla: { title: 'La batalla que no acaba', notes: [
+      'Carta de un soldado, sin enviar: «Madre: mañana es la gran batalla. Sir Morgrim dice que nadie vuelve a casa hasta que ganemos.»',
+      'Estandarte hecho jirones, con una inscripción bordada: «Ni un paso atrás. Ni en la vida, ni en la muerte.»',
+      'Diario de un cuervo… no: de un sepulturero. «Enterré a cuatrocientos. A la mañana siguiente, las tumbas estaban vacías.»',
+      'Orden de batalla manchada de sangre: «Si el caballero cae, que se retire el ejército.» Alguien ha tachado «cae».',
+    ], end: 'Sir Morgrim hinca la rodilla en el barro. Los soldados caídos bajan las armas a la vez y se tumban, por fin, en la tierra que defendieron. La batalla ha terminado.' },
+    incendio: { title: 'Las cenizas del Último Alba', notes: [
+      'Bando a medio quemar: «¡Ciudadanos! El fuego empezó en el templo. Nadie debe acercarse a la plaza mayor.»',
+      'Carta de un herrero: «No es un incendio normal. Las llamas cantan. Y algo grande camina dentro de ellas.»',
+      'Pintada con carbón en una pared: «PYRAX QUIERE TODA LA CIUDAD. LUEGO EL MUNDO.»',
+      'Diario de una niña, con dibujos: «Mamá dice que el señor de fuego no puede entrar en el agua. Nos escondemos en el pozo.»',
+    ], end: 'Pyrax se apaga con un siseo de humo negro. Empieza a llover sobre la ciudad y, desde el pozo de la plaza, una niña y su madre salen a ver el cielo.' },
+    infierno: { title: 'El trono de Belial', notes: [
+      'Grabado en una losa ardiente: «Abandonad toda esperanza… o traed mejores armas.»',
+      'Lamento escrito con ceniza: «Vendí mi alma por una corona. Belial se quedó con las dos.»',
+      'Lista de almas, clavada con una lanza: miles de nombres, y al final, en tinta fresca, el vuestro.',
+      'Hoja chamuscada del diario de Azaroth: «Belial me echó de aquí por débil. Algún héroe le pagará con la misma moneda.»',
+    ], end: 'Belial se derrumba sobre su trono, que se parte en dos. Las llamas del Infierno pierden fuerza y las almas condenadas, una a una, se apagan en paz.' },
+  };
+  const MONSTERDATA = { MONSTERS, LEGACY_MONSTER, THEMES, BOSS_LINES, LORE };
   if (typeof module !== 'undefined' && module.exports) module.exports = MONSTERDATA;
   else root.MONSTERDATA = MONSTERDATA;
 })(this);

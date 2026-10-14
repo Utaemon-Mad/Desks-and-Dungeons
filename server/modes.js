@@ -19,7 +19,7 @@ module.exports = function (ctx) {
     const id = `${desc.run}-f${desc.floor}`;
     let inst = room.instances.get(id);
     if (inst) return inst;
-    const d = GEN.generate({ theme: PROG.descentTheme(desc.floor), level: PROG.descentLevel(desc.start, desc.floor), seed: crypto.randomBytes(6).toString('hex') });
+    const d = GEN.generate({ theme: PROG.descentTheme(desc.floor), level: PROG.descentLevel(desc.start, desc.floor), seed: crypto.randomBytes(6).toString('hex'), quest: false });
     d.id = id;
     d.name = `Descenso · piso ${desc.floor}`;
     d.descent = { ...desc };

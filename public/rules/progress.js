@@ -288,7 +288,7 @@
     gigantes:   { name: 'Gigantismo', icon: '🦣', desc: 'Enemigos enormes: +50% de vida y +50% de experiencia.' },
   };
   const weekMod = (week = weekKey()) => { const ids = Object.keys(WEEKLY_MODS); return ids[((week % ids.length) + ids.length) % ids.length]; };
-  const DESCENT_THEMES = ['cuevas', 'cripta', 'nido', 'bosque', 'fortaleza', 'volcan', 'abismo'];
+  const DESCENT_THEMES = ['cuevas', 'cripta', 'caverna', 'nido', 'bosque', 'sendero', 'catedral', 'fortaleza', 'tumba', 'ciudad', 'batalla', 'volcan', 'incendio', 'abismo', 'infierno'];
   const descentTheme = (floor) => DESCENT_THEMES[(floor - 1) % DESCENT_THEMES.length];
   const descentLevel = (startLevel, floor) => startLevel + floor - 1;
   // Mejoras de la taberna: se pagan entre todos con donaciones; cada nivel suma sus bonificaciones a quien esté en ese servidor
@@ -348,7 +348,9 @@
   const AURAS = { oro: '#ffd24a', plata: '#d8e4f0', bronce: '#e0904a', temporada: '#8a6aff' };
   // Asalto semanal: el mismo mapa para todos durante la semana, más duro y con su propio desafío; clasificación por tiempo
   const RAID = { name: 'Asalto semanal', hpMult: 1.6, dmgMult: 1.3, xpMult: 1.5, bonusLevel: 2, minLevel: 3 };
-  const raidTheme = (week = weekKey()) => DESCENT_THEMES[((week + 2) % DESCENT_THEMES.length + DESCENT_THEMES.length) % DESCENT_THEMES.length];
+  // el Asalto sigue con los siete de siempre (así no cambia el de la semana en curso)
+  const RAID_THEMES = ['cuevas', 'cripta', 'nido', 'bosque', 'fortaleza', 'volcan', 'abismo'];
+  const raidTheme = (week = weekKey()) => RAID_THEMES[((week + 2) % RAID_THEMES.length + RAID_THEMES.length) % RAID_THEMES.length];
   const raidMod = (week = weekKey()) => { const ids = Object.keys(WEEKLY_MODS); return ids[(((week + 3) % ids.length) + ids.length) % ids.length]; };
 
   // ======================================================================

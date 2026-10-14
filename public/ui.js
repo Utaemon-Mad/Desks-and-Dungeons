@@ -167,7 +167,7 @@
   DD.on('me', () => { renderHud(); if (!$('#charwin').classList.contains('hidden')) renderChar(); if (!$('#levelup').classList.contains('hidden')) renderLevelUp(); if (!$('#tradewin').classList.contains('hidden')) renderTrade(); if (shop && !$('#shopwin').classList.contains('hidden')) renderShop(); });
   DD.on('look', (m) => { if (m.id === DD.myId) { renderHud(true); if (!$('#charwin').classList.contains('hidden')) renderChar(); } });
   DD.on('me-stats', () => renderHud());
-  DD.on('welcome', () => { hud.classList.remove('hidden'); });
+  DD.on('welcome', () => { hud.classList.remove('hidden'); $('#orbs').classList.remove('hidden'); });
 
   let lastLook = '';
   function renderHud(force) {
@@ -191,6 +191,10 @@
     $('#mh-hp-t').textContent = `${Math.max(0, hp)}/${maxHp}`;
     $('#mh-en').style.width = Math.max(0, 100 * en / maxEn) + '%';
     $('#mh-en-t').textContent = `${Math.max(0, en)}/${maxEn}`;
+    // los orbes de abajo (estilo Diablo): el líquido sube y baja; con poca vida late
+    $('#orb-hp-f').style.height = Math.max(0, Math.min(100, 100 * hp / maxHp)) + '%';
+    $('#orb-en-f').style.height = Math.max(0, Math.min(100, 100 * en / maxEn)) + '%';
+    $('#orb-hp').classList.toggle('low', hp > 0 && hp < maxHp * 0.3);
     const base = RULES.XP_TABLE[d.level], next = RULES.XP_TABLE[d.level + 1] || base;
     $('#mh-xp').style.width = Math.min(100, 100 * (p.xp - base) / Math.max(1, next - base)) + '%';
     $('#mh-xp').parentElement.title = `${p.xp - base} / ${next - base} PX para el nivel ${d.level + 1}`;

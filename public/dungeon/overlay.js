@@ -28,7 +28,7 @@
 
   // Clima según la zona (y la hora): el tiempo cambia cada pocos minutos, igual para todos
   function weatherFor(map, zone, now) {
-    if (map.kind !== 'world') return map.theme === 'volcan' || map.theme === 'abismo' ? 'embers' : map.theme === 'bosque' ? 'fireflies' : 'motes';
+    if (map.kind !== 'world') { const T = RULES.THEMES[map.theme]; return (T && T.weather) || 'motes'; }
     const slot = Math.floor(now / 240000);
     const r = (Math.sin(slot * 91.7 + zone * 13.3) * 43758.5453) % 1;
     const roll = Math.abs(r);
@@ -220,15 +220,11 @@
   function drawMinimap() {
     const map = game.map;
     const big = map.kind === 'world' && game.bigMap;
-    const k = big ? Math.min((innerWidth - 80) / map.w, (innerHeight - 200) / map.h) : (innerWidth <= 820 ? 1 : map.kind === 'world' ? 1.4 : 3.2) * 0.8;
+    const k = big ? Math.min((innerWidth - 80) / map.w, (innerHeight - 200) / map.h) : (innerWidth <= 820 ? (map.kind === 'world' ? 1 : 1.9) : map.kind === 'world' ? 1.4 : 3.2) * 0.8;
     const mw = map.w * k, mh = map.h * k;
-    let x0 = big ? (innerWidth - mw) / 2 : innerWidth - mw - 14, y0 = big ? 90 : innerWidth <= 820 ? 110 : 14;
-    // el minimapa pequeño va girado 45°, como la cámara isométrica (arriba es el noroeste); el mapa grande, con el norte arriba
-    if (!big) {
-      const S = (mw + mh) / Math.SQRT2;
-      g.save(); g.translate(innerWidth - S / 2 - 14, y0 + S / 2); g.rotate(Math.PI / 4 + game.camYaw); // y con el giro de la cámara en combate
-      x0 = -mw / 2; y0 = -mh / 2;
-    }
+    const x0 = big ? (innerWidth - mw) / 2 : innerWidth - mw - 14, y0 = big ? 90 : innerWidth <= 820 ? 116 : 22;
+    // recto, con el norte arriba (la cámara isométrica mira desde el sureste: arriba en la pantalla es el noroeste)
+    if (!big) g.save();
     const seenC = D.seenCount;
     if (!game.miniImg || game.miniSeen !== seenC) {
       const c = game.miniImg || document.createElement('canvas');
@@ -252,6 +248,13 @@
       g.font = '600 12px "Pixelify Sans", sans-serif'; g.textAlign = 'center';
       for (const w of map.waystones || []) { if (!DD.me || !DD.me.waystones.includes(w.id)) continue; g.fillStyle = '#7ad0ff'; g.fillRect(x0 + w.x * k - 3, y0 + w.y * k - 3, 6, 6); g.fillStyle = '#fff'; g.fillText(w.name, x0 + w.x * k, y0 + w.y * k - 10); }
     }
+    // objetivo: llaves y palancas ya vistas (doradas / rojas), el portón (gris, verde al abrirse) y la sala de las oleadas
+    const q = game.quest;
+    if (q && map.kind === 'dungeon') {
+      for (const s of q.spots || []) { if (!game.seen[s.y * map.w + s.x] || (q.type === 'keys' && s.done)) continue; g.fillStyle = q.type === 'keys' ? '#ffd23f' : s.done ? '#5aff7a' : '#ff5a3a'; g.fillRect(x0 + s.x * k - 2.5, y0 + s.y * k - 2.5, 5, 5); }
+      for (const gt of q.gate) if (game.seen[gt.y * map.w + gt.x]) { g.fillStyle = q.open ? '#5aff7a' : '#c8c0b0'; g.fillRect(x0 + gt.x * k - 1.5, y0 + gt.y * k - 1.5, 3, 3); }
+      if (q.room && !q.open && game.seen[q.room.y * map.w + q.room.x]) { g.strokeStyle = 'rgba(255,120,60,.8)'; g.lineWidth = 1; g.strokeRect(x0 + q.room.x * k, y0 + q.room.y * k, q.room.w * k, q.room.h * k); }
+    }
     for (const e of game.ents.values()) {
       if (e.kind === 'enemy' && !game.vis[e.y * map.w + e.x]) continue;
       if (e.kind === 'npc') { g.fillStyle = '#9fe0ff'; g.fillRect(x0 + e.x * k - 1.5, y0 + e.y * k - 1.5, 3, 3); continue; }
@@ -265,7 +268,14 @@
       g.strokeStyle = p.k === 'danger' ? '#ff5a3c' : '#ffd75a'; g.lineWidth = 2;
       g.beginPath(); g.arc(x0 + (p.x + 0.5) * k, y0 + (p.y + 0.5) * k, 3 + ph * 7, 0, Math.PI * 2); g.stroke();
     }
-    if (!big) g.restore();
+    if (!big) {
+      // rosa de los vientos pequeña: dónde queda el norte
+      g.font = '700 10px "Pixelify Sans", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = '#1a0f08'; g.beginPath(); g.arc(x0 + mw / 2, y0 - 4, 7, 0, 7); g.fill();
+      g.strokeStyle = '#6a4a2a'; g.lineWidth = 1.5; g.stroke();
+      g.fillStyle = '#f2d37a'; g.fillText('N', x0 + mw / 2, y0 - 3.5);
+      g.restore();
+    }
   }
 
 

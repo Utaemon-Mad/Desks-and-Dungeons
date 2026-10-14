@@ -59,7 +59,7 @@
     // al llegar junto al muro agrietado que se pinchó, se rompe
     const pb = game.pendingBreak, meP = pb && game.ents.get(DD.myId);
     if (meP && Math.max(Math.abs(meP.x - pb.x), Math.abs(meP.y - pb.y)) <= 1) { DD.net.send({ t: 'dbreak', x: pb.x, y: pb.y }); game.pendingBreak = null; }
-    game.chests = m.chests; game.loot = m.loot; game.portal = m.portal;
+    game.chests = m.chests; game.loot = m.loot; game.portal = m.portal; game.quest = m.quest || null;
     if (m.portalLeft && !game.portalEnd) game.portalEnd = performance.now() + m.portalLeft; game.start = m.start; game.herbs = m.herbs || [];
     // jefe a la vista (en la arena, el rival)
     const boss = game.map && game.map.kind === 'arena'
@@ -129,6 +129,7 @@
       case 'hit': {
         const t = game.ents.get(ev.t);
         const by = game.ents.get(ev.by);
+        if (ev.roll && D.dice) D.dice(ev, t, by, now); // por turnos: el d20 rueda hasta el objetivo
         if (t) {
           if (ev.miss) float(t.x, t.y, 'Fallo', '#9aa0aa');
           else if (ev.dodge) float(t.x, t.y, 'Esquiva', '#9ad8ff');
@@ -160,6 +161,7 @@
         else if (t && t.kind === 'hero' && ev.t !== me && ev.dmg && !ev.miss && !ev.dodge) DD.sfx('hit', { vol: 0.35 });
         break;
       }
+      case 'phase': if (D.bossPhase) D.bossPhase(ev, now); break;
       case 'swing': { const e = game.ents.get(ev.id), t = game.ents.get(ev.t); if (e && t) { e.lunge = now; e.lungeDx = Math.sign(t.x - e.x); e.lungeDy = Math.sign(t.y - e.y); } break; }
       case 'cast': {
         const by = game.ents.get(ev.by);
@@ -182,6 +184,7 @@
         if (ev.xp) float(ev.x, ev.y, `+${ev.xp} PX`, '#9fe0ff', true);
         if (ev.xp !== 0) log(`${(RULES.MONSTERS[ev.k] || {}).name || ev.k} cae.${ev.xp ? ` +${ev.xp} PX` : ''}`, ev.boss ? 'good big' : 'good');
         DD.sfx('die', { boss: ev.boss });
+        if (ev.boss && D.loreEnd) D.loreEnd(ev); // el final de la historia de la mazmorra
         break;
       }
       case 'loot': {
@@ -208,6 +211,7 @@
       }
       case 'special': log(`${ev.name}: ${{ slam: '¡golpe sísmico!', nova: '¡nova de muerte!', breath: '¡aliento de fuego!', volley: '¡andanada!', summon: 'llama a sus esbirros', charge: '¡embiste!' }[ev.s] || ''}`, 'hurt'); break;
       case 'summon': for (let i = 0; i < 10; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7cff6a', true); break;
+      case 'quest': if (D.questEvent) D.questEvent(ev); break;
       case 'portal': if (ev.left) game.portalEnd = performance.now() + ev.left; log(`¡${ev.name} ha caído!${ev.left ? ' Tenéis un minuto para recoger el botín.' : ' Se abre el portal al piso siguiente.'}`, 'good big'); if (!ev.left) DD.toast('🏆 ¡Jefe derrotado! Cruza el portal para bajar.'); DD.sfx('portal'); for (let i = 0; i < 30; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7ad0ff', true); break;
       case 'combo': {
         const t = game.ents.get(ev.id);
@@ -273,7 +277,7 @@
     game.map = m.dungeon;
     game.props = m.dungeon.props || [];
     game.ents.clear(); game.floaters = []; game.fx = []; game.projs = []; game.teles = []; game.particles = []; game.auras = [];
-    game.log = []; game.statics = null; game.boss = null; game.bossSeen = 0; game.heardLoot = new Set(); game.camInit = false; game.camRot = game.camYaw = game.camQ = 0; game.camPan = { x: 0, z: 0 }; game.keys.clear(); game.sentDir = '0,0';
+    game.log = []; game.statics = null; game.boss = null; game.bossSeen = 0; game.introDone = new Set(); game.raging = new Set(); game.lore = new Set(); game.bossIntro = null; game.heardLoot = new Set(); game.camInit = false; game.camRot = game.camYaw = game.camQ = 0; game.camPan = { x: 0, z: 0 }; game.keys.clear(); game.sentDir = '0,0';
     game.seen = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.vis = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.openDoors = new Set(m.dungeon.doors || []);
@@ -441,6 +445,9 @@
     const herb = !repeat && herbUnder(cx, cy);
     if (herb) { DD.net.send({ t: 'dgather', id: herb.id }); game.marker = { x: herb.x, y: herb.y, at: performance.now() }; return 'gather'; }
     if (enemy && repeat) return;
+    // palanca del portón: se va a su lado y se acciona (server/quests.js)
+    const lever = !repeat && D.leverAt && D.leverAt(x, y);
+    if (lever) { DD.net.send({ t: 'dlever', x: lever.x, y: lever.y }); game.marker = { x: lever.x, y: lever.y, at: performance.now() }; return 'use'; }
     // muro agrietado (sala secreta): se va a su lado y se rompe al llegar
     const sec = !repeat && secretAt(x, y);
     if (sec) { game.pendingBreak = sec; DD.net.send({ t: 'dgo', x: sec.x, y: sec.y + 1 }); game.marker = { x: sec.x, y: sec.y + 1, at: performance.now() }; return 'use'; }
@@ -609,6 +616,8 @@
 
   function clearScene() {
     if (built) { drop(built.group, true); built = null; }
+    if (D.clearDice) D.clearDice();
+    if (D.clearQuest) D.clearQuest();
     for (const d of doorObjs) drop(d.obj, true);
     doorObjs.length = 0;
     if (fog) { drop(fog.mesh, true); fog = null; }
@@ -645,7 +654,8 @@
     // mazmorras oscuras: poca luz ambiente (con el color del tema) y que manden las antorchas y el farol
     // nunca del todo a oscuras: en el móvil (pantalla pequeña y con reflejos) algo más de luz ambiente
     stage.hemi.intensity = world ? 0.62 : game.map.kind === 'arena' ? 0.4 : Math.max(T.amb || 0.16, VIEW3D.touch ? 0.38 : 0.26);
-    stage.grade = world ? null : GRADES[game.map.kind === 'arena' ? 'arena' : game.map.theme] || null;
+    const PL = VIEW3D.PLACES[game.map.theme];
+    stage.grade = world ? null : GRADES[game.map.kind === 'arena' ? 'arena' : game.map.theme] || (PL && PL.grade) || null;
     stage.hemi.color.set(world ? '#7a8ac0' : T.sky);
     stage.hemi.groundColor.set(world ? '#2a2a1a' : T.ground || '#140c0a');
     // neblina baja que se arrastra por el suelo
@@ -680,8 +690,8 @@
     const g = new THREE.Group();
     const lin = (h) => '#' + new THREE.Color(h).convertSRGBToLinear().getHexString();
     const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: lin(c), roughness: o.r ?? 0.8, metalness: o.m || 0 });
-    const wood = M(theme === 'cripta' ? '#4a3a2e' : theme === 'volcan' || theme === 'abismo' ? '#3a2620' : '#6a4426'), dark = M('#3a2414'), iron = M('#3a3a40', { r: 0.45, m: 0.8 });
-    const stone = M(theme === 'cuevas' ? '#5e4c3a' : theme === 'nido' ? '#44523a' : '#6a6870');
+    const wood = M(theme === 'cripta' || theme === 'catedral' ? '#4a3a2e' : theme === 'volcan' || theme === 'abismo' ? '#3a2620' : '#6a4426'), dark = M('#3a2414'), iron = M('#3a3a40', { r: 0.45, m: 0.8 });
+    const stone = M(theme === 'cuevas' ? '#5e4c3a' : theme === 'nido' ? '#44523a' : theme === 'tumba' ? '#a8885a' : theme === 'catedral' ? '#8a8478' : '#6a6870');
     const box = (w, h, d, m, x, y, z, par = g) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; par.add(o); return o; };
     // marco de piedra
     box(0.14, 1.32, 0.3, stone, -0.5, 0.66, 0); box(0.14, 1.32, 0.3, stone, 0.5, 0.66, 0); box(1.14, 0.16, 0.32, stone, 0, 1.3, 0);
@@ -1007,10 +1017,12 @@
     const me = game.ents.get(DD.myId);
     const dark = map.kind === 'dungeon';
     // cámara que sigue al héroe
-    const tx = me ? me.rx + 0.5 : map.w / 2, tz = me ? me.ry + 0.5 : map.h / 2;
+    // durante la entrada de un jefe, la cámara va a él
+    const bc = D.bossCam ? D.bossCam(now) : null;
+    const tx = bc ? bc.x : me ? me.rx + 0.5 : map.w / 2, tz = bc ? bc.z : me ? me.ry + 0.5 : map.h / 2;
     if (!game.camInit) { game.cam = { x: tx, y: tz }; game.camInit = !!me; }
     game.cam.x += (tx - game.cam.x) * Math.min(1, dt * 6); game.cam.y += (tz - game.cam.y) * Math.min(1, dt * 6);
-    const zoom = (innerWidth <= 820 ? 1.18 : 1) * (game.zoom || 1) * (DD.camZoom || 1);
+    const zoom = (innerWidth <= 820 ? 1.18 : 1) * (DD.camZoom || 1) * (D.zoomPunch ? D.zoomPunch(now) : 1) * (bc ? bc.zoom : 1);
     // vista isométrica: la cámara mira desde el sureste, girada 45° (VIEW3D.ISO). En combate se puede girar de 90 en 90
     // y arrastrar; al acabar vuelve sola a su sitio
     if (!game.enc && game.camRot % 4) { game.camRot = Math.round(game.camRot / 4) * 4; game.camQ = 0; }
@@ -1279,6 +1291,7 @@
     const isFire = (c) => /^#ff[5-b]/i.test(c || '');
     const L = [];
     for (const l of built.lights) L.push({ ...l, intensity: l.intensity * flick(l.x), fire: isFire(l.color) });
+    if (D.questLights) for (const l of D.questLights()) L.push(l);
     for (const p of built.props || []) {
       if (!p.light || !p.o.visible) continue;
       const fire = isFire(p.light.color), sd = p.light.x * 3 + p.light.z;
@@ -1333,6 +1346,10 @@
     g.fillStyle = vg; g.fillRect(0, 0, innerWidth, innerHeight);
     if (game.you && game.you.hp / game.you.maxHp < 0.3) { g.fillStyle = `rgba(150,0,0,${0.08 + Math.sin(now / 200) * 0.05})`; g.fillRect(0, 0, innerWidth, innerHeight); }
     if (D.drawTurns) D.drawTurns(now);
+    if (D.updateDice) D.updateDice(now);
+    if (D.updateBoss) D.updateBoss(now);
+    if (D.updateLore) D.updateLore(now);
+    if (D.updateQuest) D.updateQuest(now, Math.min(0.1, dt || 0.016));
     D.drawOverlay(now);
     D.drawPings(now);
     if (game.showMap) D.drawMinimap();
@@ -1348,7 +1365,7 @@
 
   // Lo que comparten los archivos de public/dungeon/ (se cargan después de este);
   // las variables que cambian de valor se leen como D.nombre
-  const D = DD.dg = { $, WATER_T, camCenter, camRotate, entAt, g, game, herbUnder, models, monName, onEvent, serverNow, viewEl, who,
+  const D = DD.dg = { $, WATER_T, camCenter, camRotate, entAt, log, spark, ring, puff, banner, float, g, game, herbUnder, models, monName, onEvent, serverNow, viewEl, who,
     get stage() { return stage; }, get seenCount() { return seenCount; } };
 
   // ======================================================================
