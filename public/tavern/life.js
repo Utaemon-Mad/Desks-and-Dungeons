@@ -115,6 +115,68 @@
     }
     // la chimenea crepita
     if (now > nextCrackle) { nextCrackle = now + 7000 + Math.random() * 9000; if (C.tavernFx.crackle) C.tavernFx.crackle(); }
+    tickCats(now, st);
+  }
+
+  // ---------- los gatos: Nube (blanca) y Tizón (negro) corretean, descansan, se persiguen y maúllan ----------
+  const CATS = [
+    { id: 'nube', name: 'Nube', color: '#f2efe8', x: 3.5, y: 9.5 },
+    { id: 'tizon', name: 'Tizón', color: '#1c1a20', x: 6.5, y: 3.5 },
+  ];
+  const MEOWS = ['¡Miau!', 'Miaaau…', 'Mrrr…', '¡Mau!', 'Prrrr…'];
+  const freeAt = (x, y) => MAP.isStandable(Math.floor(x), Math.floor(y));
+  // ¿se puede ir en línea recta? (sin cruzar muebles)
+  const clearLine = (a, b) => { const d = Math.hypot(b.x - a.x, b.y - a.y); for (let t = 0; t <= d; t += 0.25) if (!freeAt(a.x + (b.x - a.x) * t / d, a.y + (b.y - a.y) * t / d)) return false; return true; };
+  function pickSpot(c) {
+    for (let i = 0; i < 40; i++) {
+      const r = 1.5 + Math.random() * 5, a = Math.random() * Math.PI * 2;
+      const p = { x: Math.floor(c.x + Math.cos(a) * r) + 0.5, y: Math.floor(c.y + Math.sin(a) * r) + 0.5 };
+      if (freeAt(p.x, p.y) && clearLine(c, p)) return p;
+    }
+    return null;
+  }
+  let lastCat = 0;
+  function tickCats(now, st) {
+    const dt = Math.min(0.1, (now - (lastCat || now)) / 1000); lastCat = now;
+    for (const c of CATS) {
+      if (!c.obj) {
+        c.obj = MODELS.buildCat && MODELS.buildCat(c.color);
+        if (!c.obj) continue;
+        if (!freeAt(c.x, c.y)) { const p = pickSpot({ x: 7, y: 6 }) || { x: 7.5, y: 6.5 }; c.x = p.x; c.y = p.y; }
+        st.scene.add(c.obj); c.rest = now + 1000 + Math.random() * 2000; c.rot = 0;
+      }
+      if (c.obj.parent !== st.scene) st.scene.add(c.obj);
+      // Tizón, a veces, sale corriendo detrás de Nube
+      const other = CATS.find((o) => o !== c);
+      if (!c.goal && now > c.rest) {
+        if (c.id === 'tizon' && other.obj && Math.random() < 0.35 && clearLine(c, other)) { c.goal = { x: other.x, y: other.y }; c.chase = true; c.speed = 3.6; if (Math.random() < 0.5) other.flee = now; }
+        else { c.goal = pickSpot(c); c.chase = false; c.speed = Math.random() < 0.6 ? 2.8 : 1.3; }
+        if (!c.goal) c.rest = now + 1500;
+      }
+      // Nube huye si la persiguen
+      if (c.flee && now - c.flee < 300 && !c.goal) { c.goal = pickSpot(c); c.speed = 3.8; c.flee = 0; }
+      let moving = false;
+      if (c.goal) {
+        if (c.chase && other) c.goal = { x: other.x, y: other.y };
+        const dx = c.goal.x - c.x, dy = c.goal.y - c.y, d = Math.hypot(dx, dy), step = c.speed * dt;
+        if (d < (c.chase ? 0.6 : 0.08) || (c.chase && now - (c.chaseT || (c.chaseT = now)) > 4000)) {
+          if (c.chase && d < 0.6) talk.push({ id: c.id, text: '¡Fffff!', until: now + 1500 });
+          c.goal = null; c.chase = false; c.chaseT = 0;
+          c.rest = now + (Math.random() < 0.3 ? 5000 + Math.random() * 6000 : 600 + Math.random() * 2200); // a veces se queda un rato quieto
+        } else {
+          const nx = c.x + dx / d * step, ny = c.y + dy / d * step;
+          if (freeAt(nx, ny)) { c.x = nx; c.y = ny; moving = true; } else { c.goal = null; c.rest = now + 400; }
+          const want = Math.atan2(dx, dy);
+          let diff = want - c.rot; while (diff > Math.PI) diff -= Math.PI * 2; while (diff < -Math.PI) diff += Math.PI * 2;
+          c.rot += diff * Math.min(1, dt * 10);
+        }
+      }
+      c.obj.position.set(c.x, 0, c.y);
+      c.obj.rotation.y = c.rot;
+      MODELS.animate(c.obj, { t: now, moving, run: moving && c.speed > 2 });
+      screen[c.id] = st.project(c.x, 0.55, c.y);
+      if (!moving && Math.random() < dt * 0.04) talk.push({ id: c.id, text: MEOWS[Math.floor(Math.random() * MEOWS.length)], until: now + 2200 });
+    }
   }
 
   // ---------- encima de la escena: nombres, bocadillos y notas ----------
@@ -195,12 +257,22 @@
   $p('.pulso-push').onclick = push;
   $p('.pulso-close').onclick = closePulso;
   window.addEventListener('keydown', (e) => { if (P && (e.key === ' ' || e.code === 'Space')) { e.preventDefault(); e.stopImmediatePropagation(); push(); } if (P && e.key === 'Escape') closePulso(); }, true);
-  // pinchar a Brom (o su nombre) abre el pulso
+  // pinchar a Brom (o su nombre) abre el pulso; pinchar un gato, lo acaricias
   C.canvas.addEventListener('pointerdown', (e) => {
+    if (DD.scene !== 'tavern' || C.editing) return;
+    for (const c of CATS) {
+      const q = screen[c.id];
+      if (q && Math.hypot(e.clientX - q.x, e.clientY - q.y - 8) < 22) {
+        e.preventDefault(); e.stopImmediatePropagation();
+        talk.push({ id: c.id, text: `${c.name}: prrrr… 💕`, until: performance.now() + 2600 });
+        c.goal = null; c.rest = performance.now() + 3000;
+        return;
+      }
+    }
     const p = screen.brom;
-    if (!p || DD.scene !== 'tavern' || C.editing) return;
+    if (!p) return;
     if (Math.hypot(e.clientX - p.x, e.clientY - p.y - 20) < 34) { e.preventDefault(); e.stopImmediatePropagation(); openPulso(); }
   }, true);
 
-  C.life = { update, draw, openPulso };
+  C.life = { update, draw, openPulso, cats: CATS };
 })();

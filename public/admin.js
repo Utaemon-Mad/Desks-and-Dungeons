@@ -7,6 +7,11 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 17, date: 'Octubre', title: 'Gatos en la taberna', items: [
+      '🐈 Nube (blanca) y Tizón (negro) corretean por la taberna: se paran a descansar, Tizón persigue a Nube, maúllan de vez en cuando y, si los pinchas, ronronean.',
+      '🍺 La barra de Alfonso es más baja: ya no tapa al tabernero ni a los de los taburetes.',
+      '🎻 Arreglado: el bardo y los parroquianos salían con los brazos en cruz.',
+    ] },
     { v: 16, date: 'Octubre', title: 'Ocho mazmorras nuevas, misiones y un HUD de leyenda', items: [
       '❤️ HUD nuevo al estilo Diablo: orbes de vida (rojo) y energía (azul) abajo, con el líquido que se mueve y late cuando te queda poca vida, y la barra de experiencia en el panel de piedra.',
       '⏸️ Menú de pausa (☰ o Esc): tu héroe gira despacio sobre un círculo de runas y al lado tienes todas las opciones. Si juegas solo, la mazmorra se para de verdad; en grupo sigue corriendo.',
