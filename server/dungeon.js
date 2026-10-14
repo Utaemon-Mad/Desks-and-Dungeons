@@ -100,6 +100,8 @@ class Instance {
       this.groups.push(group);
       this.spawnGroup(group, now);
     }
+    this.quest = null; this.gateSet = null;
+    this.questInit(); // portón de la sala del jefe y su objetivo (server/quests.js)
   }
 
   get size() { return this.players.size; }
@@ -138,7 +140,7 @@ class Instance {
       if (e2 >= dy) { err += dy; x0 += sx; }
       if (e2 <= dx) { err += dx; y0 += sy; }
       if (x0 === b.x && y0 === b.y) break;
-      if (OPAQUE.has(this.tile(x0, y0))) return false;
+      if (OPAQUE.has(this.tile(x0, y0)) || (this.gateSet && this.gateSet.has(y0 * this.w + x0))) return false;
     }
     return true;
   }
@@ -555,7 +557,7 @@ class Instance {
     const p = this.players.get(userId); if (p && p.downed) return; // tumbado: espera a que lo reanimen
     if (!p || !Number.isInteger(x) || !Number.isInteger(y)) return;
     if (this.enc && !this.myTurn(p)) return;
-    p.kdir = null; p.target = null; p.pending = null; p.talkTo = null; p.fishing = null; p.gatherTo = null;
+    p.kdir = null; p.target = null; p.pending = null; p.talkTo = null; p.fishing = null; p.gatherTo = null; p.useTarget = null;
     p.goal = { x, y };
     p.path = this.path(p, p.goal, (a, b) => this.freeForPlayer(a, b));
     // por turnos: hasta donde llegue el movimiento que le queda
@@ -656,6 +658,7 @@ class Instance {
       }
     }
     if (this.kind === 'arena') this.syncProxies(now);
+    if (this.quest) this.questTick(now);
     for (const p of [...this.players.values()]) this.tickPlayer(p, now, dt);
     this.tickDoors();
     const pl = [...this.players.values()];
@@ -846,6 +849,7 @@ class Instance {
       if (cave) { this.players.delete(p.user.id); this.event({ e: 'leave', id: p.user.id }); return this.hooks.portal(p.user, cave, { x: p.x, y: p.y + 1 }); }
     }
     for (const l of [...this.loot.values()]) if (l.x === p.x && l.y === p.y) this.pickUp(p, l);
+    if (this.quest) this.questOnEnter(p);
     for (const h of this.herbs.values()) if (h.x === p.x && h.y === p.y && h.readyAt <= this.clock()) this.takeHerb(p, h);
     // en el Descenso el portal lleva al piso siguiente al pisarlo; en las mazmorras normales
     // se sale con el botón «Salir ya» o al acabar la cuenta atrás (así nadie sale sin querer)
@@ -1262,6 +1266,7 @@ class Instance {
 
   killEnemy(p, e) {
     this.enemies.delete(e.id);
+    if (this.quest) this.questOnKill(e);
     if (this.enc) setImmediate(() => { if (this.enc) this.encCheckEnd(); });
     this.stat(p, 'kills', 1);
     if (e.group) { e.group.alive.delete(e.id); if (!e.group.alive.size) e.group.respawnAt = this.clock() + RESPAWN_MS; }
@@ -1646,6 +1651,7 @@ class Instance {
       chests: [...this.chests.values()],
       loot: [...this.loot.values()].filter((l) => near(l) && (!l.owner || (viewer && l.owner === viewer.user.id))).map((l) => ({ id: l.id, x: l.x, y: l.y, gold: l.gold ? 1 : undefined, cons: l.cons, mat: l.mat, r: l.item ? l.item.rarity : undefined, slot: l.item ? l.item.slot : undefined, name: l.item ? l.item.name : undefined, it: l.item || undefined })),
       enc: this.encView(),
+      quest: this.questView(),
       portal: this.portal,
       portalLeft: this.portalEnd ? Math.max(0, this.portalEnd - now) : undefined,
       start: this.start,
@@ -1673,5 +1679,6 @@ class Instance {
 }
 
 require('./turns.js')(Instance, { rnd, cheb, roll, dirName, AGGRO, LEASH });
+require('./quests.js')(Instance, { rnd, cheb });
 
 module.exports = { Instance };

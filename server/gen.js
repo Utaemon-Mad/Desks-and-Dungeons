@@ -141,12 +141,44 @@ function generate(o) {
       }
       return dist;
     };
-    const walk = (ch) => ch === '.' || ch === '+' || ch === '^' || ch === '=';
+    const walk = (ch) => ch === '.' || ch === '+' || ch === '^' || ch === '=' || ch === 'G';
     let dist = distFrom(startPos.x, startPos.y);
     const ranked = rooms.slice(1).sort((a, b) => dist[b.cy * W + b.cx] - dist[a.cy * W + a.cx]);
     const bossRoom = ranked.slice(0, 3).sort((a, b) => b.w * b.h - a.w * a.h)[0];
     bossRoom.boss = true;
     start.start = true;
+    // ---------- Portón de la sala del jefe: en cada entrada (las casillas de fuera que llegan a la sala desde la entrada) ----------
+    const inBoss = (x, y) => x >= bossRoom.x && x < bossRoom.x + bossRoom.w && y >= bossRoom.y && y < bossRoom.y + bossRoom.h;
+    const gate = [];
+    if (o.quest !== false) {
+      const out = new Uint8Array(W * H), q = [startPos.y * W + startPos.x]; out[q[0]] = 1;
+      for (let h = 0; h < q.length; h++) {
+        const c = q[h], cx = c % W, cy = (c / W) | 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = cx + dx, ny = cy + dy, n = ny * W + nx;
+          if (out[n] || !walk(get(nx, ny)) || inBoss(nx, ny)) continue;
+          out[n] = 1; q.push(n);
+        }
+      }
+      // las casillas del borde de la sala que tocan un pasillo de fuera (así el portón no corta ningún pasillo)
+      for (let y = bossRoom.y; y < bossRoom.y + bossRoom.h; y++) for (let x = bossRoom.x; x < bossRoom.x + bossRoom.w; x++) {
+        if (!walk(get(x, y))) continue;
+        if ([[1, 0], [-1, 0], [0, 1], [0, -1]].some(([dx, dy]) => !inBoss(x + dx, y + dy) && out[(y + dy) * W + x + dx])) gate.push({ x, y });
+      }
+      // con el portón cerrado, todas las demás salas tienen que seguir al alcance (si no, sin portón)
+      const shut = new Set(gate.map((g) => g.y * W + g.x));
+      const seen2 = new Uint8Array(W * H), q2 = [startPos.y * W + startPos.x]; seen2[q2[0]] = 1;
+      for (let h = 0; h < q2.length; h++) {
+        const c = q2[h], cx = c % W, cy = (c / W) | 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const n = (cy + dy) * W + cx + dx;
+          if (seen2[n] || shut.has(n) || !walk(get(cx + dx, cy + dy))) continue;
+          seen2[n] = 1; q2.push(n);
+        }
+      }
+      if (gate.length > 10 || rooms.some((r) => !r.boss && !seen2[r.cy * W + r.cx])) gate.length = 0;
+      for (const g of gate) set(g.x, g.y, 'G');
+    }
 
     // ---------- Agua o lava y trampas ----------
     const liquid = hot ? '%' : '~';
@@ -285,7 +317,7 @@ function generate(o) {
       for (let i = 0; i < 60; i++) {
         const x = ri(r.x, r.x + r.w - 1), y = ri(r.y, r.y + r.h - 1);
         const k = key(x, y);
-        if (!walk(get(x, y)) || get(x, y) === '^' || blocked.has(k) || avoid.has(k) || !seen[k]) continue;
+        if (!walk(get(x, y)) || get(x, y) === '^' || get(x, y) === 'G' || blocked.has(k) || avoid.has(k) || !seen[k]) continue;
         return { x, y };
       }
       return null;
@@ -358,6 +390,37 @@ function generate(o) {
       }
     }
 
+    // ---------- Objetivo para abrir el portón: tres llaves, tres palancas u oleadas en la sala de antes del jefe ----------
+    let quest = null;
+    if (gate.length) {
+      const type = o.questType || pickR(['keys', 'levers', 'waves']);
+      const order = rooms.filter((r) => !r.start && !r.boss && seen[key(r.cx, r.cy)]).sort((a, b) => dist[a.cy * W + a.cx] - dist[b.cy * W + b.cx]);
+      if (type === 'waves') {
+        // la sala grande más cercana al jefe: allí se aguanta mientras el portón se abre
+        const r = order.slice(-3).sort((a, b) => b.w * b.h - a.w * a.h)[0];
+        if (r) quest = { type, room: { x: r.x, y: r.y, w: r.w, h: r.h }, waves: 3 + (level >= 15 ? 1 : 0) };
+      } else {
+        const spots = [];
+        const avoid = new Set([...taken, ...used, ...chests.map((c) => key(c.x, c.y)), ...potions.map((c) => key(c.x, c.y))]);
+        for (const f of [0.35, 0.65, 1]) {
+          const r = order[Math.min(order.length - 1, Math.round(f * (order.length - 1)))];
+          if (!r || spots.some((s) => s.r === r)) continue;
+          for (let i = 0; i < 40; i++) {
+            const p = freeCell(r, avoid);
+            if (!p || nearDoor(p.x, p.y)) continue;
+            // las palancas tapan su casilla: sólo donde no cortan el paso
+            if (type === 'levers') { const before = reach(); blocked.add(key(p.x, p.y)); const after = reach(); if (allWalk().some((k) => before[k] && !after[k])) { blocked.delete(key(p.x, p.y)); continue; } }
+            avoid.add(key(p.x, p.y)); spots.push({ x: p.x, y: p.y, r });
+            break;
+          }
+        }
+        if (spots.length >= 2) quest = { type, spots: spots.map(({ x, y }) => ({ x, y })) };
+      }
+    }
+    // sin objetivo posible, el portón no hace falta
+    if (!quest) for (const g of gate) set(g.x, g.y, '.');
+    else quest.gate = gate;
+
     // ---------- Mercader errante: a veces espera en una sala tranquila con género de su tierra ----------
     let merchant = null;
     if (rand() < 0.3) {
@@ -371,7 +434,7 @@ function generate(o) {
     const name = `${pickR(T.names)} ${pickR(T.of)}`;
     return {
       kind: 'dungeon', theme, level, name, w: W, h: H, tiles: t.join(''),
-      start: startPos, boss: { x: bossRoom.cx, y: bossRoom.cy }, props, spawns, chests, potions, merchant,
+      start: startPos, boss: { x: bossRoom.cx, y: bossRoom.cy }, props, spawns, chests, potions, merchant, quest,
     };
   }
 }

@@ -252,6 +252,13 @@
       g.font = '600 12px "Pixelify Sans", sans-serif'; g.textAlign = 'center';
       for (const w of map.waystones || []) { if (!DD.me || !DD.me.waystones.includes(w.id)) continue; g.fillStyle = '#7ad0ff'; g.fillRect(x0 + w.x * k - 3, y0 + w.y * k - 3, 6, 6); g.fillStyle = '#fff'; g.fillText(w.name, x0 + w.x * k, y0 + w.y * k - 10); }
     }
+    // objetivo: llaves y palancas ya vistas (doradas / rojas), el portón (gris, verde al abrirse) y la sala de las oleadas
+    const q = game.quest;
+    if (q && map.kind === 'dungeon') {
+      for (const s of q.spots || []) { if (!game.seen[s.y * map.w + s.x] || (q.type === 'keys' && s.done)) continue; g.fillStyle = q.type === 'keys' ? '#ffd23f' : s.done ? '#5aff7a' : '#ff5a3a'; g.fillRect(x0 + s.x * k - 2.5, y0 + s.y * k - 2.5, 5, 5); }
+      for (const gt of q.gate) if (game.seen[gt.y * map.w + gt.x]) { g.fillStyle = q.open ? '#5aff7a' : '#c8c0b0'; g.fillRect(x0 + gt.x * k - 1.5, y0 + gt.y * k - 1.5, 3, 3); }
+      if (q.room && !q.open && game.seen[q.room.y * map.w + q.room.x]) { g.strokeStyle = 'rgba(255,120,60,.8)'; g.lineWidth = 1; g.strokeRect(x0 + q.room.x * k, y0 + q.room.y * k, q.room.w * k, q.room.h * k); }
+    }
     for (const e of game.ents.values()) {
       if (e.kind === 'enemy' && !game.vis[e.y * map.w + e.x]) continue;
       if (e.kind === 'npc') { g.fillStyle = '#9fe0ff'; g.fillRect(x0 + e.x * k - 1.5, y0 + e.y * k - 1.5, 3, 3); continue; }

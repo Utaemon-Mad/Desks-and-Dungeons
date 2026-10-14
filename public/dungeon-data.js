@@ -9,6 +9,7 @@
     '^': { name: 'Pinchos', walk: true, trap: true },
     '~': { name: 'Agua', walk: false },
     '%': { name: 'Lava', walk: false },
+    'G': { name: 'Portón', walk: true }, // la sala del jefe: el servidor lo cierra hasta cumplir el objetivo
     // mundo abierto
     ',': { name: 'Hierba', walk: true },
     ';': { name: 'Hierba alta', walk: true },

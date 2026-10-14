@@ -59,7 +59,7 @@
     // al llegar junto al muro agrietado que se pinchó, se rompe
     const pb = game.pendingBreak, meP = pb && game.ents.get(DD.myId);
     if (meP && Math.max(Math.abs(meP.x - pb.x), Math.abs(meP.y - pb.y)) <= 1) { DD.net.send({ t: 'dbreak', x: pb.x, y: pb.y }); game.pendingBreak = null; }
-    game.chests = m.chests; game.loot = m.loot; game.portal = m.portal;
+    game.chests = m.chests; game.loot = m.loot; game.portal = m.portal; game.quest = m.quest || null;
     if (m.portalLeft && !game.portalEnd) game.portalEnd = performance.now() + m.portalLeft; game.start = m.start; game.herbs = m.herbs || [];
     // jefe a la vista (en la arena, el rival)
     const boss = game.map && game.map.kind === 'arena'
@@ -211,6 +211,7 @@
       }
       case 'special': log(`${ev.name}: ${{ slam: '¡golpe sísmico!', nova: '¡nova de muerte!', breath: '¡aliento de fuego!', volley: '¡andanada!', summon: 'llama a sus esbirros', charge: '¡embiste!' }[ev.s] || ''}`, 'hurt'); break;
       case 'summon': for (let i = 0; i < 10; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7cff6a', true); break;
+      case 'quest': if (D.questEvent) D.questEvent(ev); break;
       case 'portal': if (ev.left) game.portalEnd = performance.now() + ev.left; log(`¡${ev.name} ha caído!${ev.left ? ' Tenéis un minuto para recoger el botín.' : ' Se abre el portal al piso siguiente.'}`, 'good big'); if (!ev.left) DD.toast('🏆 ¡Jefe derrotado! Cruza el portal para bajar.'); DD.sfx('portal'); for (let i = 0; i < 30; i++) spark(ev.x + 0.5, ev.y + 0.5, '#7ad0ff', true); break;
       case 'combo': {
         const t = game.ents.get(ev.id);
@@ -444,6 +445,9 @@
     const herb = !repeat && herbUnder(cx, cy);
     if (herb) { DD.net.send({ t: 'dgather', id: herb.id }); game.marker = { x: herb.x, y: herb.y, at: performance.now() }; return 'gather'; }
     if (enemy && repeat) return;
+    // palanca del portón: se va a su lado y se acciona (server/quests.js)
+    const lever = !repeat && D.leverAt && D.leverAt(x, y);
+    if (lever) { DD.net.send({ t: 'dlever', x: lever.x, y: lever.y }); game.marker = { x: lever.x, y: lever.y, at: performance.now() }; return 'use'; }
     // muro agrietado (sala secreta): se va a su lado y se rompe al llegar
     const sec = !repeat && secretAt(x, y);
     if (sec) { game.pendingBreak = sec; DD.net.send({ t: 'dgo', x: sec.x, y: sec.y + 1 }); game.marker = { x: sec.x, y: sec.y + 1, at: performance.now() }; return 'use'; }
@@ -613,6 +617,7 @@
   function clearScene() {
     if (built) { drop(built.group, true); built = null; }
     if (D.clearDice) D.clearDice();
+    if (D.clearQuest) D.clearQuest();
     for (const d of doorObjs) drop(d.obj, true);
     doorObjs.length = 0;
     if (fog) { drop(fog.mesh, true); fog = null; }
@@ -1286,6 +1291,7 @@
     const isFire = (c) => /^#ff[5-b]/i.test(c || '');
     const L = [];
     for (const l of built.lights) L.push({ ...l, intensity: l.intensity * flick(l.x), fire: isFire(l.color) });
+    if (D.questLights) for (const l of D.questLights()) L.push(l);
     for (const p of built.props || []) {
       if (!p.light || !p.o.visible) continue;
       const fire = isFire(p.light.color), sd = p.light.x * 3 + p.light.z;
@@ -1343,6 +1349,7 @@
     if (D.updateDice) D.updateDice(now);
     if (D.updateBoss) D.updateBoss(now);
     if (D.updateLore) D.updateLore(now);
+    if (D.updateQuest) D.updateQuest(now, Math.min(0.1, dt || 0.016));
     D.drawOverlay(now);
     D.drawPings(now);
     if (game.showMap) D.drawMinimap();
@@ -1358,7 +1365,7 @@
 
   // Lo que comparten los archivos de public/dungeon/ (se cargan después de este);
   // las variables que cambian de valor se leen como D.nombre
-  const D = DD.dg = { $, WATER_T, camCenter, camRotate, entAt, log, spark, ring, puff, g, game, herbUnder, models, monName, onEvent, serverNow, viewEl, who,
+  const D = DD.dg = { $, WATER_T, camCenter, camRotate, entAt, log, spark, ring, puff, banner, float, g, game, herbUnder, models, monName, onEvent, serverNow, viewEl, who,
     get stage() { return stage; }, get seenCount() { return seenCount; } };
 
   // ======================================================================

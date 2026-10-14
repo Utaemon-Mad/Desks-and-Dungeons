@@ -7,6 +7,12 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 16, date: 'Octubre', title: 'Ocho mazmorras nuevas, misiones y un HUD de leyenda', items: [
+      '❤️ HUD nuevo al estilo Diablo: orbes de vida (rojo) y energía (azul) abajo, con el líquido que se mueve y late cuando te queda poca vida, y la barra de experiencia en el panel de piedra.',
+      '⏸️ Menú de pausa (☰ o Esc): tu héroe gira despacio sobre un círculo de runas y al lado tienes todas las opciones. Si juegas solo, la mazmorra se para de verdad; en grupo sigue corriendo.',
+      '🗺️ Ocho mazmorras nuevas: Catedral profanada (vidrieras, bancos y alfombra hasta el altar), Tumba del faraón (jeroglíficos, urnas, chacales y sarcófagos de oro), Cavernas profundas, Camino del bosque, Calles de la ciudad bajo la lluvia, Campo de batalla lleno de caídos, Ciudad en llamas y el Infierno, con ríos de lava. Cada una con sus monstruos, su jefe y su historia.',
+      '🗝️ Misiones dentro de las mazmorras: un portón cierra la sala del jefe. Para abrirlo, encontrad las tres llaves, accionad las tres palancas (cada una despierta una emboscada) o aguantad las oleadas en la sala del portón mientras se abre. Al abrirlo, experiencia para todos.',
+    ] },
     { v: 15, date: 'Octubre', title: 'Dados, jefes, historias y una taberna viva', items: [
       '🎲 En el combate por turnos cada ataque tira un d20 de verdad: vuela por la sala, rueda y enseña la tirada, el bonificador y la CA a batir. Con un 20 natural, crítico con cámara lenta y destello; con un 1, pifia.',
       '👑 Los jefes entran a lo grande: franjas de cine, la cámara va hacia ellos y su cartel con nombre y frase. A media vida montan en cólera (segunda fase): pegan más fuerte y más rápido, y algunos llaman refuerzos.',

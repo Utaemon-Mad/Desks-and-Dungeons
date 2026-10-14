@@ -332,6 +332,52 @@ async function instanceTests() {
   assert.ok(jefe.phase2 && jefe.m.atk < atk0 && jefe.m.dmg[1] > dmg0, 'el jefe entra en su segunda fase');
   assert.ok(binst.events.some((e) => e.e === 'phase' && e.id === jefe.id), 'avisa de la furia');
   assert.ok(RULES.BOSS_LINES.rufo && RULES.BOSS_LINES.rufo.intro && RULES.BOSS_LINES.rufo.rage, 'el jefe tiene sus frases');
+  // objetivos de la mazmorra: el portón de la sala del jefe se abre con tres llaves, tres palancas o aguantando las oleadas
+  const qdef = (type, seed) => { for (let i = 0; i < 20; i++) { const d = GEN.generate({ theme: 'cripta', level: 3, seed: seed + i, questType: type }); if (d.quest && d.quest.type === type) return { ...d, id: 'q-' + type }; } return null; };
+  const quser = (id) => ({ id, name: 'Q' + id, look: {}, profile: { ...profile } });
+  {
+    const d = qdef('keys', 'llave');
+    assert.ok(d && d.quest.gate.length && d.quest.spots.length >= 2, 'mazmorra con llaves y portón');
+    const qi = new Instance(d, { ...hooks, send: () => {}, kill: () => {} });
+    qi.join(quser('k1'));
+    const qp = qi.players.get('k1'), g = d.quest.gate[0];
+    assert.ok(!qi.walkTile(g.x, g.y), 'el portón cerrado no se cruza');
+    for (const s of d.quest.spots) { qp.x = s.x; qp.y = s.y; qi.onEnter(qp); }
+    assert.ok(qi.quest.open && qi.walkTile(g.x, g.y), 'con todas las llaves, el portón se abre');
+    assert.ok(qi.events.some((e) => e.e === 'quest' && e.kind === 'gate'), 'avisa de que se abre');
+  }
+  {
+    const d = qdef('levers', 'palanca');
+    assert.ok(d, 'mazmorra con palancas');
+    const qi = new Instance(d, { ...hooks, send: () => {}, kill: () => {} });
+    qi.join(quser('l1'));
+    const qp = qi.players.get('l1'), s0 = d.quest.spots[0];
+    assert.ok(!qi.walkTile(s0.x, s0.y), 'la palanca ocupa su casilla');
+    const n0 = qi.enemies.size;
+    const adj = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]].map(([dx, dy]) => ({ x: s0.x + dx, y: s0.y + dy })).find((c) => qi.walkTile(c.x, c.y));
+    qp.x = adj.x; qp.y = adj.y;
+    qi.useAt('l1', s0.x, s0.y);
+    assert.ok(qi.quest.spots[0].done && qi.quest.got === 1, 'se acciona la palanca de al lado');
+    assert.ok(qi.enemies.size >= n0 && qi.events.some((e) => e.e === 'quest' && e.kind === 'lever'), 'y despierta una emboscada');
+    for (const s of d.quest.spots.slice(1)) qi.pullLever(qp, qi.quest.spots.find((q) => q.x === s.x && q.y === s.y));
+    assert.ok(qi.quest.open, 'con todas las palancas, el portón se abre');
+  }
+  {
+    const d = qdef('waves', 'oleada');
+    assert.ok(d && d.quest.room, 'mazmorra con oleadas');
+    const qi = new Instance(d, { ...hooks, send: () => {}, kill: () => {} });
+    qi.join(quser('w1'));
+    const qp = qi.players.get('w1'), r = d.quest.room;
+    qp.x = r.x + (r.w >> 1); qp.y = r.y + (r.h >> 1);
+    qi.onEnter(qp);
+    assert.ok(qi.quest.wave === 1 && qi.quest.alive.size >= 3, 'al entrar en la sala llega la primera oleada');
+    for (let w = 0; w < 10 && !qi.quest.open; w++) {
+      for (const id of [...qi.quest.alive]) { const e = qi.enemies.get(id); if (e) qi.killEnemy(qp, e); }
+      if (qi.quest.nextWaveAt) qi.questTick(qi.quest.nextWaveAt + 1);
+    }
+    assert.ok(qi.quest.open && qi.quest.wave === d.quest.waves, 'tras la última oleada, el portón se abre');
+  }
+  assert.ok(!GEN.generate({ theme: 'cripta', level: 3, seed: 'x', quest: false }).quest, 'el Descenso y el Asalto van sin portón');
   // pausa del menú (solo): el reloj de juego se para y al volver sigue donde estaba
   binst.setPaused(true);
   const c0 = binst.clock();
@@ -965,7 +1011,7 @@ async function instanceTests() {
   const rstart = await rcl.next((m) => m.t === 'dstart');
   assert.ok(/Asalto semanal/.test(rstart.dungeon.name), 'entra en el asalto');
   const rinst = rooms.get(MAP.SERVERS[0].id).instances.get(rstart.dungeon.id);
-  const sameMap = GEN.generate({ theme: rinfo.theme, level: rinst.level, seed: 'asalto-' + rinfo.week });
+  const sameMap = GEN.generate({ theme: rinfo.theme, level: rinst.level, seed: 'asalto-' + rinfo.week, quest: false });
   assert.strictEqual(sameMap.tiles, rinst.def.tiles, 'el mapa es el de la semana (igual para todos)');
   const rbossE = [...rinst.enemies.values()].find((e) => e.m.boss);
   assert.ok(rbossE.maxHp > RULES.monsterAt(rbossE.k, rinst.level).hp * 1.5, 'el jefe tiene más vida que en una mazmorra normal');

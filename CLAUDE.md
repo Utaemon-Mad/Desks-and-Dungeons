@@ -19,7 +19,8 @@ server/web.js           archivos estáticos (gzip, ETag), panel /admin y errores
 server/accounts.js      copias de seguridad firmadas y usuario/contraseña
 server/social.js        hazañas, mejoras de la taberna, mercado, temporadas, recompensa diaria y Asalto semanal
 server/dungeon.js       instancia de mazmorra/mundo/arena: combate, IA, botín, mascotas, puertas
-server/turns.js         combate por turnos estilo D&D 5e (se instala en Instance): reloj de juego, iniciativa, turnos, reacciones
+server/turns.js         combate por turnos estilo D&D 5e (se instala en Instance): reloj de juego, iniciativa, turnos, reacciones; pausa (setPaused)
+server/quests.js        objetivos de mazmorra (se instala en Instance): portón de la sala del jefe, llaves, palancas y oleadas
 server/gen.js           generador de mazmorras (salas, puertas, decorado, antorchas)
 server/world.js         mundo abierto y NPC
 server/store.js         guardado en data/*.json
@@ -40,7 +41,9 @@ public/models-creatures.js enemigos, mascotas y monturas (bloques y modelos de v
 public/models-props.js  muebles de la taberna, decorado de mazmorra, plantas, caña y jarra
 public/armor3d.js       dibuja las armaduras en el personaje (piezas pegadas a los huesos)
 public/weapons3d.js     dibuja armas y escudos (un modelo por tipo y nivel, colores por variante)
-public/view3d.js        render, mapa 3D, partículas, clima, retratos y dibujos de objetos
+public/view3d.js        render, mapa 3D, partículas, clima, retratos, héroe que gira (turntable) y dibujos de objetos
+public/places.js        temas nuevos (catedral, tumba, caverna, sendero, ciudad, batalla, incendio, infierno): colores, suelos, alrededores (VIEW3D.PLACES) y su decorado
+public/pause.js         menú de pausa: héroe girando y todas las opciones (DD.pause)
 public/game.js          núcleo de la taberna: estado, red, interfaz (crónica, héroes, avisos), puente DD.core
 public/tavern/start.js  pantalla de inicio, casillas, servidores y editor de personaje
 public/tavern/editor.js editor de muebles de la taberna (dueño)
@@ -55,6 +58,7 @@ public/dungeon/menu.js  menú de mazmorras (tema, nivel, lista de partidas)
 public/dungeon/party.js vida del grupo, volver con el grupo, HUD y barra de habilidades
 public/dungeon/overlay.js marcas, nombres, bocadillos y minimapa dibujados encima; joystick táctil
 public/dungeon/turns.js barra de iniciativa, panel de tu turno, casillas alcanzables y avisos del combate por turnos
+public/dungeon/quest.js portón, llaves, palancas, cartel del objetivo (#dquest) y avisos de las misiones de mazmorra
 public/dungeon/dice.js  d20 en 3D de cada tirada del combate por turnos (`ev.roll` = { f, b, ca })
 public/dungeon/boss.js  entrada del jefe (franjas de cine, cartel, cámara `bossCam`) y su segunda fase (`bossPhase`)
 public/dungeon/lore.js  notas y murales de la mazmorra (`#lorewin`) y el final al matar al jefe
@@ -69,7 +73,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 
 ## Dónde tocar para… (busca el nombre con grep, no leas el archivo entero)
 - Enemigo nuevo o cambiar sus números: fila en `MONSTERS` (rules/monsters-data.js); su modelo en `ENEMY_GL` + `monsterFeatures` (models-creatures.js).
-- Mazmorra/tema nuevo: `THEMES` (monsters-data.js) + colores en view3d.js (`volcan`/`abismo` como ejemplo) + decorado en server/gen.js. El bosque (`bosque`) es especial: sin puertas ni antorchas (`forest` en gen.js), árboles en vez de muros (`buildForestGL`), suelo pintado (`forestTile`) y luciérnagas (`fireflies`).
+- Mazmorra/tema nuevo: `THEMES` (monsters-data.js, con sus rasgos: `out` exterior —forest, cave, city, burning, field, hell—, `hot`, `road`, `path`, `weather`) + `LORE` y `BOSS_LINES` + colores, suelo y alrededores en places.js (`PLACES[tema]`: tile, build, tint, floors, grade) + decorado en server/gen.js (`THEME_PROPS`, `PROPS`). El bosque (`bosque`) es especial: sin puertas ni antorchas (`forest` en gen.js), árboles en vez de muros (`buildForestGL`), suelo pintado (`forestTile`) y luciérnagas (`fireflies`).
 - Detalle de las mazmorras (`buildDungeonGL`): tono por losa y por piedra (`tone`), columnas de esquina y telarañas (`extras`, enseñadas al explorar), muros con estanterías y ventanales.
 - Cuánto botín cae: `DROP` y `legChance` en `rollLoot` (engine.js). Poderes legendarios: `LEGENDARY` (engine.js) y su efecto en server/dungeon.js (`p.d.leg`).
 - Clases y habilidades: `CLASSES`, `ABILITIES` (engine.js); aspecto y rasgos del editor: `FEATURES`, `HAIR_LIST`, `HUMAN_SKINS` (map.js) y `faceFeatures` (models.js). Talentos: rules/talents-data.js.
@@ -89,6 +93,8 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Dados del combate por turnos: `showRoll`, `foeCA`, `heroCA` (server/dungeon.js) mandan `roll` en los eventos `hit`/`miss`; el cliente los tira en `dungeon/dice.js`. Segunda fase de jefe: `bossPhase` (al 50 % de vida, evento `phase`); frases en `BOSS_LINES` (monsters-data.js).
 - Historia de las mazmorras: `LORE` por tema (monsters-data.js: título, 4 notas, final); en server/gen.js se reparten como `note` (y `mural` en la pared de la sala) por distancia a la entrada.
 - Taberna viva: `BARD`, `PATRONS`, `ARGUES` (tavern/life.js); el pulso avisa al servidor con `tavern:pulso` (play.js) y la chimenea crepita con `C.tavernFx.crackle`.
+- Misiones de mazmorra: gen.js pone el portón ('G') en el borde de la sala del jefe y `quest` = { type: keys|levers|waves, gate, spots|room } (sin portón con `quest: false`, como el Descenso y el Asalto); server/quests.js lo cierra con `blocked` y `gateSet` (tapa la vista en `los`), y lo abre `openGate`. Palancas: orden `dlever`. Cliente: public/dungeon/quest.js.
+- HUD: orbes `#orbs` (index.html, estilos al final de extras.css) que rellena `renderHud` (ui.js). Pausa: `DD.pause` (pause.js), orden `dpause` (play.js) → `setPaused` (turns.js).
 - Sonidos y música: `FX` y `TRACKS` (audio.js). Iconos: `P` (icons.js). Novedades: `NEWS` (admin.js).
 - Ventanas: ui.js (ficha, inventario, talentos, tiendas, guía) y ui2.js (pueblo, forja, fama, ajustes, asalto, taberna, mercado).
 
