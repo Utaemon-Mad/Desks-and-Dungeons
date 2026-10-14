@@ -318,6 +318,12 @@ async function instanceTests() {
   assert.ok(jefe.phase2 && jefe.m.atk < atk0 && jefe.m.dmg[1] > dmg0, 'el jefe entra en su segunda fase');
   assert.ok(binst.events.some((e) => e.e === 'phase' && e.id === jefe.id), 'avisa de la furia');
   assert.ok(RULES.BOSS_LINES.rufo && RULES.BOSS_LINES.rufo.intro && RULES.BOSS_LINES.rufo.rage, 'el jefe tiene sus frases');
+  // pausa del menú (solo): el reloj de juego se para y al volver sigue donde estaba
+  binst.setPaused(true);
+  const c0 = binst.clock();
+  binst.pausedAt -= 5000; // como si la pausa hubiera empezado 5 s antes: esos 5 s no cuentan
+  binst.setPaused(false);
+  assert.ok(binst.clock() <= c0 - 4000 && !binst.pausedAt, 'la pausa congela el reloj de la mazmorra');
   for (const [th, T] of Object.entries(RULES.THEMES)) { const M = RULES.MONSTERS[T.boss]; assert.ok(RULES.BOSS_LINES[T.boss], 'frases de ' + th); assert.ok(M && M.boss, 'jefe de ' + th); assert.ok(RULES.LORE[th] && RULES.LORE[th].notes.length >= 3 && RULES.LORE[th].end, 'historia de ' + th); }
 
   // En grupo: botín para cada uno, reanimar al caído y resumen al acabar

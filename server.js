@@ -484,7 +484,7 @@ setInterval(() => {
   const now = Date.now();
   for (const room of rooms.values()) {
     for (const [id, inst] of room.instances) {
-      if (inst.size) inst.tick(now);
+      if (inst.size) { if (!inst.pausedAt) inst.tick(now); }
       else if (inst.emptySince && now - inst.emptySince > EMPTY_INSTANCE_MS) room.instances.delete(id);
     }
   }

@@ -205,6 +205,7 @@ class Instance {
 
   // ---------- Héroes ----------
   join(user, at) {
+    if (this.setPaused) this.setPaused(false); // llega alguien: se acabó la pausa
     const d = this.hooks.derive(user);
     const c = user.combat || (user.combat = { hp: d.hp, en: d.en, cds: {} });
     c.hp = Math.min(c.hp, d.hp); c.en = Math.min(c.en, d.en);
@@ -227,6 +228,7 @@ class Instance {
   }
 
   leave(userId) {
+    if (this.setPaused) this.setPaused(false);
     this.pets.delete(userId);
     this.enemies.delete('pv:' + userId);
     if (!this.players.delete(userId)) return;

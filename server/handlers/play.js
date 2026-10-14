@@ -253,6 +253,16 @@ module.exports = function (ctx) {
     },
     'dice:get'(cx) { send(cx.ws, { t: 'dice:state', round: diceView(cx.room) }); },
 
+    // ---------- Pausa del menú: sólo se para el juego si estás solo en la partida ----------
+    'dpause'(cx, msg) {
+      const i = cx.inst();
+      if (!i || !i.setPaused) return;
+      const solo = i.size === 1 && i.kind !== 'arena';
+      if (msg.on && !solo) return send(cx.ws, { t: 'dpaused', on: false, group: true });
+      i.setPaused(!!msg.on);
+      send(cx.ws, { t: 'dpaused', on: !!msg.on });
+    },
+
     // ---------- Pulso con Brom el Herrero (minijuego del navegador; aquí sólo se anuncia, sin premio) ----------
     'tavern:pulso'(cx, msg) {
       const { user, room } = cx;

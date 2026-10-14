@@ -30,6 +30,18 @@ module.exports = function installTurns(Instance, U) {
       return this.clock();
     },
 
+    // ---------- Pausa (sólo quien juega solo): el reloj de juego y los plazos de turno se paran ----------
+    setPaused(on) {
+      if (!!on === !!this.pausedAt) return;
+      if (on) { this.pausedAt = realNow(); return; }
+      const d = realNow() - this.pausedAt;
+      this.pausedAt = 0;
+      this.lag = (this.lag || 0) + d;
+      const E = this.enc;
+      if (E) for (const k of ['deadline', 'gapUntil', 'endAt', 'idleAt']) if (E[k]) E[k] += d;
+      this.lastReal = realNow();
+    },
+
     // ---------- Daño por turnos ----------
     // Un turno son unos 6 s de pelea (como en D&D): un ataque hace lo que harían los golpes de 6 s en tiempo real,
     // así las armas rápidas siguen valiendo lo mismo que las lentas. Las habilidades pesan algo menos (ya multiplican),

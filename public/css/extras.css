@@ -279,3 +279,111 @@ body.at-mesa #heroes { display: none; }
 .pulso-zone { position: absolute; top: 0; bottom: 0; background: #4caf50aa; border-radius: 6px; }
 .pulso-needle { position: absolute; top: -5px; bottom: -5px; width: 4px; margin-left: -2px; background: #fff; box-shadow: 0 0 6px #fff; border-radius: 2px; }
 .pulso-msg { min-height: 1.4em; font-weight: bold; color: #f0d890; }
+
+/* ---------- HUD estilo Diablo: orbes de vida y energía y panel de piedra abajo ---------- */
+:root { --orb: 118px; --bar-side: 150px; }
+#orbs { position: absolute; inset: auto 0 0 0; height: 0; z-index: 4; pointer-events: none; zoom: var(--ui-zoom, 1); }
+.orb { position: absolute; bottom: 14px; width: var(--orb); height: var(--orb); pointer-events: auto; }
+.orb.hp { left: 14px; } .orb.en { right: 14px; }
+/* marco: aro de bronce con remaches y un fondo de piedra detrás */
+.orb::before { content: ""; position: absolute; inset: -9px; border-radius: 50%;
+  background: radial-gradient(circle, transparent 58%, #1a0f08 59%, #6b4826 62%, #d6a85a 66%, #8c6038 70%, #3a2414 74%, #120904 76%, transparent 77%),
+    conic-gradient(from 0deg, #2a1c12, #4a3424, #2a1c12, #4a3424, #2a1c12);
+  box-shadow: 0 6px 18px rgba(0,0,0,.8); }
+.orb::after { content: ""; position: absolute; inset: -9px; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle at 50% 3%, #f2d37a 0 3px, transparent 4px), radial-gradient(circle at 50% 97%, #f2d37a 0 3px, transparent 4px),
+    radial-gradient(circle at 3% 50%, #f2d37a 0 3px, transparent 4px), radial-gradient(circle at 97% 50%, #f2d37a 0 3px, transparent 4px); }
+.orb-glass { position: absolute; inset: 0; border-radius: 50%; overflow: hidden; background: radial-gradient(circle at 50% 60%, #1a0a08, #050202); box-shadow: inset 0 0 18px #000; }
+.orb.en .orb-glass { background: radial-gradient(circle at 50% 60%, #080a1a, #020205); }
+.orb-fill { position: absolute; left: 0; right: 0; bottom: 0; height: 100%; transition: height .35s ease-out; overflow: visible; }
+.orb.hp .orb-fill { background: radial-gradient(circle at 40% 70%, #ff4a3a, #b0140c 45%, #4a0404 100%); box-shadow: inset 0 0 22px #2a0000; }
+.orb.en .orb-fill { background: radial-gradient(circle at 40% 70%, #5a9aff, #1638b8 45%, #050a4a 100%); box-shadow: inset 0 0 22px #00002a; }
+/* la superficie del líquido ondula */
+.orb-wave { position: absolute; left: -50%; top: -10px; width: 200%; height: 20px; border-radius: 45%; animation: orbWave 3.4s linear infinite; opacity: .85; }
+.orb.hp .orb-wave { background: radial-gradient(ellipse at 50% 70%, #ff6a50, transparent 70%); }
+.orb.en .orb-wave { background: radial-gradient(ellipse at 50% 70%, #7ab4ff, transparent 70%); animation-duration: 4.2s; }
+@keyframes orbWave { from { transform: translateX(-12%) rotate(0deg); } 50% { transform: translateX(12%) rotate(2deg); } to { transform: translateX(-12%) rotate(0deg); } }
+.orb-shine { position: absolute; left: 18%; top: 9%; width: 46%; height: 30%; border-radius: 50%; background: radial-gradient(ellipse at 40% 40%, rgba(255,255,255,.55), rgba(255,255,255,0) 70%); pointer-events: none; }
+.orb-t { position: absolute; left: 0; right: 0; top: 50%; transform: translateY(-50%); text-align: center; font: 700 16px var(--mono, monospace); color: #fff; text-shadow: 0 2px 0 #000, 0 0 6px #000; pointer-events: none; }
+.orb-l { position: absolute; left: 50%; bottom: -4px; transform: translateX(-50%); padding: 0 6px; font: 700 9px "Pixelify Sans", sans-serif; letter-spacing: 1px; color: #f2d37a; background: #1a0f08; border: 1px solid #8c6038; border-radius: 3px; }
+.orb.low .orb-glass { animation: orbLow .9s ease-in-out infinite; }
+@keyframes orbLow { 50% { box-shadow: inset 0 0 18px #000, 0 0 22px 4px rgba(255,40,20,.8); } }
+
+/* panel de piedra entre los dos orbes */
+#bar { left: var(--bar-side); right: var(--bar-side); height: 78px; padding-top: 10px; border-radius: 10px 10px 0 0;
+  background: linear-gradient(#3a2c20, #1e150e 40%, #120c08), repeating-linear-gradient(90deg, rgba(0,0,0,.18) 0 2px, transparent 2px 46px);
+  background-blend-mode: multiply; border: 3px solid #120904; border-bottom: 0;
+  box-shadow: inset 0 2px 0 #8c6038, inset 0 3px 0 #d6a85a55, 0 -4px 18px rgba(0,0,0,.7); }
+#bar::before, #bar::after { content: ""; position: absolute; bottom: 0; width: 36px; height: 60px; background: linear-gradient(#3a2c20, #120c08); border: 3px solid #120904; border-bottom: 0; }
+#bar::before { left: -30px; border-radius: 0 0 0 0; clip-path: polygon(100% 0, 100% 100%, 0 100%, 40% 30%); }
+#bar::after { right: -30px; clip-path: polygon(0 0, 60% 30%, 100% 100%, 0 100%); }
+#xpbar { position: absolute; left: 18px; right: 18px; top: 4px; height: 7px; border-width: 1px; border-radius: 4px; box-shadow: 0 0 6px rgba(240,192,96,.25); }
+#log { bottom: 150px; }
+body.in-dungeon .dactions { bottom: 84px; }
+#dextra { bottom: 160px; }
+#joy { bottom: 160px; }
+/* el retrato de arriba ya no lleva vida y energía: están en los orbes */
+#myhero .meter.hp, #myhero .meter.en { display: none; }
+#myhero { width: auto; min-width: 190px; max-width: 290px; }
+body.at-title #orbs { visibility: hidden; }
+@media (max-width: 820px) {
+  :root { --orb: 78px; --bar-side: 100px; }
+  .orb { bottom: 10px; }
+  .orb-t { font-size: 12px; } .orb-l { font-size: 7px; }
+  #bar { height: auto; flex-wrap: wrap; gap: 0; padding-top: 14px; }
+  #bar .tool span:not(.ico) { display: none; }
+  #bar .tool { padding: 4px 0; flex: 1 0 30px; min-width: 0; }
+  #log { bottom: 160px; }
+  #joy { bottom: 190px; }
+}
+@media (max-width: 560px) {
+  :root { --orb: 64px; --bar-side: 76px; }
+  /* en el móvil sólo lo justo: lo demás está en el menú (☰) */
+  #bar { flex-wrap: nowrap; padding: 14px 6px calc(6px + env(safe-area-inset-bottom)); }
+  #bar .tool:not([data-act="bag"]):not([data-act="menu"]) { display: none; }
+  #bar .tool { flex: 0 0 34px; }
+  #chat-form { order: 0; flex: 1 1 auto; margin: 0 4px; padding: 3px; }
+  #chat-form .btn { display: none; }
+  #chat-input { font-size: 14px; }
+  .orb.hp { left: 6px; } .orb.en { right: 6px; }
+  #bar::before, #bar::after { display: none; }
+}
+
+/* ---------- Menú de pausa: tu héroe girando a un lado, las opciones al otro ---------- */
+#pausewin { position: fixed; inset: 0; z-index: 60; display: flex; background: radial-gradient(ellipse at 30% 55%, rgba(40,22,12,.82), rgba(4,2,1,.96) 70%); animation: ovIn .2s ease-out; }
+#pausewin.hidden { display: none; }
+.pz-hero { position: relative; flex: 1 1 50%; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; padding-bottom: 28px; }
+.pz-stage { position: absolute; inset: 0; }
+.pz-stage canvas { width: 100%; height: 100%; display: block; }
+.pz-plate { position: relative; text-align: center; text-shadow: 0 3px 0 #000; }
+.pz-plate b { display: block; font: 54px "Jacquard 12", serif; color: #f2d36b; line-height: 1; text-shadow: 0 4px 0 #000, 0 0 24px rgba(255,140,40,.45); }
+.pz-plate span { font: 600 16px "Pixelify Sans", sans-serif; color: #e8dcc4; }
+.pz-stats { position: relative; display: grid; grid-template-columns: repeat(3, auto); gap: 4px 18px; margin-top: 10px; padding: 8px 14px; background: rgba(10,6,4,.6); border: 1px solid #6b4528; border-radius: 6px; font-size: 13px; }
+.pz-stats div { display: flex; justify-content: space-between; gap: 8px; }
+.pz-stats b { color: var(--gold); }
+.pz-side { position: relative; flex: 1 1 50%; min-width: 0; display: flex; flex-direction: column; gap: 8px; padding: 20px 30px 18px; overflow-y: auto;
+  background: linear-gradient(90deg, rgba(0,0,0,0), rgba(20,12,8,.85) 12%); border-left: 2px solid #3a2414; box-shadow: inset 2px 0 0 #8c603855; }
+.pz-head { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+.pz-title { font: 46px "Jacquard 12", serif; color: #f2d36b; text-shadow: 0 4px 0 #000; letter-spacing: 2px; }
+.pz-state { font: 600 14px "Pixelify Sans", sans-serif; color: #c8bca4; }
+.pz-state.ok { color: #9fe09f; } .pz-state.warn { color: #ffb070; }
+.pz-groups { display: flex; flex-direction: column; gap: 7px; }
+.pz-opt .lb { max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+.pz-group h4 { margin: 0 0 6px; font: 700 12px "Pixelify Sans", sans-serif; letter-spacing: 2px; text-transform: uppercase; color: #c8a060; border-bottom: 1px solid #4a2e1a; padding-bottom: 3px; }
+.pz-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 5px; }
+.pz-opt { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 5px 3px 4px; color: var(--parch); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 2px 0 #000;
+  background: radial-gradient(#3a2618, #1a0f08); border: 2px solid #120904; border-radius: 6px; box-shadow: inset 0 0 0 1px #6b4528; transition: transform .08s, box-shadow .12s; }
+.pz-opt .ico { font-size: 22px; filter: drop-shadow(0 2px 0 #000); }
+.pz-opt:hover, .pz-opt:focus-visible { transform: translateY(-2px); box-shadow: inset 0 0 0 1px #d6a85a, 0 0 14px rgba(240,192,96,.35); outline: none; }
+.pz-resume { margin-top: auto; align-self: stretch; font-size: 18px; }
+.pz-resume small { opacity: .7; font-size: 12px; }
+@media (max-width: 820px) {
+  #pausewin { flex-direction: column; }
+  .pz-hero { flex: 0 0 42%; padding-bottom: 8px; }
+  .pz-plate b { font-size: 36px; }
+  .pz-stats { grid-template-columns: repeat(3, auto); font-size: 11px; gap: 2px 10px; padding: 4px 8px; }
+  .pz-side { flex: 1 1 auto; padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); border-left: 0; border-top: 2px solid #3a2414; background: rgba(20,12,8,.9); }
+  .pz-title { font-size: 32px; }
+  .pz-grid { grid-template-columns: repeat(auto-fill, minmax(76px, 1fr)); }
+  .pz-opt { font-size: 11px; padding: 6px 2px; } .pz-opt .ico { font-size: 22px; }
+}

@@ -1234,13 +1234,6 @@
     if (snapCache.has(key)) return snapCache.get(key);
     ensureSnap();
     snapR.setPixelRatio(1);
-      snapR = legacy(new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true }));
-      snapR.outputColorSpace = THREE.SRGBColorSpace;
-      snapR.toneMapping = THREE.ACESFilmicToneMapping;
-      snapScene = new THREE.Scene();
-      snapScene.add(new THREE.HemisphereLight('#c8c0d8', '#3a2a1a', 0.55));
-      const key1 = new THREE.DirectionalLight('#ffe0c0', 1.05); key1.position.set(1.5, 2.5, 3); snapScene.add(key1);
-      const rim = new THREE.DirectionalLight('#8aa0ff', 0.8); rim.position.set(-2, 1.5, -2); snapScene.add(rim);
     snapR.setSize(w, h, false);
     const model = M().buildHero(look);
     model.rotation.y = rot !== undefined ? rot : mode === 'bust' ? 0.35 : 0.55;
@@ -1260,6 +1253,77 @@
     return c;
   }
 
+
+  // ======================================================================
+  //  Héroe que gira despacio sobre un círculo de luz (menú de pausa).
+  //  Un solo renderizador que se reutiliza: show(host, look) lo mete en host, hide() lo para.
+  // ======================================================================
+  let tt = null;
+  function ttInit() {
+    const r = legacy(new THREE.WebGLRenderer({ antialias: true, alpha: true }));
+    r.outputColorSpace = THREE.SRGBColorSpace; r.toneMapping = THREE.ACESFilmicToneMapping; r.toneMappingExposure = 1.15;
+    const scene = new THREE.Scene();
+    scene.add(new THREE.HemisphereLight('#b8a8c8', '#2a1a10', 0.45));
+    const key = new THREE.SpotLight('#ffdcb0', 2.6, 14, 0.55, 0.7, 1); key.position.set(1.2, 4.2, 2.6); key.target.position.set(0, 0.7, 0); scene.add(key, key.target);
+    const rim = new THREE.DirectionalLight('#7a90ff', 1.0); rim.position.set(-2.2, 2.2, -2.6); scene.add(rim);
+    const fire = new THREE.PointLight('#ff7a30', 1.6, 5, 1.6); fire.position.set(1.5, 0.5, 1.1); scene.add(fire);
+    // el suelo: un círculo de luz que se pierde en lo oscuro, con unas runas
+    const cv = document.createElement('canvas'); cv.width = cv.height = 256; const g = cv.getContext('2d');
+    const gr = g.createRadialGradient(128, 128, 0, 128, 128, 128);
+    gr.addColorStop(0, 'rgba(255,214,160,.7)'); gr.addColorStop(0.45, 'rgba(170,110,60,.32)'); gr.addColorStop(1, 'rgba(0,0,0,0)');
+    g.fillStyle = gr; g.fillRect(0, 0, 256, 256);
+    g.strokeStyle = 'rgba(255,200,120,.45)'; g.lineWidth = 2; g.beginPath(); g.arc(128, 128, 92, 0, Math.PI * 2); g.stroke();
+    g.lineWidth = 1; g.beginPath(); g.arc(128, 128, 80, 0, Math.PI * 2); g.stroke();
+    g.fillStyle = 'rgba(255,210,140,.5)'; g.font = '14px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    const runes = 'ᚠᚢᚦᚨᚱᚲᚷᚹᚺᚾᛁᛃᛇᛈᛉᛊ';
+    for (let i = 0; i < runes.length; i++) { const a = i / runes.length * Math.PI * 2; g.save(); g.translate(128 + Math.cos(a) * 86, 128 + Math.sin(a) * 86); g.rotate(a + Math.PI / 2); g.fillText(runes[i], 0, 0); g.restore(); }
+    const tex = new THREE.CanvasTexture(cv); tex.colorSpace = THREE.SRGBColorSpace;
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(3.2, 3.2), new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false }));
+    floor.rotation.x = -Math.PI / 2; scene.add(floor);
+    // ascuas que suben
+    const N = 40, pos = new Float32Array(N * 3), seeds = [];
+    for (let i = 0; i < N; i++) seeds.push({ a: Math.random() * Math.PI * 2, r: 0.5 + Math.random() * 0.9, v: 0.15 + Math.random() * 0.3, o: Math.random() * 3 });
+    const pg = new THREE.BufferGeometry(); pg.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const embers = new THREE.Points(pg, new THREE.PointsMaterial({ color: '#ffa050', size: 0.035, transparent: true, opacity: 0.85, blending: THREE.AdditiveBlending, depthWrite: false }));
+    scene.add(embers);
+    const cam = new THREE.PerspectiveCamera(24, 1, 0.05, 30);
+    tt = { r, scene, cam, fire, floor, embers, seeds, model: null, key: '', raf: 0, rot: 0.5, last: 0, host: null };
+  }
+  function ttFrame(now) {
+    if (!tt || !tt.host) return;
+    tt.raf = requestAnimationFrame(ttFrame);
+    const w = tt.host.clientWidth, h = tt.host.clientHeight;
+    if (!w || !h) return;
+    if (tt.w !== w || tt.h !== h) { tt.w = w; tt.h = h; tt.r.setPixelRatio(Math.min(2, window.devicePixelRatio || 1)); tt.r.setSize(w, h, false); tt.cam.aspect = w / h; }
+    const dt = Math.min(0.1, (now - (tt.last || now)) / 1000); tt.last = now;
+    tt.rot += dt * 0.45;
+    const m = tt.model;
+    if (m) { m.rotation.y = tt.rot; M().animate(m, { t: now }); }
+    const sc = m ? m.scale.x : 1;
+    // encuadre: el héroe entero, algo más arriba del centro si la vista es alta
+    const tall = h / w > 1.2;
+    tt.cam.position.set(0, 1.15 * sc, tall ? 5.2 : 5.4); tt.cam.lookAt(0, 0.45 * sc, 0); tt.cam.updateProjectionMatrix();
+    tt.fire.intensity = 1.4 + Math.sin(now / 90) * 0.25 + Math.sin(now / 37) * 0.15;
+    const p = tt.embers.geometry.attributes.position;
+    tt.seeds.forEach((s, i) => { const y = ((now / 1000) * s.v + s.o) % 2.2; p.setXYZ(i, Math.cos(s.a + y) * s.r, y, Math.sin(s.a + y) * s.r); });
+    p.needsUpdate = true;
+    tt.r.render(tt.scene, tt.cam);
+  }
+  const turntable = {
+    show(host, look) {
+      if (!tt) ttInit();
+      const key = JSON.stringify(look) + (M().GL ? M().GL.version : 0);
+      if (key !== tt.key) {
+        if (tt.model) tt.scene.remove(tt.model);
+        tt.model = M().buildHero(look); tt.key = key;
+        tt.scene.add(tt.model);
+      }
+      if (tt.r.domElement.parentNode !== host) host.appendChild(tt.r.domElement);
+      tt.host = host; tt.w = 0; tt.last = 0;
+      cancelAnimationFrame(tt.raf); tt.raf = requestAnimationFrame(ttFrame);
+    },
+    hide() { if (!tt) return; tt.host = null; cancelAnimationFrame(tt.raf); },
+  };
 
   // ======================================================================
   //  Partículas (puntos suaves en la GPU): chispas, polvo, magia, ascuas…
@@ -1497,5 +1561,5 @@
     const a = oct * Math.PI / 4;
     return [Math.round(Math.cos(a)) || 0, Math.round(Math.sin(a)) || 0];
   }
-  root.VIEW3D = { ISO, QUAD, metalEnv, screenToTile, touch, setBrightness, info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
+  root.VIEW3D = { ISO, QUAD, metalEnv, screenToTile, touch, setBrightness, info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, turntable, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
 })(this);
