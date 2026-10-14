@@ -374,6 +374,7 @@
       const top = st.project(m.x + 0.5, 1.45, m.y + 0.5);
       m._screen = { x: top.x, y: top.y };
     }
+    if (C.life) C.life.update(now); // bardo y parroquianos
     // casilla bajo el ratón y destino
     const hm = T3.hoverMesh;
     if (hover && MAP.inBounds(hover.x, hover.y)) {
@@ -388,7 +389,8 @@
     const flick = (s) => 0.85 + Math.sin(now / 130 + s * 3) * 0.08 + Math.sin(now / 47 + s) * 0.05;
     const L = [];
     for (const t of T3.torches) L.push({ x: t.x, y: 1.85, z: t.z, color: '#ff9a40', intensity: 1.7 * flick(t.seed), dist: 6.5 });
-    for (const l of T3.furn.lights) L.push({ ...l, intensity: l.intensity * flick(l.seed) });
+    const crk = C.tavernFx.burst ? C.tavernFx.burst(now) : 1; // la chimenea crepita de vez en cuando
+    for (const l of T3.furn.lights) L.push({ ...l, intensity: l.intensity * flick(l.seed) * (l.kind === 'fireplace' ? crk : 1) });
     for (const w of T3.windows) { w.mat.emissiveIntensity = 0.55 + fl * 2.5; if (fl) L.push({ x: w.w.wall === 'L' ? 1 : w.pos.x, y: 2, z: w.w.wall === 'L' ? w.pos.z : 1, color: '#a8c0ff', intensity: fl * 6, dist: 10 }); }
     if (me && !me.where) L.push({ x: me.px + 0.5, y: 2.6, z: me.py + 0.5, color: '#ffe0b8', intensity: 0.9, dist: 6, shadow: true });
     else L.push({ x: 5, y: 2.6, z: 6, color: '#ffe0b8', intensity: 0.6, dist: 8, shadow: true });
@@ -514,6 +516,7 @@
     const bw = C.ctx.measureText(label).width + 12;
     rrect(bkp.x - bw / 2, bkp.y - 9, bw, 17, 4, 'rgba(60,30,10,.85)', '#c8963a', 1);
     C.ctx.fillStyle = '#ffe6b8'; C.ctx.fillText(label, bkp.x, bkp.y);
+    if (C.life) C.life.draw(now);
     if (barkeep.until > now) {
       C.ctx.font = '16px "VT323", monospace';
       const tw = C.ctx.measureText(barkeep.text).width + 14;
@@ -617,6 +620,6 @@
     net.send({ t: 'move', x, y });
   });
 
-  Object.assign(C, { T3, frame });
+  Object.assign(C, { T3, frame, charModel, SEAT_Y, FACE });
   Object.defineProperty(C, 'hover', { get: () => hover, set: (v) => { hover = v; } });
 })();

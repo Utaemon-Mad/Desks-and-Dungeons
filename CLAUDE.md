@@ -48,12 +48,16 @@ public/tavern/screen.js zoom del juego y pantalla completa
 public/tavern/ambience.js ambiente de la taberna: haces de luna, halos y charcos de luz, polvo, ascuas (C.tavernFx)
 public/tavern/mesa.js    mesa de partida: panel con el plano de la próxima mazmorra, marcas, listo, dados y comercio (C.mesa)
 public/tavern/tavern3d.js taberna en 3D, bucle de dibujo y clics en la sala
+public/tavern/life.js   taberna viva: bardo, parroquianos con rumores y discusiones, pulso con Brom (C.life)
 public/tavern/boot.js   arranque (se carga el último de la taberna)
 public/dungeon.js       mazmorra en el navegador: estado, red, eventos, controles y escena 3D; comparte en DD.dg
 public/dungeon/menu.js  menú de mazmorras (tema, nivel, lista de partidas)
 public/dungeon/party.js vida del grupo, volver con el grupo, HUD y barra de habilidades
 public/dungeon/overlay.js marcas, nombres, bocadillos y minimapa dibujados encima; joystick táctil
 public/dungeon/turns.js barra de iniciativa, panel de tu turno, casillas alcanzables y avisos del combate por turnos
+public/dungeon/dice.js  d20 en 3D de cada tirada del combate por turnos (`ev.roll` = { f, b, ca })
+public/dungeon/boss.js  entrada del jefe (franjas de cine, cartel, cámara `bossCam`) y su segunda fase (`bossPhase`)
+public/dungeon/lore.js  notas y murales de la mazmorra (`#lorewin`) y el final al matar al jefe
 public/polish.js        fundidos, celebración de nivel y cartel de objeto único
 public/tutorial.js      tutorial de Alfonso para personajes nuevos
 public/ui.js, ui2.js    ventanas: ficha, inventario, tiendas, forja, guía; ajustes (volumen, tamaño, daltónico, teclas en DD.keys)
@@ -82,6 +86,9 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Sorpresas de mazmorra: afijo al azar (`this.mod`/`modMf` en el constructor de Instance), sala secreta (casilla `S` en server/gen.js, `breakWall`), mímico (`mimico` en monsters-data.js, `ch.mimic` en `openChest`, modelo `mimic` en models-creatures.js), mercader errante (`def.merchant`).
 - Objetivo semanal del grupo `GROUP_GOALS` (progress.js) y `goalAdd`/`goalBonus` (social.js); muro de trofeos `trophyAdd` (social.js) y `buildTrophies` (tavern3d.js); marcos por logros `FRAMES`; encargos de Alfonso `STORY` (progress.js, tarea semanal `h_<semana>`); ronda de dados `dice:*` (server/handlers/play.js, ventana en ui2.js).
 - Mesa de partida: casillas `maptable` unidas (`mapTables`, `atMapTable` en map.js) se dibujan como una mesa (`buildMapTable`, tavern3d.js); al sentarse, vista de arriba (`atMesa` en `renderTavern3D`, con `setViewOffset`) y panel `mesa.js`. Servidor: `mesa:*` en server/handlers/play.js; la semilla del plano es la de la mazmorra (`newDungeon(…, seed)`), y bajan todos cuando todos están listos (`mesaStart`).
+- Dados del combate por turnos: `showRoll`, `foeCA`, `heroCA` (server/dungeon.js) mandan `roll` en los eventos `hit`/`miss`; el cliente los tira en `dungeon/dice.js`. Segunda fase de jefe: `bossPhase` (al 50 % de vida, evento `phase`); frases en `BOSS_LINES` (monsters-data.js).
+- Historia de las mazmorras: `LORE` por tema (monsters-data.js: título, 4 notas, final); en server/gen.js se reparten como `note` (y `mural` en la pared de la sala) por distancia a la entrada.
+- Taberna viva: `BARD`, `PATRONS`, `ARGUES` (tavern/life.js); el pulso avisa al servidor con `tavern:pulso` (play.js) y la chimenea crepita con `C.tavernFx.crackle`.
 - Sonidos y música: `FX` y `TRACKS` (audio.js). Iconos: `P` (icons.js). Novedades: `NEWS` (admin.js).
 - Ventanas: ui.js (ficha, inventario, talentos, tiendas, guía) y ui2.js (pueblo, forja, fama, ajustes, asalto, taberna, mercado).
 

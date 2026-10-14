@@ -172,5 +172,13 @@
     A.motes.update(dt); A.embers.update(dt);
   }
 
-  C.tavernFx = { build, update };
+  // la chimenea crepita: ráfaga de chispas y un momento de más luz (la llama C.life de vez en cuando)
+  function crackle() {
+    if (!A.embers) return;
+    A.burstUntil = performance.now() + 700;
+    for (const f of A.fires) for (let i = 0; i < 26; i++) A.embers.emit({ x: f.x + (Math.random() - 0.5) * f.w, y: f.y, z: f.z + (Math.random() - 0.5) * 0.1, vx: (Math.random() - 0.5) * 0.9, vy: 0.9 + Math.random() * 1.4, vz: 0.3 + Math.random() * 0.7, drag: 0.5, color: Math.random() < 0.5 ? '#ffd060' : '#ff6a1a', size: 0.04 + Math.random() * 0.04, life: 0.8 + Math.random(), alpha: 1 });
+  }
+  const burst = (now) => (A.burstUntil && now < A.burstUntil ? 1 + 0.6 * (A.burstUntil - now) / 700 : 1);
+
+  C.tavernFx = { build, update, crackle, burst };
 })();

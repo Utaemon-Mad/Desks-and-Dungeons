@@ -253,6 +253,16 @@ module.exports = function (ctx) {
     },
     'dice:get'(cx) { send(cx.ws, { t: 'dice:state', round: diceView(cx.room) }); },
 
+    // ---------- Pulso con Brom el Herrero (minijuego del navegador; aquí sólo se anuncia, sin premio) ----------
+    'tavern:pulso'(cx, msg) {
+      const { user, room } = cx;
+      if (user.where) return;
+      const now = Date.now();
+      if (user.pulsoAt && now - user.pulsoAt < 15000) return;
+      user.pulsoAt = now;
+      system(room, msg.win ? `💪 ${user.name} le gana un pulso a Brom el Herrero. ¡La taberna entera aplaude!` : `💪 Brom el Herrero tumba el brazo de ${user.name} contra la mesa. «¡Otra vez será!»`);
+    },
+
     // ---------- Mesa de partida: los sentados ven el plano de la próxima mazmorra, lo marcan y bajan juntos ----------
     'mesa:get'(cx) { send(cx.ws, { t: 'mesa', ...mesaView(cx.room, true) }); },
     'mesa:refresh'(cx) {

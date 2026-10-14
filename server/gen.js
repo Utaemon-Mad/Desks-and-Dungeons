@@ -13,6 +13,7 @@ const PROPS = {
   crystal: { b: 1, light: '#c86aff' }, lavarock: { b: 0, light: '#ff5a1a' }, puddle: { b: 0 },
   ribcage: { b: 0 }, skullcandle: { b: 0, light: '#ffb050' }, coins: { b: 0 }, sack: { b: 1 }, keg: { b: 1 }, weapons: { b: 0 }, barrels: { b: 1 },
   stump: { b: 1 }, rockb: { b: 1 }, bush: { b: 1 }, log: { b: 1 }, lantern: { b: 1, light: '#ffd27a' }, flowers: { b: 0 }, fern: { b: 0 },
+  note: { b: 0, light: '#ffe0a0' }, mural: { wall: 1 },
   torch: { wall: 1, light: '#ffa040' }, banner: { wall: 1 }, chains: { wall: 1 }, shield: { wall: 1 }, crack: { wall: 1 }, secret: { wall: 1, light: '#ffcf6a' },
 };
 
@@ -184,6 +185,33 @@ function generate(o) {
       if (r && (x - r.x) % 3 === 1) props.push({ k: 'torch', x, y });
       else if (r && rand() < (r.boss ? 0.3 : 0.16)) props.push({ k: pickR(TP.wall.filter((k) => k !== 'torch')), x, y });
       else if (!r && rand() < 0.14) props.push({ k: 'torch', x, y });
+    }
+
+    // ---------- Historia: notas por el suelo y murales en la pared (RULES.LORE), en orden según se aleja uno de la entrada ----------
+    const LORE = RULES.LORE && RULES.LORE[theme];
+    if (LORE) {
+      const order = rooms.filter((r) => !r.start && !r.boss).sort((a, b) => dist[a.cy * W + a.cx] - dist[b.cy * W + b.cx]);
+      const n = Math.min(LORE.notes.length, order.length), picked = new Set();
+      for (let i = 0; i < n; i++) {
+        const r = order[Math.round(n > 1 ? i * (order.length - 1) / (n - 1) : 0)];
+        if (!r || picked.has(r)) continue;
+        picked.add(r);
+        let placed = false;
+        // los murales van en el muro de arriba de la sala (el que se ve), quitando lo que hubiera colgado
+        if (/^Mural/.test(LORE.notes[i]) && !forest) {
+          for (let k = 0; k < r.w && !placed; k++) {
+            const x = r.x + ((k + Math.floor(r.w / 2)) % r.w), y = r.y - 1;
+            if (get(x, y) !== '#' || get(x, y - 1) !== '#' || !walk(get(x, y + 1))) continue;
+            for (let j = props.length - 1; j >= 0; j--) if (props[j].x === x && props[j].y === y) props.splice(j, 1);
+            props.push({ k: 'mural', x, y, n: i }); placed = true;
+          }
+        }
+        for (let t = 0; t < 30 && !placed; t++) {
+          const x = ri(r.x + 1, r.x + r.w - 2), y = ri(r.y + 1, r.y + r.h - 2);
+          if (get(x, y) !== '.' || used.has(key(x, y)) || nearDoor(x, y)) continue;
+          addProp('note', x, y); props[props.length - 1].n = i; placed = true;
+        }
+      }
     }
 
     // Lo que bloquea no puede romper la conexión: se quita si deja zonas aisladas

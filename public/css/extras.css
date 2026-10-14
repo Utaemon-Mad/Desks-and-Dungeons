@@ -268,3 +268,14 @@ body.at-mesa #heroes { display: none; }
   .mesa-panel.mini-mesa { max-height: 46vh; }
   @keyframes mesaUp { from { transform: translateY(40px); opacity: 0; } to { transform: none; opacity: 1; } }
 }
+
+/* Pulso con Brom (taberna viva) */
+#pulsowin .panel { width: min(440px, calc(100% - 24px)); text-align: center; }
+.pulso-arms { display: flex; align-items: center; gap: 8px; margin: 14px 0 10px; font-size: 26px; }
+.pulso-track { position: relative; flex: 1; height: 22px; border-radius: 11px; background: #5a2a1a; border: 2px solid #2a1408; overflow: hidden; }
+.pulso-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 50%; background: linear-gradient(90deg, #e8c060, #f0a030); transition: width .08s linear; }
+.pulso-mid { position: absolute; left: 50%; top: -2px; bottom: -2px; width: 2px; background: #fff8; }
+.pulso-timing { position: relative; height: 16px; margin: 6px 4px 8px; border-radius: 8px; background: #2a1a10; border: 2px solid #1a0e06; }
+.pulso-zone { position: absolute; top: 0; bottom: 0; background: #4caf50aa; border-radius: 6px; }
+.pulso-needle { position: absolute; top: -5px; bottom: -5px; width: 4px; margin-left: -2px; background: #fff; box-shadow: 0 0 6px #fff; border-radius: 2px; }
+.pulso-msg { min-height: 1.4em; font-weight: bold; color: #f0d890; }

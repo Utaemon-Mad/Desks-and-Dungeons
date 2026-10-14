@@ -184,6 +184,7 @@
         if (ev.xp) float(ev.x, ev.y, `+${ev.xp} PX`, '#9fe0ff', true);
         if (ev.xp !== 0) log(`${(RULES.MONSTERS[ev.k] || {}).name || ev.k} cae.${ev.xp ? ` +${ev.xp} PX` : ''}`, ev.boss ? 'good big' : 'good');
         DD.sfx('die', { boss: ev.boss });
+        if (ev.boss && D.loreEnd) D.loreEnd(ev); // el final de la historia de la mazmorra
         break;
       }
       case 'loot': {
@@ -275,7 +276,7 @@
     game.map = m.dungeon;
     game.props = m.dungeon.props || [];
     game.ents.clear(); game.floaters = []; game.fx = []; game.projs = []; game.teles = []; game.particles = []; game.auras = [];
-    game.log = []; game.statics = null; game.boss = null; game.bossSeen = 0; game.introDone = new Set(); game.raging = new Set(); game.bossIntro = null; game.heardLoot = new Set(); game.camInit = false; game.camRot = game.camYaw = game.camQ = 0; game.camPan = { x: 0, z: 0 }; game.keys.clear(); game.sentDir = '0,0';
+    game.log = []; game.statics = null; game.boss = null; game.bossSeen = 0; game.introDone = new Set(); game.raging = new Set(); game.lore = new Set(); game.bossIntro = null; game.heardLoot = new Set(); game.camInit = false; game.camRot = game.camYaw = game.camQ = 0; game.camPan = { x: 0, z: 0 }; game.keys.clear(); game.sentDir = '0,0';
     game.seen = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.vis = new Uint8Array(m.dungeon.w * m.dungeon.h);
     game.openDoors = new Set(m.dungeon.doors || []);
@@ -1340,6 +1341,7 @@
     if (D.drawTurns) D.drawTurns(now);
     if (D.updateDice) D.updateDice(now);
     if (D.updateBoss) D.updateBoss(now);
+    if (D.updateLore) D.updateLore(now);
     D.drawOverlay(now);
     D.drawPings(now);
     if (game.showMap) D.drawMinimap();
@@ -1355,7 +1357,7 @@
 
   // Lo que comparten los archivos de public/dungeon/ (se cargan después de este);
   // las variables que cambian de valor se leen como D.nombre
-  const D = DD.dg = { $, WATER_T, camCenter, camRotate, entAt, spark, ring, puff, g, game, herbUnder, models, monName, onEvent, serverNow, viewEl, who,
+  const D = DD.dg = { $, WATER_T, camCenter, camRotate, entAt, log, spark, ring, puff, g, game, herbUnder, models, monName, onEvent, serverNow, viewEl, who,
     get stage() { return stage; }, get seenCount() { return seenCount; } };
 
   // ======================================================================

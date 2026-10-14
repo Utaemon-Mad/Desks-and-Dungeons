@@ -7,6 +7,12 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 15, date: 'Octubre', title: 'Dados, jefes, historias y una taberna viva', items: [
+      '🎲 En el combate por turnos cada ataque tira un d20 de verdad: vuela por la sala, rueda y enseña la tirada, el bonificador y la CA a batir. Con un 20 natural, crítico con cámara lenta y destello; con un 1, pifia.',
+      '👑 Los jefes entran a lo grande: franjas de cine, la cámara va hacia ellos y su cartel con nombre y frase. A media vida montan en cólera (segunda fase): pegan más fuerte y más rápido, y algunos llaman refuerzos.',
+      '📜 Las mazmorras cuentan una historia: notas, diarios y murales repartidos por las salas, de la entrada al jefe. Al acercarte los lees, y al derrotar al jefe ves cómo acaba (y cuántas partes encontraste).',
+      '🍺 La taberna está viva: Lirio el Bardo toca el laúd junto a la chimenea, los parroquianos brindan, cuentan rumores y discuten, y la chimenea crepita. Pincha a Brom el Herrero para echarle un pulso (Espacio cuando la aguja esté en la zona verde): toda la taberna se entera de quién gana.',
+    ] },
     { v: 14, date: 'Octubre', title: 'Yelmos, escudos y adornos', items: [
       '⛑️ Cascos de verdad: ya no son cacerolas. Yelmos nasales con bandas remachadas, carrilleras, bacinetes apuntados que bajan hasta la mandíbula (el de pico con su hocico y respiraderos), celadas con cola y rendija, armets con visera de pico, cresta y gola, grandes yelmos de tapa plana con cruz de refuerzo, y gorros de cuero en gajos cosidos.',
       '🛡️ Seis escudos por nivel, cada uno con su forma: rodelas, broqueles, adargas, tarjas, escudos de cometa, de guerra y de cruzado, rodelas de acero grabadas, tarjas de justa, escudos de torre y de torreón (con almenas y puerta) y paveses. Cara curvada, tablas de madera, cuero o piedra, pintura heráldica y bordes y remaches de metal.',
