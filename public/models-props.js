@@ -286,6 +286,7 @@
   const BANNER_BY_THEME = { cripta: 'banner_patternB_white', cuevas: 'banner_patternA_brown', fortaleza: 'banner_patternA_red', nido: 'banner_patternA_green', volcan: 'banner_patternA_red', abismo: 'banner_patternA_red' };
   // Fresco de los murales: fondo de cal gastada y una escena sencilla de cada tema (la de su historia)
   const muralTex = {};
+  const MURALS = {}; // escenas de otros temas: MODELS.MURALS[tema] = (g, ink) => …
   function muralTexture(theme) {
     if (muralTex[theme]) return muralTex[theme];
     const c = document.createElement('canvas'); c.width = 256; c.height = 184;
@@ -295,7 +296,8 @@
     for (let i = 0; i < 500; i++) { g.fillStyle = `rgba(${Math.random() < 0.5 ? '60,40,20' : '255,240,210'},0.08)`; g.fillRect(Math.random() * 256, Math.random() * 184, 2 + Math.random() * 5, 1 + Math.random() * 3); }
     const ink = (col) => { g.fillStyle = col; g.strokeStyle = col; };
     g.lineWidth = 5; g.lineCap = 'round';
-    if (theme === 'cuevas') { // goblin con corona sobre su montón de tesoro, y otros de rodillas
+    if (MURALS[theme]) MURALS[theme](g, ink); // los temas de places.js pintan su escena
+    else if (theme === 'cuevas') { // goblin con corona sobre su montón de tesoro, y otros de rodillas
       ink('#c8a030'); g.beginPath(); g.moveTo(70, 160); g.lineTo(128, 120); g.lineTo(186, 160); g.fill();
       ink('#3a5a2a'); g.beginPath(); g.arc(128, 82, 22, 0, Math.PI * 2); g.fill(); g.fillRect(112, 100, 32, 30);
       ink('#e8c040'); g.beginPath(); g.moveTo(108, 62); g.lineTo(114, 46); g.lineTo(122, 58); g.lineTo(128, 42); g.lineTo(134, 58); g.lineTo(142, 46); g.lineTo(148, 62); g.fill();
@@ -391,5 +393,5 @@
     return { obj: g, light };
   }
 
-  Object.assign(MODELS, { furniture, prop, flame, candle, mug, herb, rod });
+  Object.assign(MODELS, { furniture, prop, flame, candle, mug, herb, rod, MURALS });
 })();

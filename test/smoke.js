@@ -13,6 +13,7 @@ const RULES = require('../public/rules/engine.js');
 const MAP = require('../public/map.js');
 const PROG = require('../public/rules/progress.js');
 const GEN = require('../server/gen.js');
+const DUNGEON = require('../public/dungeon-data.js');
 const { Instance } = require('../server/dungeon.js');
 
 const url = `ws://localhost:${process.env.PORT}/ws`;
@@ -147,6 +148,19 @@ function rulesTests() {
     assert.ok(g.spawns.some((s) => s.boss && s.k === RULES.THEMES[theme].boss), 'tiene su jefe');
     assert.strictEqual(g.tiles.length, g.w * g.h);
   }
+  // temas nuevos: exteriores sin puertas, caminos y calles de tierra o adoquines ('='), lava en el infierno, el jefe siempre al alcance
+  for (const theme of ['catedral', 'tumba', 'caverna', 'sendero', 'ciudad', 'batalla', 'incendio', 'infierno']) {
+    for (const level of [1, 12, 30]) for (const seed of ['a', 'b', 'c']) {
+      const g = GEN.generate({ theme, level, seed: theme + seed });
+      const T = RULES.THEMES[theme];
+      if (T.out) assert.ok(!g.tiles.includes('+'), theme + ': al aire libre no hay puertas');
+      if (T.road) assert.ok(g.tiles.includes('='), theme + ': tiene calles o caminos');
+      assert.ok(g.spawns.every((sp) => RULES.MONSTERS[sp.k]), theme + ': monstruos conocidos');
+      assert.ok(DUNGEON.walkable('='), 'los caminos se pisan');
+    }
+  }
+  assert.ok(GEN.generate({ theme: 'infierno', level: 5, seed: 'lava' }).tiles.split('%').length > 20, 'el infierno tiene ríos de lava');
+  assert.ok(GEN.generate({ theme: 'catedral', level: 5, seed: 'nave' }).props.some((p) => p.k === 'pew'), 'la catedral tiene bancos');
   // bosque: claros sin puertas ni antorchas de muro, alumbrados con farolillos y hogueras
   const fo = GEN.generate({ theme: 'bosque', level: 3, seed: 'b' });
   assert.ok(!fo.tiles.includes('+') && !fo.props.some((p) => p.k === 'torch') && fo.props.some((p) => p.k === 'lantern'), 'bosque sin puertas, con farolillos');

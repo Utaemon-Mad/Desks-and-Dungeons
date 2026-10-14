@@ -649,7 +649,8 @@
     // mazmorras oscuras: poca luz ambiente (con el color del tema) y que manden las antorchas y el farol
     // nunca del todo a oscuras: en el móvil (pantalla pequeña y con reflejos) algo más de luz ambiente
     stage.hemi.intensity = world ? 0.62 : game.map.kind === 'arena' ? 0.4 : Math.max(T.amb || 0.16, VIEW3D.touch ? 0.38 : 0.26);
-    stage.grade = world ? null : GRADES[game.map.kind === 'arena' ? 'arena' : game.map.theme] || null;
+    const PL = VIEW3D.PLACES[game.map.theme];
+    stage.grade = world ? null : GRADES[game.map.kind === 'arena' ? 'arena' : game.map.theme] || (PL && PL.grade) || null;
     stage.hemi.color.set(world ? '#7a8ac0' : T.sky);
     stage.hemi.groundColor.set(world ? '#2a2a1a' : T.ground || '#140c0a');
     // neblina baja que se arrastra por el suelo
@@ -684,8 +685,8 @@
     const g = new THREE.Group();
     const lin = (h) => '#' + new THREE.Color(h).convertSRGBToLinear().getHexString();
     const M = (c, o = {}) => new THREE.MeshStandardMaterial({ color: lin(c), roughness: o.r ?? 0.8, metalness: o.m || 0 });
-    const wood = M(theme === 'cripta' ? '#4a3a2e' : theme === 'volcan' || theme === 'abismo' ? '#3a2620' : '#6a4426'), dark = M('#3a2414'), iron = M('#3a3a40', { r: 0.45, m: 0.8 });
-    const stone = M(theme === 'cuevas' ? '#5e4c3a' : theme === 'nido' ? '#44523a' : '#6a6870');
+    const wood = M(theme === 'cripta' || theme === 'catedral' ? '#4a3a2e' : theme === 'volcan' || theme === 'abismo' ? '#3a2620' : '#6a4426'), dark = M('#3a2414'), iron = M('#3a3a40', { r: 0.45, m: 0.8 });
+    const stone = M(theme === 'cuevas' ? '#5e4c3a' : theme === 'nido' ? '#44523a' : theme === 'tumba' ? '#a8885a' : theme === 'catedral' ? '#8a8478' : '#6a6870');
     const box = (w, h, d, m, x, y, z, par = g) => { const o = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m); o.position.set(x, y, z); o.castShadow = true; o.receiveShadow = true; par.add(o); return o; };
     // marco de piedra
     box(0.14, 1.32, 0.3, stone, -0.5, 0.66, 0); box(0.14, 1.32, 0.3, stone, 0.5, 0.66, 0); box(1.14, 0.16, 0.32, stone, 0, 1.3, 0);

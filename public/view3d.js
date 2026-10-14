@@ -423,6 +423,8 @@
   //  Mazmorras y mundo abierto
   // ======================================================================
   const WALL_H = 1.3;
+  // Temas que dibuja otro archivo (places.js): PLACES[tema] = { tile, after, build, tint, floors, fancy, webby, mossy, grade }
+  const PLACES = {};
   const THEME = {
     cripta: { floor: ['#4a4c56', '#40424c'], seam: '#2a2b32', wall: '#565862', top: '#141418', fog: '#06060a', liquid: '#1a3a4a', sky: '#5a6aa0', amb: 0.16, ground: '#0c1018', mist: '#8a9ac8', mistA: 0.32 },
     cuevas: { floor: ['#5a4a38', '#4e4030'], seam: '#3a2e22', wall: '#5e4c3a', top: '#16110c', fog: '#080604', liquid: '#1e3a5a', sky: '#8a7a5a', amb: 0.15, ground: '#140e08', mist: '#a89878', mistA: 0.22 },
@@ -492,6 +494,8 @@
         continue;
       }
       if (theme === 'bosque') { forestTile(g, map, x, y, X, Y, px); if (x === map.w - 1 && y === map.h - 1) forestBlobs(g, map, px); continue; }
+      const PL = PLACES[theme];
+      if (PL && PL.tile) { PL.tile(g, map, x, y, X, Y, px); if (x === map.w - 1 && y === map.h - 1 && PL.after) PL.after(g, map, px); continue; }
       if (ch === '#') { g.fillStyle = T.top; g.fillRect(X, Y, px, px); continue; }
       if (ch === '~' || ch === '%') { g.fillStyle = ch === '%' ? '#3a1408' : '#0e1a22'; g.fillRect(X, Y, px, px); continue; }
       const v = Math.floor(rand(x * 13 + y * 7) * 2);
@@ -583,7 +587,8 @@
       const lava = instanced(quad, liquidMaterial('lava', { color: '#ff5a10', emissive: '#ff3a00', emissiveIntensity: 1.3, roughness: 0.6 }), liquids.lava, { shadow: false });
       lava.userData.lava = true;
       group.add(lava);
-      liquids.lava.forEach((l, i) => { if (i % 6 === 0) lights.push({ x: l.x, y: 0.6, z: l.z, color: '#ff5a1a', intensity: 1.2, dist: 4 }); });
+      const every = liquids.lava.length > 60 ? 14 : 6; // mucha lava: menos luces (si no, todo se quema)
+      liquids.lava.forEach((l, i) => { if (i % every === 0) lights.push({ x: l.x, y: 0.6, z: l.z, color: '#ff5a1a', intensity: 1.2, dist: 4 }); });
     }
     const out = { group, lights, floor };
     if (!world && mm.GL && mm.GL.ready && mm.pieceGeo('wall')) return buildDungeonGL(map, theme, out);
@@ -753,8 +758,9 @@
   // Suciedad del suelo: sombra junto a los muros, grietas, musgo, manchas y piedrecitas (todo al azar con semilla)
   function grime(g, map, theme, px) {
     const wallAt = (x, y) => x < 0 || y < 0 || x >= map.w || y >= map.h || map.tiles[y * map.w + x] === '#';
-    const hot = theme === 'volcan' || theme === 'abismo';
-    const mossy = theme === 'cripta' || theme === 'nido' || theme === 'cuevas' || theme === 'bosque';
+    const RT = (root.RULES && RULES.THEMES[theme]) || {};
+    const hot = !!RT.hot;
+    const mossy = theme === 'cripta' || theme === 'nido' || theme === 'cuevas' || theme === 'bosque' || !!(PLACES[theme] && PLACES[theme].mossy);
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
       if (wallAt(x, y)) continue;
       const X = x * px, Y = y * px, seed = x * 7.31 + y * 13.17;
@@ -800,6 +806,7 @@
       if (p.k === 'blood') { g.fillStyle = 'rgba(90,10,10,.75)'; g.beginPath(); g.ellipse(X + px / 2, Y + px / 2, px * 0.32, px * 0.22, rand(p.x) * 3, 0, 7); g.fill(); }
       if (p.k === 'rug') { g.fillStyle = '#6a1a1a'; g.fillRect(X + 2, Y + 4, px - 4, px - 8); g.strokeStyle = '#c8a040'; g.lineWidth = 2; g.strokeRect(X + 4, Y + 6, px - 8, px - 12); }
       if (p.k === 'puddle') { g.fillStyle = 'rgba(30,50,70,.7)'; g.beginPath(); g.ellipse(X + px / 2, Y + px / 2, px * 0.35, px * 0.22, 0, 0, 7); g.fill(); }
+      if (PLACES.paint) PLACES.paint(g, p, X, Y, px, map);
       if (p.k === 'web') { g.strokeStyle = 'rgba(220,220,230,.5)'; g.lineWidth = 1; for (let i = 0; i < 6; i++) { g.beginPath(); g.moveTo(X + px / 2, Y + px / 2); g.lineTo(X + px / 2 + Math.cos(i) * px / 2, Y + px / 2 + Math.sin(i) * px / 2); g.stroke(); } for (const r of [5, 10, 14]) { g.beginPath(); g.arc(X + px / 2, Y + px / 2, r, 0, 7); g.stroke(); } }
     }
     const tex = new THREE.CanvasTexture(c);
@@ -948,6 +955,8 @@
   function buildDungeonGL(map, theme, out) {
     const mm = M();
     if (theme === 'bosque') return buildForestGL(map, out);
+    if (PLACES[theme] && PLACES[theme].build) return PLACES[theme].build(map, out);
+    const PL = PLACES[theme] || {};
     const { group, lights, floor } = out;
     const T = THEME[theme] || THEME.cripta;
     if (floor.material.map) floor.material.map.dispose(); // la textura pintada no hace falta: aquí hay losas
@@ -956,9 +965,9 @@
     floor.position.y = -0.03;
     const HS = 0.25, VS = GL_WALL_H / 4;
     const many = (a, n, b) => Array(n).fill(a).concat(b ? [b] : []);
-    const floorNames = theme === 'cuevas' || theme === 'nido' ? many('floor_dirt_large', 9, 'floor_dirt_large_rocky') : theme === 'volcan' || theme === 'abismo' ? many('floor_tile_large', 7, 'floor_tile_large_rocks') : many('floor_tile_large', 1);
+    const floorNames = PL.floors ? PL.floors : theme === 'cuevas' || theme === 'nido' ? many('floor_dirt_large', 9, 'floor_dirt_large_rocky') : theme === 'volcan' || theme === 'abismo' ? many('floor_tile_large', 7, 'floor_tile_large_rocks') : many('floor_tile_large', 1);
     // las piezas KayKit son claras: se oscurecen y tiñen según el tema
-    const TINT = { cripta: ['#727a8c', '#8e95a6'], cuevas: ['#8e785c', '#9c8a72'], fortaleza: ['#8a7c70', '#9a8e84'], nido: ['#6e7c5e', '#86947a'], volcan: ['#7a5e58', '#8a7470'], abismo: ['#7a4a46', '#8a5650'] }[theme] || ['#80808a', '#90909a'];
+    const TINT = { cripta: ['#727a8c', '#8e95a6'], cuevas: ['#8e785c', '#9c8a72'], fortaleza: ['#8a7c70', '#9a8e84'], nido: ['#6e7c5e', '#86947a'], volcan: ['#7a5e58', '#8a7470'], abismo: ['#7a4a46', '#8a5650'] }[theme] || PL.tint || ['#80808a', '#90909a'];
     const tinted = (mat, hex) => [].concat(mat).map((m) => { const c = m.clone(); c.color = new THREE.Color(hex); return c; });
     const one = (a) => (a.length === 1 ? a[0] : a);
     const floors = {};
@@ -976,8 +985,8 @@
           near = true;
           const k = rand(x * 7.1 + y * 3.3 + dx * 5 + dy * 11);
           // muros con variedad: agrietados, rotos y, en criptas y fortalezas, estanterías y ventanales enrejados
-          const fancy = (theme === 'cripta' || theme === 'fortaleza') && !low && dy === 1;
-          const name = k < 0.1 ? 'wall_cracked' : k < 0.14 ? 'wall_broken' : fancy && k < 0.19 ? 'wall_shelves' : fancy && k < 0.23 ? 'wall_archedwindow_gated' : 'wall';
+          const fancy = (theme === 'cripta' || theme === 'fortaleza' || PL.fancy) && !low && dy === 1;
+          const name = PL.fancy === 'windows' && fancy && k > 0.55 ? 'wall_archedwindow_gated' : k < 0.1 ? 'wall_cracked' : k < 0.14 ? 'wall_broken' : fancy && k < 0.19 && PL.fancy !== 'windows' ? 'wall_shelves' : fancy && k < 0.23 ? 'wall_archedwindow_gated' : 'wall';
           (segs[name] = segs[name] || []).push({ x: x + 0.5 + dx * 0.375, z: y + 0.5 + dy * 0.375, r, tile, lm });
         }
         if (!near) for (let dy = -1; dy <= 1 && !near; dy++) for (let dx = -1; dx <= 1; dx++) if (!isWall(x + dx, y + dy)) { near = true; break; }
@@ -1026,7 +1035,7 @@
       group.add(im); extras.push({ im, list });
     };
     const corners = [], webs = [];
-    const webby = theme === 'cripta' || theme === 'nido' || theme === 'cuevas';
+    const webby = theme === 'cripta' || theme === 'nido' || theme === 'cuevas' || !!PL.webby;
     for (let y = 0; y < map.h; y++) for (let x = 0; x < map.w; x++) {
       if (isWall(x, y) || WATER.has(map.tiles[y * map.w + x])) continue;
       const tile = y * map.w + x;
@@ -1561,5 +1570,5 @@
     const a = oct * Math.PI / 4;
     return [Math.round(Math.cos(a)) || 0, Math.round(Math.sin(a)) || 0];
   }
-  root.VIEW3D = { ISO, QUAD, metalEnv, screenToTile, touch, setBrightness, info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, turntable, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
+  root.VIEW3D = { ISO, QUAD, metalEnv, screenToTile, touch, setBrightness, info: () => (renderer ? { ...renderer.info.memory, programs: renderer.info.programs ? renderer.info.programs.length : 0 } : null), snapshot, turntable, PLACES, _: { rand, camMask, seenNear, instanced, QUAD, LOW_WALL, WATER, decalTexture, grassTuft, buildForestGL, forestTile, forestBlobs }, itemArt, makeStage, show, buildMap, fogLayer, mistLayer, THEME, setQuality, qualityInfo, particles, weather, dayCycle, roomView, fxLayer };
 })(this);
