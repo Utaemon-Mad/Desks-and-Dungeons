@@ -220,15 +220,11 @@
   function drawMinimap() {
     const map = game.map;
     const big = map.kind === 'world' && game.bigMap;
-    const k = big ? Math.min((innerWidth - 80) / map.w, (innerHeight - 200) / map.h) : (innerWidth <= 820 ? 1 : map.kind === 'world' ? 1.4 : 3.2) * 0.8;
+    const k = big ? Math.min((innerWidth - 80) / map.w, (innerHeight - 200) / map.h) : (innerWidth <= 820 ? (map.kind === 'world' ? 1 : 1.9) : map.kind === 'world' ? 1.4 : 3.2) * 0.8;
     const mw = map.w * k, mh = map.h * k;
-    let x0 = big ? (innerWidth - mw) / 2 : innerWidth - mw - 14, y0 = big ? 90 : innerWidth <= 820 ? 110 : 14;
-    // el minimapa pequeño va girado 45°, como la cámara isométrica (arriba es el noroeste); el mapa grande, con el norte arriba
-    if (!big) {
-      const S = (mw + mh) / Math.SQRT2;
-      g.save(); g.translate(innerWidth - S / 2 - 14, y0 + S / 2); g.rotate(Math.PI / 4 + game.camYaw); // y con el giro de la cámara en combate
-      x0 = -mw / 2; y0 = -mh / 2;
-    }
+    const x0 = big ? (innerWidth - mw) / 2 : innerWidth - mw - 14, y0 = big ? 90 : innerWidth <= 820 ? 116 : 22;
+    // recto, con el norte arriba (la cámara isométrica mira desde el sureste: arriba en la pantalla es el noroeste)
+    if (!big) g.save();
     const seenC = D.seenCount;
     if (!game.miniImg || game.miniSeen !== seenC) {
       const c = game.miniImg || document.createElement('canvas');
@@ -272,7 +268,14 @@
       g.strokeStyle = p.k === 'danger' ? '#ff5a3c' : '#ffd75a'; g.lineWidth = 2;
       g.beginPath(); g.arc(x0 + (p.x + 0.5) * k, y0 + (p.y + 0.5) * k, 3 + ph * 7, 0, Math.PI * 2); g.stroke();
     }
-    if (!big) g.restore();
+    if (!big) {
+      // rosa de los vientos pequeña: dónde queda el norte
+      g.font = '700 10px "Pixelify Sans", sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+      g.fillStyle = '#1a0f08'; g.beginPath(); g.arc(x0 + mw / 2, y0 - 4, 7, 0, 7); g.fill();
+      g.strokeStyle = '#6a4a2a'; g.lineWidth = 1.5; g.stroke();
+      g.fillStyle = '#f2d37a'; g.fillText('N', x0 + mw / 2, y0 - 3.5);
+      g.restore();
+    }
   }
 
 
