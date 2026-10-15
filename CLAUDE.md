@@ -68,6 +68,7 @@ public/ui.js, ui2.js    ventanas: ficha, inventario, tiendas, forja, guía; ajus
 public/sprites.js, dsprites.js  sprites 2D: iconos de objetos y reserva sin 3D
 public/css/*.css        estilos por zonas (base, dungeon, windows, start, inventory, extras), en ese orden
 test/smoke.js           pruebas de reglas y de red (npm test)
+taberna-iso/            prototipo aparte "La Taberna del Cuervo" (RPG de acción isométrico, sin servidor; `npm run iso`); no comparte código con el juego principal, ver su README.md
 scripts/lint.js         comprobación de sintaxis (npm run lint)
 ```
 

@@ -1,0 +1,94 @@
+:root {
+  --gold: #c9a15a; --gold2: #8a6a30; --ink: #0c0806; --panel: #17110c;
+  --red1: #d9382a; --red2: #7a140d; --green1: #5fae3a; --green2: #2c6a1c;
+  --ui: 'Georgia', 'Times New Roman', serif;
+}
+* { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+html, body { margin: 0; height: 100%; background: #050302; overflow: hidden; font-family: var(--ui); color: #e8d8b8; }
+#c { position: fixed; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; cursor: default; }
+#c.pointer { cursor: pointer; }
+#hud { position: fixed; inset: 0; pointer-events: none; }
+#hud > * { pointer-events: auto; }
+
+/* marco metálico reutilizable */
+.frame { background: var(--panel); box-shadow: inset 0 0 0 2px var(--gold2), inset 0 0 0 3px #000, inset 0 0 8px 2px rgba(0,0,0,.8), 0 0 0 1px #000, 0 3px 10px rgba(0,0,0,.6); }
+
+/* retrato */
+#portrait { position: absolute; left: 14px; top: 12px; width: 92px; height: 92px; }
+#portrait canvas { position: absolute; inset: 6px; width: 80px; height: 80px; border-radius: 50%; background: #1a1410; }
+#portrait .ring { position: absolute; inset: 0; border-radius: 50%; border: 4px solid transparent;
+  background: conic-gradient(from 200deg, #e6c987, #7a5a26, #d9b46a, #5c4220, #e6c987) border-box; -webkit-mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0); mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0);
+  filter: drop-shadow(0 2px 4px #000); }
+#portrait .lvl { position: absolute; left: -2px; bottom: -2px; width: 26px; height: 26px; border-radius: 50%; background: radial-gradient(#3a2a12, #120c06); border: 2px solid var(--gold); font-size: 12px; font-weight: bold; text-align: center; line-height: 22px; color: #f1dca6; box-shadow: 0 2px 4px #000; }
+
+/* barras de arriba */
+#bars { position: absolute; left: 92px; top: 28px; width: 250px; }
+.bar { height: 16px; margin: 0 0 7px 0; position: relative; border-radius: 3px; background: #0a0605; box-shadow: inset 0 0 0 1px #6f5226, inset 0 0 0 2px #000, 0 2px 5px #000; overflow: hidden; }
+.bar i { position: absolute; left: 2px; top: 2px; bottom: 2px; width: 40%; border-radius: 2px; transition: width .15s linear; }
+.bar.fury i { background: linear-gradient(#ee5240, var(--red1) 40%, var(--red2)); box-shadow: 0 0 8px rgba(255,60,30,.6); }
+.bar.sta { width: 180px; height: 12px; }
+.bar.sta i { background: linear-gradient(#8bd05c, var(--green1) 40%, var(--green2)); }
+#mini-icons { position: absolute; left: 22px; top: 116px; display: flex; flex-direction: column; gap: 8px; }
+.ico { width: 30px; height: 30px; border-radius: 50%; background: radial-gradient(#2a2016, #0e0a06); box-shadow: inset 0 0 0 2px var(--gold2), 0 2px 5px #000; display: grid; place-items: center; cursor: pointer; }
+.ico.sel { width: 40px; height: 40px; border-radius: 8px; box-shadow: inset 0 0 0 2px #e6c987, 0 0 10px rgba(255,150,40,.4), 0 2px 5px #000; background: radial-gradient(#4a2a14, #160c06); }
+.ico svg { width: 70%; height: 70%; }
+
+/* rueda de acciones */
+#wheel { position: absolute; left: 28px; bottom: 26px; width: 160px; height: 160px; }
+.w { position: absolute; border: 0; padding: 0; border-radius: 50%; cursor: pointer; display: grid; place-items: center; transition: transform .1s, filter .1s;
+  background: radial-gradient(circle at 35% 30%, #34281a, #0e0906 70%); box-shadow: inset 0 0 0 3px var(--gold2), inset 0 0 0 4px #000, 0 3px 8px rgba(0,0,0,.7); }
+.w:hover { filter: brightness(1.35); } .w:active { transform: scale(.94); }
+.w svg { width: 62%; height: 62%; }
+.w.main { width: 66px; height: 66px; left: 46px; top: 34px; background: radial-gradient(circle at 40% 35%, #8a2a14, #2a0c06 75%); box-shadow: inset 0 0 0 3px #e6c987, inset 0 0 0 4px #000, 0 0 14px rgba(255,90,30,.45), 0 3px 8px #000; z-index: 2; }
+.w.n { width: 38px; height: 38px; left: 60px; top: 0; } .w.e { width: 38px; height: 38px; left: 118px; top: 60px; } .w.s { width: 38px; height: 38px; left: 60px; top: 118px; }
+.w .cd { position: absolute; inset: 0; border-radius: 50%; background: conic-gradient(rgba(0,0,0,.7) var(--p, 0%), transparent 0); pointer-events: none; }
+
+/* barra inferior */
+#bottom { position: absolute; left: 50%; bottom: 8px; transform: translateX(-50%); width: min(520px, 62vw); }
+#hp { position: relative; height: 15px; margin: 0 14px 5px; border-radius: 3px; background: #07100a; box-shadow: inset 0 0 0 1px #6f5226, inset 0 0 0 2px #000, 0 2px 6px #000; overflow: hidden; }
+#hp i { position: absolute; left: 2px; top: 2px; bottom: 2px; width: 84%; background: linear-gradient(#8fe05a, #4ea72c 45%, #25601a); border-radius: 2px; transition: width .2s; box-shadow: 0 0 8px rgba(120,230,70,.45); }
+#hp span { position: absolute; inset: 0; text-align: center; font-size: 11px; line-height: 15px; letter-spacing: 1px; text-shadow: 0 1px 2px #000; }
+#slots { display: flex; justify-content: center; gap: 4px; padding: 6px 10px; border-radius: 4px; background: linear-gradient(#1c140d, #0d0805); box-shadow: inset 0 0 0 2px var(--gold2), inset 0 0 0 3px #000, 0 4px 12px rgba(0,0,0,.7); }
+.slot { position: relative; width: 52px; height: 52px; border-radius: 4px; background: radial-gradient(circle at 50% 40%, #1b1511, #0a0705); box-shadow: inset 0 0 0 1px #4a3a22, inset 0 0 12px #000; display: grid; place-items: center; cursor: pointer; }
+.slot.has { background: radial-gradient(circle at 50% 35%, #5a1c12, #1d0805 80%); box-shadow: inset 0 0 0 1px #9a7a3a, inset 0 0 14px rgba(0,0,0,.8); }
+.slot.has:hover { filter: brightness(1.3); }
+.slot svg { width: 78%; height: 78%; filter: drop-shadow(0 1px 2px #000); }
+.slot .k { position: absolute; left: 4px; bottom: 1px; font-size: 10px; color: #e6d3a4; text-shadow: 0 1px 2px #000; }
+.slot .cd { position: absolute; inset: 0; border-radius: 4px; background: conic-gradient(rgba(0,0,0,.72) var(--p, 0%), transparent 0); pointer-events: none; }
+.slot .cdt { position: absolute; inset: 0; display: grid; place-items: center; font-size: 15px; font-weight: bold; text-shadow: 0 1px 3px #000; opacity: 0; }
+.slot.flash { animation: flash .35s; }
+@keyframes flash { 0% { filter: brightness(2.2); transform: scale(1.08); } 100% { filter: none; transform: none; } }
+#xp { position: relative; height: 9px; margin: 5px 14px 0; border-radius: 3px; background: #0a0605; box-shadow: inset 0 0 0 1px #6f5226, 0 2px 5px #000; overflow: hidden; }
+#xp i { position: absolute; left: 1px; top: 1px; bottom: 1px; width: 22%; background: linear-gradient(#f0c050, #b07a18); border-radius: 2px; transition: width .4s; }
+#xp span { position: absolute; inset: 0; text-align: center; font-size: 7px; line-height: 9px; letter-spacing: 2px; color: #f4e6c0; text-shadow: 0 1px 1px #000; }
+
+/* minimapa */
+#minimap { position: absolute; right: 18px; bottom: 16px; width: 168px; height: 168px; }
+#minimap canvas { position: absolute; inset: 7px; width: 154px; height: 154px; border-radius: 50%; background: #0d0907; }
+#minimap .rim { position: absolute; inset: 0; border-radius: 50%; border: 5px solid transparent; background: conic-gradient(from 30deg, #e6c987, #6a4c20, #d9b46a, #4f381a, #e6c987) border-box; -webkit-mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0); mask: linear-gradient(#000 0 0) padding-box exclude, linear-gradient(#000 0 0); filter: drop-shadow(0 2px 5px #000); pointer-events: none; }
+#minimap .gear { position: absolute; right: -4px; top: -2px; width: 32px; height: 32px; border-radius: 50%; background: radial-gradient(#2a2016, #0e0a06); box-shadow: inset 0 0 0 2px var(--gold2), 0 2px 5px #000; cursor: pointer; display: grid; place-items: center; }
+#minimap .gear svg { width: 62%; height: 62%; }
+
+/* globos de diálogo, aviso y mensajes */
+#bubble { position: fixed; left: 0; top: 0; max-width: 260px; padding: 9px 13px 10px; border-radius: 6px; background: linear-gradient(#241a10ee, #120c07ee); box-shadow: inset 0 0 0 1px var(--gold2), 0 6px 18px rgba(0,0,0,.7); font-size: 13px; line-height: 1.35; opacity: 0; transform: translate(-50%, -100%) translateY(6px); transition: opacity .2s, transform .2s; pointer-events: none; z-index: 5; }
+#bubble.on { opacity: 1; transform: translate(-50%, -100%); }
+#bubble b { display: block; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--gold); margin-bottom: 3px; }
+#bubble::after { content: ''; position: absolute; left: 50%; bottom: -6px; width: 12px; height: 12px; background: #120c07; transform: translateX(-50%) rotate(45deg); box-shadow: 2px 2px 0 0 var(--gold2); }
+#tip { position: fixed; padding: 3px 9px; font-size: 12px; border-radius: 4px; background: #120c07dd; box-shadow: inset 0 0 0 1px var(--gold2); pointer-events: none; opacity: 0; transform: translate(-50%, -140%); z-index: 4; white-space: nowrap; }
+#toasts { position: fixed; left: 50%; top: 14%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.toast { padding: 7px 18px; border-radius: 4px; background: linear-gradient(90deg, transparent, #1c120bdd 20%, #1c120bdd 80%, transparent); font-size: 14px; letter-spacing: 1px; color: #f1dca6; text-shadow: 0 1px 3px #000; animation: toast 3.2s forwards; }
+@keyframes toast { 0% { opacity: 0; transform: translateY(8px); } 10%, 80% { opacity: 1; transform: none; } 100% { opacity: 0; transform: translateY(-8px); } }
+#help { position: fixed; left: 50%; top: 10px; transform: translateX(-50%); font-size: 11px; color: #bba983; background: #0c0806aa; padding: 4px 12px; border-radius: 10px; pointer-events: none; transition: opacity 1.2s; letter-spacing: .5px; white-space: nowrap; }
+#loading { position: fixed; inset: 0; background: radial-gradient(#1c120a, #050302); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; z-index: 20; transition: opacity .8s; }
+#loading .t { font-size: 30px; letter-spacing: 4px; color: var(--gold); text-shadow: 0 0 18px rgba(255,140,40,.4); }
+#loading .pb { width: 260px; height: 6px; background: #0a0605; border-radius: 3px; box-shadow: inset 0 0 0 1px var(--gold2); overflow: hidden; }
+#loading .pb i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #8a3a14, #f0a030); transition: width .2s; }
+#loading .s { font-size: 12px; color: #9c8a68; }
+#loading.off { opacity: 0; pointer-events: none; }
+
+@media (max-width: 720px) {
+  #bars { width: 150px; } .bar.sta { width: 110px; }
+  #wheel { transform: scale(.7); transform-origin: left bottom; left: 8px; bottom: 90px; }
+  #minimap { width: 120px; height: 120px; right: 8px; bottom: 90px; } #minimap canvas { width: 106px; height: 106px; }
+  .slot { width: 40px; height: 40px; } #help { display: none; }
+}

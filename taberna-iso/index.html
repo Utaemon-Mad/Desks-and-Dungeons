@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,user-scalable=no">
+<title>La Taberna del Cuervo</title>
+<link rel="icon" href="data:,">
+<link rel="stylesheet" href="css/hud.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="hud">
+  <!-- arriba a la izquierda: retrato y barras -->
+  <div id="portrait"><canvas id="pc" width="192" height="192"></canvas><div class="ring"></div><div class="lvl" id="lvl">12</div></div>
+  <div id="bars">
+    <div class="bar fury"><i id="b-fury"></i></div>
+    <div class="bar sta"><i id="b-sta"></i></div>
+  </div>
+  <div id="mini-icons"><div class="ico" id="ic-x" title="Esc: ajustes"></div><div class="ico sel" id="ic-sign" title="Q: Llamarada"></div></div>
+
+  <!-- abajo a la izquierda: rueda de acciones -->
+  <div id="wheel">
+    <button class="w main" id="w-sign" title="Q · Llamarada"></button>
+    <button class="w n" id="w-rest" title="R · Descansar"></button>
+    <button class="w e" id="w-draw" title="E · Desenvainar"></button>
+    <button class="w s" id="w-potion" title="F · Poción"></button>
+  </div>
+
+  <!-- abajo en el centro: vida, ranuras y experiencia -->
+  <div id="bottom">
+    <div id="hp"><i id="b-hp"></i><span id="hp-t">920 / 1100</span></div>
+    <div id="slots"></div>
+    <div id="xp"><i id="b-xp"></i><span>EXPERIENCIA</span></div>
+  </div>
+
+  <!-- abajo a la derecha: minimapa -->
+  <div id="minimap"><canvas id="mm" width="320" height="320"></canvas><div class="rim"></div><div class="gear" id="gear"></div></div>
+</div>
+
+<div id="bubble"><b></b><span></span></div>
+<div id="tip"></div>
+<div id="toasts"></div>
+<div id="help">Clic: moverse · Clic en un personaje: hablar · 1-4 / clic derecho: habilidades · Espacio: esquivar · Rueda: zoom · M: sonido</div>
+<div id="loading"><div class="t">La Taberna del Cuervo</div><div class="pb"><i id="lp"></i></div><div class="s" id="ls">Encendiendo el fuego…</div></div>
+
+<script src="vendor/three.bundle.min.js"></script>
+<script src="js/tex.js"></script>
+<script src="js/actors.js"></script>
+<script src="js/room.js"></script>
+<script src="js/hud.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

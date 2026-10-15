@@ -6,7 +6,8 @@
   "scripts": {
     "start": "node server.js",
     "test": "node test/smoke.js",
-    "lint": "node scripts/lint.js"
+    "lint": "node scripts/lint.js",
+    "iso": "node taberna-iso/serve.js"
   },
   "engines": {
     "node": ">=18"
