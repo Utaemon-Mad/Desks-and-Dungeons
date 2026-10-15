@@ -234,9 +234,9 @@
     // sobre la barra: alguna vela, jarras y botellas (siempre en el mismo sitio)
     for (const it of MAP.items) if (it.type === 'bar') {
       const r = rand(it.x * 13.1 + it.y * 7.7), dx = it.x + 0.5 + (r - 0.5) * 0.4, dz = it.y + 0.5 + (rand(it.y * 3.3 + it.x) - 0.5) * 0.4;
-      if (r < 0.34) { const c = new THREE.Group(); MODELS.candle(c, 0, 0, 0); c.position.set(dx, 0.9, dz); g.add(c); lights.push({ x: dx, y: 1.15, z: dz, color: '#ffc070', intensity: 0.7, dist: 2.6, seed: it.x * 3 + it.y, kind: 'barcandle' }); }
-      else if (r < 0.7) { const m = MODELS.mug(); m.position.set(dx, 0.96, dz); g.add(m); }
-      else { const b = MODELS.mesh(MODELS.cyl(0.04, 0.05, 0.24, 6), MODELS.mat(['#2e7d4f', '#7a2a2a', '#3a5a9a'][Math.floor(r * 30) % 3], { rough: 0.25, metal: 0.1, opacity: 0.85 }), dx, 1.02, dz, g); b.castShadow = false; }
+      if (r < 0.34) { const c = new THREE.Group(); MODELS.candle(c, 0, 0, 0); c.position.set(dx, 0.68, dz); g.add(c); lights.push({ x: dx, y: 0.93, z: dz, color: '#ffc070', intensity: 0.7, dist: 2.6, seed: it.x * 3 + it.y, kind: 'barcandle' }); }
+      else if (r < 0.7) { const m = MODELS.mug(); m.position.set(dx, 0.74, dz); g.add(m); }
+      else { const b = MODELS.mesh(MODELS.cyl(0.04, 0.05, 0.24, 6), MODELS.mat(['#2e7d4f', '#7a2a2a', '#3a5a9a'][Math.floor(r * 30) % 3], { rough: 0.25, metal: 0.1, opacity: 0.85 }), dx, 0.8, dz, g); b.castShadow = false; }
     }
     for (const m of Object.values(MAP.MERCHANTS)) for (const pr of [m.prop, m.prop2].filter(Boolean)) place(pr.type, pr.x, pr.y);
     return { g, lights, hang };
@@ -360,7 +360,7 @@
       const top = st.project(u.px + 0.5, seat ? 1.15 : 1.35, u.py + 0.5);
       u._screen = { x: top.x, y: top.y };
     }
-    for (const [id, m] of T3.models) if (!live.has(id) && !id.startsWith('npc:')) { dropModel(m.obj); T3.models.delete(id); }
+    for (const [id, m] of T3.models) if (!live.has(id) && !id.startsWith('npc:') && !id.startsWith('life:')) { dropModel(m.obj); T3.models.delete(id); }
     const bk = charModel('npc:barkeep', bartenderLook);
     bk.obj.position.set(MAP.BARKEEP.x + 0.5, 0, MAP.BARKEEP.y + 0.5);
     bk.obj.rotation.y = -Math.PI / 2;

@@ -317,6 +317,10 @@ body.at-mesa #heroes { display: none; }
 #bar::before, #bar::after { content: ""; position: absolute; bottom: 0; width: 36px; height: 60px; background: linear-gradient(#3a2c20, #120c08); border: 3px solid #120904; border-bottom: 0; }
 #bar::before { left: -30px; border-radius: 0 0 0 0; clip-path: polygon(100% 0, 100% 100%, 0 100%, 40% 30%); }
 #bar::after { right: -30px; clip-path: polygon(0 0, 60% 30%, 100% 100%, 0 100%); }
+/* con los orbes a los lados la barra es más estrecha: botones más justos y la charla con su sitio */
+#bar .tool { min-width: 0; padding: 4px 5px; font-size: 13px; }
+#chat-form { flex: 1 1 300px; min-width: 270px; }
+@media (max-width: 1360px) and (min-width: 821px) { #bar .tool span:not(.ico) { display: none; } #bar .tool { padding: 4px 7px; } }
 #xpbar { position: absolute; left: 18px; right: 18px; top: 4px; height: 7px; border-width: 1px; border-radius: 4px; box-shadow: 0 0 6px rgba(240,192,96,.25); }
 #log { bottom: 150px; }
 body.in-dungeon .dactions { bottom: 84px; }

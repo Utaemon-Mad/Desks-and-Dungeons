@@ -103,11 +103,12 @@
       case 'bar': {
         // barra de madera con paneles, encimera barnizada (brilla con las velas) y molduras de latón
         const brass = mat('#c8963a', { metal: 0.85, rough: 0.3 });
-        mesh(box(1.0, 0.8, 0.9), texMat('panel', panelTex), 0, 0.4, 0, g);
-        mesh(box(1.02, 0.1, 1.0), texMat('bartop', topTex, { rough: 0.32, metal: 0.05 }), 0, 0.85, 0, g);
+        // (más baja que antes: a 0,68 la encimera, así no tapa al tabernero ni a los de los taburetes)
+        mesh(box(1.0, 0.6, 0.9), texMat('panel', panelTex), 0, 0.3, 0, g);
+        mesh(box(1.02, 0.08, 1.0), texMat('bartop', topTex, { rough: 0.32, metal: 0.05 }), 0, 0.64, 0, g);
         mesh(box(1.0, 0.04, 0.96), mat('#22140a'), 0, 0.03, 0, g);
-        mesh(box(1.03, 0.03, 0.97), brass, 0, 0.785, 0, g);
-        mesh(box(1.01, 0.03, 0.93), brass, 0, 0.12, 0, g);
+        mesh(box(1.03, 0.03, 0.97), brass, 0, 0.585, 0, g);
+        mesh(box(1.01, 0.03, 0.93), brass, 0, 0.1, 0, g);
         break;
       }
       case 'bookshelf': {

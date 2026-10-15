@@ -423,7 +423,8 @@
         mm.roughness = 0.9; mm.metalness = 0;
         const n = src.name || '';
         // el pelaje principal toma el color pedido; lo oscuro y lo claro, versiones de ese color
-        if (tint && /^(Main|Material)$/.test(n)) mm.color.copy(tint);
+        if (tint && o.fur && /^(Main_Light|Material\.003)$/.test(n)) mm.color.copy(tint).multiplyScalar(o.fur);
+        else if (tint && /^(Main|Material)$/.test(n)) mm.color.copy(tint);
         else if (tint && /^(Main_Dark|Material\.010)$/.test(n)) mm.color.copy(tint).multiplyScalar(0.55);
         else if (tint && /^(Main_Light|Material\.003)$/.test(n)) mm.color.lerp(tint, 0.35);
         if (o.glowEyes && /Eye/.test(n) && !/White/.test(n)) { mm.emissive = new THREE.Color(o.glowEyes); mm.emissiveIntensity = 0.35; }
@@ -467,6 +468,15 @@
     return m;
   }
 
-  Object.assign(MODELS, { buildEnemy, buildPet, buildMount });
+  // Gato de la taberna: el zorro animado, pequeño y teñido entero (blanco o negro), con los ojos que brillan
+  function buildCat(color) {
+    if (!GL.animals.Fox) return null;
+    const black = new THREE.Color(color).getHSL({}).l < 0.3;
+    const m = buildAnimalGL('Fox', { tint: color, fur: black ? 1.6 : 1.0, height: 0.4, glowEyes: black ? '#c8ff3a' : '#5ad0ff' });
+    m.userData.kind = 'cat';
+    return m;
+  }
+
+  Object.assign(MODELS, { buildEnemy, buildPet, buildMount, buildCat });
   MODELS._.humanoid = humanoid;
 })();
