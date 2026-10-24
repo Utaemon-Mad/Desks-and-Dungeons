@@ -15,6 +15,7 @@ const PROG = require('../public/rules/progress.js');
 const GEN = require('../server/gen.js');
 const DUNGEON = require('../public/dungeon-data.js');
 const { Instance } = require('../server/dungeon.js');
+const MZR = require('../public/mazomorra/rules.js');
 
 const url = `ws://localhost:${process.env.PORT}/ws`;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -165,6 +166,99 @@ function rulesTests() {
   const fo = GEN.generate({ theme: 'bosque', level: 3, seed: 'b' });
   assert.ok(!fo.tiles.includes('+') && !fo.props.some((p) => p.k === 'torch') && fo.props.some((p) => p.k === 'lantern'), 'bosque sin puertas, con farolillos');
   assert.ok(RULES.THEMES.bosque.mobs.includes('retono') && RULES.MONSTERS['ent-corrupto'].boss, 'enemigos del bosque');
+}
+
+// ---------- Mazo Morra (minijuego de cartas y dados) ----------
+function mazoMorraTests() {
+  // jugador automático sencillo: coloca el dado más bajo que llena cada casilla y coge objetos mientras caben
+  function bot(G) {
+    let steps = 0;
+    while (!G.over && steps++ < 3000) {
+      const E = G.enc;
+      if (E) {
+        if (!E.rolled) { MZR.roll(G, E.kind === 'peril' ? 0 : undefined); continue; }
+        E.boxes.forEach((bx, i) => {
+          for (let k = bx.dice.length; k < bx.n; k++) {
+            const need = bx.v - MZR.boxSum(E, bx);
+            const fit = MZR.free(E).filter((d) => MZR.canPlace(G, d.id, i)).sort((a, b) => a.v - b.v);
+            const d = fit.find((x) => x.v >= need) || (bx.n === 2 ? fit[fit.length - 1] : null);
+            if (d) MZR.place(G, d.id, i);
+          }
+        });
+        MZR.resolve(G); continue;
+      }
+      if (G.reward) { const o = MZR.rewardOptions(G); MZR.takeReward(G, o.item.full ? 'xp' : 'item'); continue; }
+      if (G.doors.length && !MZR.canExplore(G)) { MZR.openDoor(G, 0); continue; }
+      if (MZR.canExplore(G)) { MZR.explore(G); continue; }
+      if (MZR.canDescend(G)) { MZR.descend(G); continue; }
+      MZR.openDoor(G, 0);
+    }
+    return G;
+  }
+  for (const h of Object.keys(MZR.HEROES)) {
+    for (const d of Object.keys(MZR.DUNGEONS)) {
+      const G = bot(MZR.newGame(h, d, 7));
+      assert.ok(G.over === 'win' || G.over === 'lose', `Mazo Morra: la partida termina (${h}, ${d})`);
+      assert.ok(G.hero.items.length <= MZR.stats(G).slots && G.hero.hp >= 0, 'huecos y vida dentro de los límites');
+      assert.deepStrictEqual(bot(MZR.newGame(h, d, 7)).log, G.log, 'misma semilla, misma partida');
+    }
+  }
+  // todas las cartas tienen dibujo (16×16), objeto y una habilidad que existe
+  require('../public/mazomorra/sprites.js');
+  const SPR = globalThis.MZS.SPRITES;
+  for (const [id, c] of Object.entries(MZR.CARDS)) assert.ok(c.item && MZR.SKILLS[c.skill] && (c.boxes || c.opts) && SPR[c.sprite], `carta ${id} completa`);
+  for (const x of [...Object.values(MZR.HEROES), ...Object.values(MZR.DUNGEONS).map((d) => d.boss)]) assert.ok(SPR[x.sprite], `dibujo de ${x.name}`);
+  for (const [name, def] of Object.entries(SPR)) { const rows = globalThis.MZS.rowsOf(def); assert.ok(rows.length === 16 && rows.every((r) => r.length === 16), `sprite ${name} de 16×16`); }
+  for (const id of MZR.DECK) assert.ok(MZR.CARDS[id], `carta ${id} del mazo`);
+
+  // explorar gasta 2 de tiempo y saca una puerta; huir gasta 1 y la deja abierta
+  const G = MZR.newGame('guerrera', 'cripta', 1);
+  const n = G.deck.length;
+  MZR.explore(G);
+  assert.ok(G.deck.length === n - 3 && G.doors.length === 1 && !G.doors[0].open, 'explorar');
+  G.doors[0].id = 'orco';
+  MZR.openDoor(G, 0);
+  MZR.flee(G);
+  assert.ok(!G.enc && G.doors[0].open && G.deck.length === n - 4, 'huir cuesta 1 de tiempo');
+  // combate: un dado sólo entra en una casilla de su color (o en una de cualquiera); los heroicos valen en todas
+  MZR.openDoor(G, 0);
+  MZR.roll(G);
+  const E = G.enc, st = MZR.stats(G);
+  assert.strictEqual(E.dice.length, st.dice.F + st.dice.A + st.dice.M, 'se tiran todos los dados');
+  const fA = E.dice.find((x) => x.c === 'A');
+  assert.ok(!MZR.canPlace(G, fA.id, 0) && MZR.canPlace(G, fA.id, 2), 'colores de las casillas');
+  const [f1, f2] = E.dice.filter((x) => x.c === 'F');
+  assert.ok(MZR.merge(G, [f1.id, f2.id]) && E.dice.some((x) => x.c === 'H' && x.v === Math.max(f1.v, f2.v)), 'dos dados iguales se funden en uno heroico');
+  const hero = E.dice.find((x) => x.c === 'H');
+  assert.ok(MZR.canPlace(G, hero.id, 2) && MZR.place(G, hero.id, 0) && !MZR.place(G, hero.id, 1), 'un dado sólo va en una casilla');
+  const pv = MZR.preview(G), hp0 = G.hero.hp;
+  MZR.resolve(G);
+  assert.ok(G.hero.hp === hp0 - pv.hp && G.reward === 'orco' && !G.doors.length, 'el combate cobra lo previsto y da recompensa');
+  MZR.takeReward(G, 'item');
+  assert.ok(G.hero.items.includes('orco') && MZR.stats(G).dice.F === 4, 'el objeto da un dado más');
+  // peligro: suma de los dados del color elegido
+  G.doors.push({ id: 'pinchos', open: false });
+  MZR.openDoor(G, 0); MZR.roll(G, 0);
+  assert.ok(G.enc.dice.every((x) => x.c === 'A') && G.enc.dice.length === MZR.stats(G).dice.A, 'el peligro tira sólo un color');
+  MZR.resolve(G);
+  MZR.takeReward(G, 'xp');
+  // sin mazo, el tiempo cuesta vida; bajar tres veces lleva al jefe
+  G.deck = []; G.doors = [];
+  const hp1 = G.hero.hp;
+  assert.ok(MZR.descend(G) && G.floor === 2 && G.deck.length > 0, 'bajar a la planta 2');
+  G.deck = []; MZR.descend(G); G.deck = [];
+  assert.ok(MZR.descend(G) && G.enc && G.enc.kind === 'boss' && G.boss.hp > 0, 'tras la tercera planta, el jefe');
+  assert.ok(G.hero.hp >= Math.min(hp1, MZR.stats(G).maxHp), 'bajar cura');
+  // ante el jefe: las casillas de ataque llenas le hacen daño
+  MZR.roll(G);
+  G.enc.dice.push({ id: 999, c: 'H', v: 6 });
+  const atk = G.enc.boxes.findIndex((bx) => bx.atk && bx.n === 1);
+  MZR.place(G, 999, atk);
+  const bossHp = G.boss.hp, dealt = MZR.preview(G).dealt;
+  G.hero.hp = 99;
+  MZR.resolve(G);
+  assert.ok(dealt >= G.enc.boxes[atk].atk && G.boss.hp === bossHp - dealt, 'daño al jefe');
+  assert.strictEqual(G.boss.round, 2, 'nueva ronda contra el jefe');
 }
 
 // ---------- Progresión: forja, tablón, mascotas, pesca ----------
@@ -562,6 +656,7 @@ async function instanceTests() {
 (async () => {
   rulesTests();
   progressTests();
+  mazoMorraTests();
   await instanceTests();
 
   await new Promise((r) => server.listen(process.env.PORT, r));
@@ -1132,6 +1227,8 @@ async function instanceTests() {
   assert.strictEqual(await get('/admin'), 404, 'sin ADMIN_KEY no hay panel');
   assert.strictEqual(await get('/portada'), 200, 'portada');
   assert.strictEqual(await get('/guia.pdf'), 200, 'guía en PDF');
+  assert.strictEqual(await get('/mazomorra'), 200, 'Mazo Morra');
+  assert.strictEqual(await get('/mazomorra/rules.js'), 200, 'reglas de Mazo Morra');
   assert.strictEqual(await get('/sw.js'), 200, 'service worker');
 
   console.log('✔ Todas las pruebas pasan');

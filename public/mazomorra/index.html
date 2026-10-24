@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Mazo Morra</title>
+  <meta name="description" content="Mazo Morra: una mazmorra en un solo mazo. Juego de cartas y dados en pixel art, de un jugador.">
+  <meta name="theme-color" content="#140e1c">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Press+Start+2P&family=VT323&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/mazomorra/style.css">
+</head>
+<body>
+  <!-- Portada: elegir héroe y mazmorra -->
+  <section id="title" class="screen">
+    <header class="logo">
+      <span class="torch" data-sprite="torch"></span>
+      <div>
+        <h1>MAZO<br>MORRA</h1>
+        <p class="sub">Una mazmorra entera en un solo mazo</p>
+      </div>
+      <span class="torch" data-sprite="torch"></span>
+    </header>
+
+    <h2>Elige tu héroe</h2>
+    <div id="hero-pick" class="pick heroes"></div>
+    <h2>Elige la mazmorra</h2>
+    <div id="dun-pick" class="pick duns"></div>
+
+    <div class="title-go">
+      <button id="go" class="btn big" type="button">¡A LA MAZMORRA!</button>
+      <p id="record" class="record"></p>
+    </div>
+
+    <details class="howto panel">
+      <summary>Cómo se juega</summary>
+      <ul>
+        <li><b>El mazo es el reloj.</b> Cada vez que pasa el tiempo se tiran cartas del mazo. Cuando se acaba, bajas a la planta siguiente (más dura). Tras la tercera planta te espera el jefe. Si el mazo está vacío y aún tiene que pasar tiempo, pierdes vida.</li>
+        <li><b>Explorar</b> cuesta 2 de tiempo y añade una puerta cerrada (hasta 4). Ábrela para ver qué hay: un <b>monstruo</b> o un <b>peligro</b>. Antes de tirar puedes huir (1 de tiempo) y volver más tarde.</li>
+        <li><b>Combate:</b> tiras todos tus dados (<span class="c-F">Fuerza</span>, <span class="c-A">Agilidad</span>, <span class="c-M">Magia</span>) y los colocas en las casillas del monstruo. Cada casilla pide un color y un valor mínimo (las de «2 dados» piden la suma). Las casillas que quedan sin llenar te quitan vida o tiempo.</li>
+        <li><b>Dados heroicos</b> (negros) valen en cualquier casilla. Puedes <b>fusionar</b> dos dados del mismo color en un heroico con el valor del mayor.</li>
+        <li><b>Peligros:</b> eliges una de dos pruebas, tiras los dados de ese color y sumas.</li>
+        <li><b>Botín:</b> la carta vencida se convierte en lo que elijas: un <b>objeto</b> (más dados o vida), una <b>habilidad</b> o <b>experiencia</b> para subir de nivel (más vida y más huecos).</li>
+        <li><b>Jefe:</b> pelea por rondas. Las casillas con espada le hacen daño si las llenas; las demás te dañan si no.</li>
+      </ul>
+      <p class="small">Inspirado en <i>One Deck Dungeon</i> (Asmadi Games). Arte y cartas propios.</p>
+    </details>
+    <p class="foot"><a href="/">← Volver a Desks &amp; Dungeons</a></p>
+  </section>
+
+  <!-- Partida -->
+  <section id="game" class="screen hidden">
+    <header id="top" class="panel"></header>
+    <main class="layout">
+      <div class="left">
+        <div id="board" class="panel"></div>
+        <div id="actions" class="actions"></div>
+      </div>
+      <aside class="right">
+        <div id="kit" class="panel"></div>
+        <div id="log" class="panel log"></div>
+      </aside>
+    </main>
+  </section>
+
+  <!-- Encuentro, recompensa y final (ventanas encima) -->
+  <div id="enc" class="modal hidden"><div class="modal-in panel"></div></div>
+  <div id="reward" class="modal hidden"><div class="modal-in panel"></div></div>
+  <div id="end" class="modal hidden"><div class="modal-in panel"></div></div>
+
+  <button id="mute" class="btn mini mute" type="button" title="Sonido">♪</button>
+  <div id="flash"></div>
+
+  <script src="/audio.js"></script>
+  <script src="/mazomorra/sprites.js"></script>
+  <script src="/mazomorra/rules.js"></script>
+  <script src="/mazomorra/game.js"></script>
+</body>
+</html>

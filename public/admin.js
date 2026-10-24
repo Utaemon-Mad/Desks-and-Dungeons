@@ -7,6 +7,11 @@
 
   // ---------- Novedades (la primera es la más reciente) ----------
   const NEWS = [
+    { v: 18, date: 'Octubre', title: 'Mazo Morra', items: [
+      '🃏 Nuevo minijuego en el menú principal: Mazo Morra, una mazmorra entera en un solo mazo de cartas (inspirado en One Deck Dungeon).',
+      '🎲 Tiras dados de Fuerza, Agilidad y Magia y los colocas en las casillas de cada monstruo; el mazo es el reloj. Tres plantas y un jefe.',
+      '🧙 Cuatro héroes y tres mazmorras en pixel art: la Cripta del Rey Liche, la Guarida de la Dragona y el Laberinto del Minotauro.',
+    ] },
     { v: 17, date: 'Octubre', title: 'Gatos en la taberna', items: [
       '🐈 Nube (blanca) y Tizón (negro) corretean por la taberna: se paran a descansar, Tizón persigue a Nube, maúllan de vez en cuando y, si los pinchas, ronronean.',
       '🍺 La barra de Alfonso es más baja: ya no tapa al tabernero ni a los de los taburetes.',
