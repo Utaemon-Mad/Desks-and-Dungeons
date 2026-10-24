@@ -187,6 +187,7 @@
         box.appendChild(sprite(c.sprite));
         box.appendChild(el('div', 'nm', esc(c.name)));
         box.appendChild(el('span', 'tag', c.kind === 'peril' ? '⚠' : '⚔'));
+        if (c.kind === 'monster') { const o = R.odds(G, d.id); box.appendChild(el('div', 'odds ' + verdict(o).cls, `≈ −${num(o.hp)} ${icons('heart', 1)}`)); }
       } else {
         box.appendChild(sprite('door'));
         box.appendChild(el('div', 'nm', 'Puerta cerrada'));
@@ -286,6 +287,40 @@
     return p.join(' y ');
   }
 
+  const pct = (p) => Math.round(p * 100);
+  const num = (x) => (Math.round(x * 10) / 10).toLocaleString('es-ES');
+  function verdict(o) {
+    if (o.ko >= 0.25) return { cls: 'risk-hi', text: '¡Peligroso! Puede matarte' };
+    if (o.ko > 0.03 || o.hp >= Math.min(2, G.hero.hp / 3)) return { cls: 'risk-mid', text: 'Arriesgado' };
+    return { cls: 'risk-lo', text: 'Asequible' };
+  }
+  // Antes de tirar: tus dados (los colores que piden las casillas, resaltados) y un pronóstico del combate
+  function forecast(E, boss) {
+    const box = el('div', 'forecast');
+    const dice = R.stats(G).dice, want = new Set(E.boxes.map((bx) => bx.c));
+    const ab = R.abOf(G);
+    box.appendChild(el('div', 'lbl', 'Tus dados'));
+    const row = el('div', 'dice-row');
+    for (const c of ['F', 'A', 'M']) {
+      const g = el('div', 'fc-col' + (want.has(c) || want.has('X') ? '' : ' unused'));
+      const dr = el('div', 'fc-dice');
+      for (let i = 0; i < dice[c]; i++) dr.appendChild(dieEl({ c, v: 0 }, { small: true, dead: c === 'F' && ab.has('etereo') }));
+      g.appendChild(dr);
+      g.appendChild(el('div', 'fc-n c-' + c, `${colorName(c)} ×${dice[c]}`));
+      row.appendChild(g);
+    }
+    box.appendChild(row);
+    const o = R.odds(G, boss ? 'boss' : E.id), v = verdict(o);
+    const parts = [`−${num(o.hp)} de vida de media`];
+    if (o.t) parts.push(`−${num(o.t)} de tiempo`);
+    if (boss) parts.push(`${num(o.dealt)} de daño al jefe por ronda`);
+    else parts.push(`sin daño un ${pct(o.clean)} %`);
+    if (o.ko) parts.push(`te mata un ${pct(o.ko)} %`);
+    box.appendChild(el('div', 'fc-verdict ' + v.cls, `<b>${v.text}</b> · ${parts.join(' · ')}`));
+    box.appendChild(el('div', 'fc-note', 'Pronóstico aproximado, sin contar fusiones ni habilidades.'));
+    return box;
+  }
+
   function renderFight(P, E, boss) {
     const boxes = el('div', 'boxes');
     E.boxes.forEach((bx, i) => {
@@ -314,6 +349,7 @@
     P.appendChild(boxes);
 
     if (!E.rolled) {
+      P.appendChild(forecast(E, boss));
       const foot = el('div', 'enc-foot');
       foot.appendChild(el('div', 'pv', boss ? 'Tira tus dados y colócalos. Las casillas con espada dañan al jefe.' : 'Coloca tus dados en las casillas. Las que dejes sin llenar te dañan.'));
       const bs = el('div');
@@ -391,7 +427,8 @@
       card.opts.forEach((o, i) => {
         const n = R.stats(G).dice[o.c];
         const v = o.v + 2 * (G.floor - 1);
-        opts.appendChild(btn(`<span class="c-${o.c}">${colorName(o.c).toUpperCase()}</span> ${v}+<small>Tiras ${n} dado${n === 1 ? '' : 's'}${R.has(G, 'manos') ? ' (+3)' : ''}. Si fallas: ${penText(o)}.</small>`, 'alt', () => { sel = []; act(() => R.roll(G, i)); }));
+        const p = pct(R.odds(G, E.id).opts[i]);
+        opts.appendChild(btn(`<span class="c-${o.c}">${colorName(o.c).toUpperCase()}</span> ${v}+ · ${p} %<small>Tiras ${n} dado${n === 1 ? '' : 's'}${R.has(G, 'manos') ? ' (+3)' : ''}: lo superas un ${p} % de las veces. Si fallas: ${penText(o)}.</small>`, 'alt', () => { sel = []; act(() => R.roll(G, i)); }));
       });
       P.appendChild(opts);
       const foot = el('div', 'enc-foot');

@@ -185,6 +185,19 @@ a { color: var(--gold); }
 .enc-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px; margin-top: 10px; }
 .enc-foot .pv { color: var(--dim); }
 .enc-foot .pv b { color: #f07a80; } .enc-foot .pv b.good { color: var(--green); }
+.forecast { background: #221a2a; padding: 10px; margin-bottom: 4px; }
+.forecast .lbl { color: var(--dim); font-size: 18px; }
+.fc-col { margin-right: 18px; }
+.fc-col.unused { opacity: .35; }
+.fc-dice { display: flex; flex-wrap: wrap; max-width: 170px; }
+.fc-n { font-size: 18px; }
+.fc-verdict { margin-top: 8px; }
+.fc-note { color: var(--dim); font-size: 16px; }
+.risk-lo b, .odds.risk-lo { color: var(--green); }
+.risk-mid b, .odds.risk-mid { color: var(--gold); }
+.risk-hi b, .odds.risk-hi { color: #f07a80; }
+.door .odds { font-size: 18px; margin-top: 2px; }
+.door .odds img { width: 16px; height: 16px; vertical-align: -2px; }
 .peril-opts { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0; }
 .peril-opts .btn { text-align: left; }
 .peril-sum { font-family: 'VT323', monospace; font-size: 48px; text-align: center; margin: 12px 0; }

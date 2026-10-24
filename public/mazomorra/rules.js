@@ -450,13 +450,78 @@
     return true;
   }
 
+  // ---------- Pronóstico ----------
+  // ¿Me puedo enfrentar? Simula tiradas con tus dados (con un azar aparte: no cambia la partida) y coloca
+  // cada vez de forma sencilla: la casilla que más duele primero, con el dado más bajo que la llena.
+  // No cuenta fusiones ni habilidades, así que en la práctica suele salir algo mejor.
+  // `id`: carta de una puerta, o 'boss'. Devuelve daño y tiempo medios, la probabilidad de salir sin daño
+  // y la de caer; en los peligros, la probabilidad de superar cada prueba.
+  function odds(G, id, trials = 300) {
+    const dice = stats(G).dice;
+    if (id !== 'boss' && CARDS[id].kind === 'peril') {
+      const bonus = has(G, 'manos') ? 3 : 0;
+      return { opts: CARDS[id].opts.map((o) => sumAtLeast(dice[o.c], o.v + 2 * (G.floor - 1) - bonus)) };
+    }
+    const card = id === 'boss' ? DUNGEONS[G.dungeon].boss : CARDS[id];
+    const kind = id === 'boss' ? 'boss' : 'monster';
+    const boxes = card.boxes.map((bx) => Object.assign({}, bx, { v: target(G, bx, kind) }));
+    const ab = new Set(card.ab ? [card.ab] : []);
+    if (floorRule(G, 'unos')) ab.add('unos');
+    const order = boxes.map((bx, i) => i).sort((a, c) => weight(boxes[c]) - weight(boxes[a]));
+    const R0 = rng(0x9e3779b9 ^ (G.floor * 131));
+    let hpSum = 0, tSum = 0, dealtSum = 0, clean = 0, ko = 0;
+    for (let n = 0; n < trials; n++) {
+      const pool = [];
+      for (const c of ['F', 'A', 'M']) for (let i = 0; i < dice[c]; i++) {
+        let v = 1 + Math.floor(R0() * 6);
+        if ((c === 'F' && ab.has('volador')) || (c === 'M' && ab.has('piedra'))) v = Math.max(1, v - 1);
+        if ((ab.has('unos') && v === 1) || (ab.has('etereo') && c === 'F')) continue; // no se pueden colocar
+        pool.push({ c, v });
+      }
+      let hp = 0, t = 0, dealt = 0;
+      for (const i of order) {
+        const bx = boxes[i];
+        const fit = pool.filter((d) => bx.c === 'X' || d.c === bx.c);
+        let use = null;
+        if (bx.n === 1) use = fit.filter((d) => d.v >= bx.v).sort((a, c) => a.v - c.v).slice(0, 1);
+        else {
+          for (let a = 0; a < fit.length; a++) for (let c = a + 1; c < fit.length; c++) {
+            const sum = fit[a].v + fit[c].v;
+            if (sum >= bx.v && (!use || sum < use[0].v + use[1].v)) use = [fit[a], fit[c]];
+          }
+        }
+        if (use && use.length) { for (const d of use) pool.splice(pool.indexOf(d), 1); if (bx.atk) dealt += bx.atk; continue; }
+        if (bx.atk) continue;
+        hp += bx.hp || 0; t += bx.t || 0;
+      }
+      if (kind === 'boss') { hp += t; t = 0; }
+      if (hp && ab.has('veneno')) hp++;
+      if (hp && has(G, 'piel')) hp--;
+      hpSum += hp; tSum += t; dealtSum += dealt;
+      if (!hp && !t) clean++;
+      if (hp >= G.hero.hp) ko++;
+    }
+    return { hp: hpSum / trials, t: tSum / trials, dealt: dealtSum / trials, clean: clean / trials, ko: ko / trials };
+  }
+  const weight = (bx) => (bx.hp || 0) + (bx.atk || 0) * 1.2 + (bx.t || 0) * 0.6;
+  // Probabilidad de que k dados de seis caras sumen al menos `need`
+  function sumAtLeast(k, need) {
+    let dist = [1];
+    for (let i = 0; i < k; i++) {
+      const nx = new Array(dist.length + 6).fill(0);
+      dist.forEach((p, s) => { for (let f = 1; f <= 6; f++) nx[s + f] += p / 6; });
+      dist = nx;
+    }
+    return dist.reduce((acc, p, s) => acc + (s >= need ? p : 0), 0);
+  }
+
   // Lo que el jugador puede hacer ahora (para la interfaz y las pruebas)
   function score(G) { return G.won * 10 + G.hero.xp * 5 + (G.over === 'win' ? 200 : 0) + (G.floor - 1) * 25; }
 
   const API = {
     COLORS, HEROES, SKILLS, ABILITIES, CARDS, DECK, DUNGEONS, XP_LEVEL, MAX_DOORS, FLOORS,
     newGame, stats, has, canExplore, explore, canDescend, descend, openDoor, flee, fleeCost, roll, free, canPlace, place, unplace,
-    boxSum, boxDone, canMerge, merge, canUseSkill, useSkill, perilTotal, perilTarget, resolve, rewardOptions, takeReward, abOf, score, rng, preview,
+    boxSum, boxDone, canMerge, merge, canUseSkill, useSkill, perilTotal, perilTarget, resolve, rewardOptions, takeReward, abOf, score, rng, preview, odds,
   };
   if (typeof module !== 'undefined' && module.exports) module.exports = API;
   else root.MZR = API;

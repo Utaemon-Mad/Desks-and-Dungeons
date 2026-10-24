@@ -211,6 +211,12 @@ function mazoMorraTests() {
   for (const [name, def] of Object.entries(SPR)) { const rows = globalThis.MZS.rowsOf(def); assert.ok(rows.length === 16 && rows.every((r) => r.length === 16), `sprite ${name} de 16×16`); }
   for (const id of MZR.DECK) assert.ok(MZR.CARDS[id], `carta ${id} del mazo`);
 
+  // pronóstico: no toca la partida, la rata es más fácil que el gólem y los peligros dan probabilidades exactas
+  const P0 = MZR.newGame('guerrera', 'cripta', 3), deck0 = JSON.stringify(P0.deck), r0 = P0.rand();
+  const P1 = MZR.newGame('guerrera', 'cripta', 3);
+  const rata = MZR.odds(P1, 'rata'), golem = MZR.odds(P1, 'golem');
+  assert.ok(rata.hp < golem.hp && rata.clean > golem.clean && JSON.stringify(P1.deck) === deck0 && P1.rand() === r0, 'pronóstico sin tocar el azar');
+  assert.ok(Math.abs(MZR.odds(P1, 'pinchos').opts[0] - 21 / 36) < 1e-9, 'probabilidad exacta del peligro (2 dados ≥ 7)');
   // explorar gasta 2 de tiempo y saca una puerta; huir gasta 1 y la deja abierta
   const G = MZR.newGame('guerrera', 'cripta', 1);
   const n = G.deck.length;
