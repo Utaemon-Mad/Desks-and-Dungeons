@@ -62,6 +62,7 @@ const server = http.createServer((req, res) => {
   if (urlPath === '/') urlPath = '/index.html';
   if (urlPath === '/portada') urlPath = '/portada.html';
   if (urlPath === '/guia') urlPath = '/guia.pdf';
+  if (urlPath === '/mazomorra' || urlPath === '/mazomorra/') urlPath = '/mazomorra/index.html';
   const file = path.normalize(path.join(PUBLIC_DIR, urlPath));
   if (!file.startsWith(PUBLIC_DIR + path.sep)) { res.writeHead(403); return res.end(); }
   sendStatic(req, res, file);

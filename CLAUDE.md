@@ -29,6 +29,10 @@ public/audio.js         sonido y música hechos con WebAudio (SFX.play, SFX.musi
 public/icons.js         iconos SVG propios (ICONS.svg, ICONS.skill) para la barra y las habilidades
 public/admin.js         novedades, mensaje del día, instalar como app y envío de errores del navegador
 public/portada.html     portada de presentación (/portada); guia.pdf es la guía para imprimir
+public/mazomorra/       Mazo Morra (/mazomorra): minijuego de cartas y dados de un jugador, aparte de la taberna (inspirado en One Deck Dungeon)
+  rules.js              reglas puras (MZR): héroes, cartas, habilidades, mazmorras, combate, peligros, jefe; probadas en test/smoke.js
+  sprites.js            sprites pixel art 16×16 escritos con letras (MZS; `half` se refleja, `over` añade píxeles)
+  game.js, style.css    pantalla (DOM) y estilo; usa /audio.js para sonido y música
 public/rules/engine.js  reglas: stats, razas, clases, habilidades, objetos estilo Diablo 2, afijos, botín, monstruos
 public/rules/progress.js forja, misiones, logros, descenso semanal
 public/rules/items-data.js tabla de nombre y aspecto de las armaduras y armas/escudos (4 variantes por nivel; 5 en cuero y placas, 6 en escudos)
@@ -96,6 +100,7 @@ scripts/lint.js         comprobación de sintaxis (npm run lint)
 - Misiones de mazmorra: gen.js pone el portón ('G') en el borde de la sala del jefe y `quest` = { type: keys|levers|waves, gate, spots|room } (sin portón con `quest: false`, como el Descenso y el Asalto); server/quests.js lo cierra con `blocked` y `gateSet` (tapa la vista en `los`), y lo abre `openGate`. Palancas: orden `dlever`. Cliente: public/dungeon/quest.js.
 - HUD: orbes `#orbs` (index.html, estilos al final de extras.css) que rellena `renderHud` (ui.js). Pausa: `DD.pause` (pause.js), orden `dpause` (play.js) → `setPaused` (turns.js).
 - Sonidos y música: `FX` y `TRACKS` (audio.js). Iconos: `P` (icons.js). Novedades: `NEWS` (admin.js).
+- Mazo Morra: cartas y su botín en `CARDS`/`DECK`, héroes `HEROES`, habilidades `SKILLS`, jefes y reglas de planta `DUNGEONS` (public/mazomorra/rules.js); dibujos en `MZS.SPRITES` (sprites.js). Equilibrio: el mazo es el tiempo (explorar −2), monstruos +1 por planta, peligros +2.
 - Ventanas: ui.js (ficha, inventario, talentos, tiendas, guía) y ui2.js (pueblo, forja, fama, ajustes, asalto, taberna, mercado).
 
 ## Probar

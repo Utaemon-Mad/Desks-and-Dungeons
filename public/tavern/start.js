@@ -178,6 +178,7 @@
     else if (go === 'server') openServers();
     else if (go === 'continue' && acct && acct.last) enterGame(acct.last.slot, acct.last.server);
     else if (go === 'account') openAccount();
+    else if (go === 'mazo') location.href = '/mazomorra';
   }
 
   function enterGame(slot, srv) {
